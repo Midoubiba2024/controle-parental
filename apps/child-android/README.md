@@ -96,9 +96,12 @@ pour une soumission Play sans VPN).
 ## Construire
 
 **Le plus simple : le CI.** Chaque push / PR lance `.github/workflows/android.yml` :
-tests JVM (`testWithBgLocationDebugUnitTest`) + APK `withBgLocation` debug, et APK
-**release signé** si les secrets de signature existent. L'APK est publié en artefact
-(onglet Actions) et, sur un tag `v*`, dans une Release GitHub.
+tests JVM (`testWithBgLocationDebugUnitTest`) + Android Lint + APK debug
+(`withBgLocation`, et `noBgLocation` compilée pour vérification). L'APK **release signé**
+n'est construit que dans un contexte de confiance (push sur `main` ou tag `v*`, job
+rattaché à l'environnement GitHub `release`). Les APK sont publiés en artefacts (onglet
+Actions) ; un tag `v*` publie une Release GitHub (APK release signé uniquement — le job
+échoue sans signature).
 Installation sur le téléphone : **[`../../docs/10-INSTALLATION.md`](../../docs/10-INSTALLATION.md)**.
 
 En local (JDK 17 + Android SDK 35 requis ; le wrapper Gradle 8.9 est commité) :
@@ -122,9 +125,11 @@ Une mise à jour sideloadée ne s'installe par-dessus que si elle est signée av
 **même clé**. `app/build.gradle.kts` lit 4 valeurs (propriété Gradle `-P…` ou variable
 d'environnement) : `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`,
 `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Si l'une manque, aucune signature release
-n'est configurée. En CI, le keystore vient du secret `ANDROID_KEYSTORE_BASE64`
-(procédure : `docs/10-INSTALLATION.md` §0). **Ne jamais commiter de keystore.**
-`versionCode` = `-PversionCode=<n>` (numéro de run CI ; défaut 1) pour qu'il croisse.
+n'est configurée. En CI, le keystore vient du secret `ANDROID_KEYSTORE_BASE64` de
+l'environnement `release` (procédure : `docs/10-INSTALLATION.md` §0). **Ne jamais
+commiter de keystore** (`*.keystore`, `*.jks`, `*.p12`, `*.b64*` sont ignorés par Git).
+`versionCode` = `-PversionCode=<n>` (numéro de run CI ; défaut 1) pour qu'il croisse ;
+`versionName` = `<-PversionName, défaut 0.1.0> (build <n>)` (le tag `v*` fournit la version).
 
 ## À venir (lots suivants)
 Verrouillage/messagerie à distance (L5), bien-être & détection on-device ado (L6),

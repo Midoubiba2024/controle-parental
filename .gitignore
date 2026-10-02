@@ -33,6 +33,12 @@ apps/child-android/captures/
 *.aab
 *.keystore
 !debug.keystore
+# Clé de signature release : JAMAIS dans le dépôt (docs/10-INSTALLATION.md §0).
+*.jks
+*.p12
+*.b64
+*.b64.txt
+keystore*.txt
 
 # --- OS / éditeurs ---
 .DS_Store

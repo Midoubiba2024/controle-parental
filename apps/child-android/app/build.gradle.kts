@@ -16,7 +16,7 @@ val supabaseAnonKey: String = (project.findProperty("supabaseAnonKey") as String
 // Android refuse l'installation. Le keystore n'est JAMAIS commité : il est fourni
 // par l'environnement (secrets GitHub en CI, variables locales sinon). Si l'une des
 // 4 valeurs manque, aucune signature release n'est configurée (APK debug seulement).
-// Voir docs/10-INSTALLATION.md §Signature.
+// Voir docs/10-INSTALLATION.md §0.
 fun signingValue(name: String): String? =
     ((project.findProperty(name) as String?) ?: System.getenv(name))?.takeIf { it.isNotBlank() }
 
@@ -30,6 +30,9 @@ val hasReleaseSigning: Boolean = releaseKeystorePath != null && file(releaseKeys
 // versionCode croissant obligatoire pour installer une mise à jour par-dessus :
 // le CI passe -PversionCode=<numéro de run>. Défaut 1 en local.
 val appVersionCode: Int = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+// versionName visible dans Réglages → Applications : « 0.1.0 (build N) ». Sur un
+// tag v*, le CI passe -PversionName=<tag sans le v>.
+val appVersionName: String = (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() } ?: "0.1.0"
 
 android {
     namespace = "fr.controleparental.child"
@@ -40,7 +43,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = appVersionCode
-        versionName = "0.1.0"
+        versionName = "$appVersionName (build $appVersionCode)"
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")

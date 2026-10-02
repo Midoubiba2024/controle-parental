@@ -82,8 +82,10 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
     val locationClient = remember { LocationClient(context) }
 
     var fineGranted by remember { mutableStateOf(locationClient.hasFine()) }
+    // targetSdk ≥ 31 : FINE doit être demandée AVEC COARSE, sinon Android n'affiche
+    // pas la fenêtre. L'enfant peut n'accorder que « approximative ».
     val finePermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
+        ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         fineGranted = locationClient.hasFine()
         // Relance le service pour activer le type de premier plan `location`
@@ -121,7 +123,8 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
     // --- LOT 4 — Filtrage du web (VpnService local) --------------------------
     val filterCache = remember { FilterCache(context) }
     val filterConfig = remember { FilterClient(store).fromCache(filterCache) }
-    var filterOn by remember { mutableStateOf(false) }
+    // État initial = état réel du tunnel (plus de « false » figé à chaque ouverture).
+    var filterOn by remember { mutableStateOf(LocalDnsVpnService.isRunning) }
     val vpnConsent = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { res ->
@@ -310,7 +313,11 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 "zones « bien arrivé », et SOS). Tu la vois toujours dans cet écran — " +
                 "rien n'est caché.",
             actionLabel = if (fineGranted) "Activé" else "Autoriser la position",
-            onAction = { finePermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+            onAction = {
+                finePermission.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            },
         )
 
         if (Config.featureBackgroundLocation && fineGranted) {
