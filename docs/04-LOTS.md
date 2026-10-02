@@ -109,3 +109,20 @@ L0 ──┬── L1 ──► (publication v1 : socle transparent + observatio
 3. **L3** et **L4** (déclarations Play — anticiper les délais Google).
 4. **L5**, puis **L6** (profil ado).
 5. **L8** avant chaque soumission majeure ; **L9** au fil de l'eau.
+
+---
+
+## Ajouts de la veille concurrentielle (v2)
+
+Chaque lot absorbe les fonctions `must`/`should` récupérées de la veille (détail : [`05-VEILLE-CONCURRENTIELLE.md`](05-VEILLE-CONCURRENTIELLE.md), mappées dans [`01-CAHIER-DES-CHARGES.md`](01-CAHIER-DES-CHARGES.md) §« Ajouts v2 ») :
+
+- **L1** : journal d'appels/SMS (métadonnées), batterie & stockage, tendances/comparaisons, suivi data.
+- **L2** : mode vacances, verrouillage des réglages système (anti-triche), préréglages par âge + délai de grâce, plannings réutilisables, masquer des apps intégrées.
+- **L3** : automatisation de mode par géofence, faire sonner l'appareil, rapport de conduite (ado).
+- **L4** : assistants IA (Gemini/Siri), médias explicites, contrôles sociaux de jeu, expérience YouTube supervisée.
+- **L5** : contacts autorisés + demande d'ajout, code parent hors-ligne, blocage de contacts, message de verrouillage personnalisé, verrouillage/effacement anti-vol.
+- **L6** : signalement autorités (3018/PHAROS) + ressources 3114.
+- **L8** : toggle de non-visualisation (minimisation RGPD).
+- **L9** : portefeuille familial (dépenses réelles).
+
+Les motifs de **design/UX** récupérés alimentent le prototype (voir §2 du doc de veille) : visualisations de temps d'écran et carte de localisation déjà intégrées.

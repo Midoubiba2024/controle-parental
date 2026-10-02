@@ -226,3 +226,41 @@ elles sont illégales (FR : Code pénal **226‑1**, **226‑15** ; US : ECPA/wi
 > légales** sont : bouton **SOS** (E1), **localisation temps réel transparente** (D1), **geofencing +
 > check-in** (D4/D6), **alertes on-device** (G1–G4), **contacts ICE** (E3). Elles protègent aussi
 > efficacement, sans exposer le parent à des poursuites pénales.
+
+---
+
+## Ajouts issus de la veille concurrentielle (v2)
+
+Fonctions `must`/`should` récupérées de la veille (liste exhaustive : [`05-VEILLE-CONCURRENTIELLE.md`](05-VEILLE-CONCURRENTIELLE.md)). Elles complètent les modules ci-dessus.
+
+### Nouveautés indispensables (`must`)
+| # | Fonction | Module / Lot | Note légale |
+|---|----------|--------------|-------------|
+| V1 | **Contacts autorisés** (appels & SMS natifs) + demande d'ajout par l'enfant | H / **L5** | Gestion de l'appareil ; transparent. Liste blanche pour le 6 ans. |
+| V2 | **Code parent temporaire hors-ligne** (déverrouiller / accorder du temps sans réseau) | H / **L5** | Équivalent du Parent Access Code (Family Link) / code Temps d'écran (Apple). |
+| V3 | **Gestion des assistants IA génératifs** (Gemini / Siri / chatbots), filtrage par âge | C / **L4** | Enjeu 2026 ; bloquer à 6 ans, encadrer à 12 ans. |
+
+### Nouveautés importantes (`should`)
+| # | Fonction | Module / Lot |
+|---|----------|--------------|
+| V4 | **Mode vacances / pause de planning** temporaire (reprise auto) | A / L2 |
+| V5 | **Verrouillage des réglages système** (anti-triche : date/heure, compte, dév.) | B / L2 |
+| V6 | **Préréglages de temps par âge** (par catégorie) + **délai de grâce « encore 1 min »** | A / L2 |
+| V7 | **Restrictions de médias explicites** (musique, podcasts, actualités, livres) | C / L4 |
+| V8 | **Contrôles sociaux de jeu** (multijoueur, ajout d'amis, chat in-game, enregistrement) | C / L4 |
+| V9 | **Expérience YouTube supervisée** (Kids vs supervisé, niveaux par âge) | C / L4 |
+| V10 | **Journal d'appels & SMS — métadonnées seulement** (qui/quand/durée, jamais le contenu), visible par l'enfant | F / L1 |
+| V11 | **Blocage de contacts** (appels + SMS, listes allow/block) | H / L5 |
+| V12 | **Signalement aux autorités** (grooming) : 3018 e-Enfance, PHAROS + **ressources prévention suicide 3114** | G / L6 |
+| V13 | **Portefeuille familial** (dépenses réelles, plafonds, historique d'achats) | I / L9 |
+| V14 | **Automatisation de mode par géofence** (École/Downtime déclenchés par lieu) | D / L3 |
+| V15 | **Faire sonner l'appareil** (buzz, même en silencieux) | D-E / L3 |
+| V16 | **Verrouillage avec message personnalisé** sur l'écran | H / L5 |
+| V17 | **Batterie & stockage** de l'appareil dans la console | F / L1 |
+| V18 | **Rapport de conduite** (profil ado conducteur) | E / L3 |
+
+### Confort (`nice`, extraits)
+Plannings réutilisables (L2) · délai de grâce (L2) · tendances/comparaisons dans les rapports (L1) · masquer des apps intégrées (L2) · verrouillage/effacement anti-vol (L5) · **toggle « je choisis de ne pas voir X »** (minimisation RGPD, L8) · suivi data mobile (L1).
+
+### Design/UX (intégrés au prototype ou backlog)
+Visualisations de **temps d'écran** (anneau du jour, barres 7 jours, répartition par app) ✅ · **carte de localisation** + zones de sécurité ✅ · **batterie/stockage** dans l'en-tête ✅ · à venir : onboarding guidé, états vides pédagogiques, gamification douce (récompenses), notifications groupées. Liste complète : [`05-VEILLE-CONCURRENTIELLE.md`](05-VEILLE-CONCURRENTIELLE.md) §2.
