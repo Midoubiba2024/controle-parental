@@ -46,6 +46,14 @@ class SupervisionStore(context: Context) {
             .apply()
     }
 
+    /** Met à jour uniquement les jetons de session (après un refresh GoTrue). */
+    fun updateTokens(accessToken: String, refreshToken: String) {
+        prefs.edit()
+            .putString(KEY_ACCESS, accessToken)
+            .putString(KEY_REFRESH, refreshToken)
+            .apply()
+    }
+
     fun load(): Enrollment? {
         if (!isEnrolled) return null
         return Enrollment(
@@ -58,6 +66,11 @@ class SupervisionStore(context: Context) {
         )
     }
 
+    /** Filigrane de la dernière métadonnée d'appel remontée (epoch ms). */
+    var callLogWatermark: Long
+        get() = prefs.getLong(KEY_CALL_WM, 0L)
+        set(value) { prefs.edit().putLong(KEY_CALL_WM, value).apply() }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
@@ -67,5 +80,6 @@ class SupervisionStore(context: Context) {
         const val KEY_MODE = "mode"
         const val KEY_ACCESS = "access_token"
         const val KEY_REFRESH = "refresh_token"
+        const val KEY_CALL_WM = "call_log_watermark"
     }
 }

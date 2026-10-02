@@ -24,6 +24,10 @@ class SupervisionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIF_ID, buildNotification())
+        // Planifie la collecte d'agrégats d'observation (LOT 1) : passage immédiat
+        // + périodique. La collecte elle-même s'exécute dans WorkManager (repli
+        // fiable sous Doze) ; le service garantit la notification de transparence.
+        MetricsWorker.schedule(this)
         // START_STICKY : le système relance le service s'il est tué.
         return START_STICKY
     }
