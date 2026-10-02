@@ -59,28 +59,37 @@ class MetricsCollector(private val context: Context) {
                     put("is_system", r.isSystem)
                     putOpt("installed_at", r.installedAt?.let { iso(it) })
                     put("last_seen_at", iso(System.currentTimeMillis()))
+                    // App présente : on « ressuscite » une entrée éventuellement
+                    // marquée désinstallée (removed_at remis à null au merge).
+                    put("removed_at", JSONObject.NULL)
                 },
             )
         }
-        when (val res = client.upsert(
+        val invRes = client.upsert(
             "app_inventory", invArr, onConflict = "child_id,device_id,package_name",
-        )) { is SupabaseClient.Result.Error -> errors += "inventory:${res.code}"; else -> {} }
-
-        // 3) Batterie & stockage.
-        val status = DeviceStatusCollector(context).collect()
-        val statusArr = JSONArray().put(
-            base(e).apply {
-                putOpt("battery_level", status.batteryLevel)
-                putOpt("is_charging", status.isCharging)
-                putOpt("storage_total_bytes", status.storageTotalBytes)
-                putOpt("storage_free_bytes", status.storageFreeBytes)
-                put("captured_at", iso(System.currentTimeMillis()))
-            },
         )
-        val statusOk = client.upsert("device_status", statusArr) !is SupabaseClient.Result.Error
-        if (!statusOk) errors += "status"
+        if (invRes is SupabaseClient.Result.Error) errors += "inventory:${invRes.code}"
 
-        // 4) Journal d'appels (métadonnées), seulement si la fonction est activée.
+        // Réconciliation : stamper removed_at pour les packages encore en base
+        // (non déjà marqués) mais ABSENTS de l'inventaire courant → apps
+        // désinstallées. Sinon elles resteraient affichées « à vie » côté parent.
+        // On ne le fait qu'après un upsert réussi et si l'inventaire n'est pas
+        // vide (une collecte vide, ex. erreur, ne doit pas tout marquer supprimé).
+        if (invRes !is SupabaseClient.Result.Error && inventory.isNotEmpty()) {
+            val present = inventory.joinToString(",") { it.packageName }
+            val query = "child_id=eq.${e.childId}" +
+                "&device_id=eq.${e.deviceId}" +
+                "&removed_at=is.null" +
+                "&package_name=not.in.($present)"
+            val reconciled = client.patch(
+                "app_inventory", query,
+                JSONObject().put("removed_at", iso(System.currentTimeMillis())),
+            )
+            if (reconciled is SupabaseClient.Result.Error) errors += "inventory_reconcile:${reconciled.code}"
+        }
+
+        // 3) Journal d'appels (métadonnées), seulement si la fonction est activée.
+        //    CONFORMITÉ : aucun nom de contact — numéro haché, sens, durée, date.
         var callCount = 0
         val callCollector = CallLogCollector(context)
         if (callCollector.isEnabledAndGranted()) {
@@ -94,7 +103,6 @@ class MetricsCollector(private val context: Context) {
                         put("kind", "call")
                         put("direction", r.direction)
                         putOpt("counterparty_hash", r.counterpartyHash)
-                        putOpt("counterparty_label", r.counterpartyLabel)
                         put("duration_ms", r.durationMs)
                         put("occurred_at", iso(r.occurredAt))
                     },
@@ -108,6 +116,31 @@ class MetricsCollector(private val context: Context) {
             )
             if (res is SupabaseClient.Result.Error) errors += "calls:${res.code}"
             else { store.callLogWatermark = maxTs; callCount = calls.size }
+        }
+
+        // 4) Batterie & stockage — EN DERNIER. C'est une série temporelle sans clé
+        //    d'unicité : un insert simple n'est PAS idempotent. Comme le worker
+        //    rejoue tout le cycle quand un seul upload échoue, on ne l'insère QUE
+        //    si tout le reste du cycle a réussi (errors vide). Ainsi un cycle
+        //    partiellement en échec n'écrit pas de device_status, et sa
+        //    ré-exécution n'en crée pas de doublon. (Résidu connu : si l'insert
+        //    aboutit côté serveur mais que la réponse est perdue, le retour en
+        //    échec peut, au retry, créer un doublon ; cas rare, à traiter par une
+        //    clé d'unicité serveur si besoin.)
+        var statusOk = false
+        if (errors.isEmpty()) {
+            val status = DeviceStatusCollector(context).collect()
+            val statusArr = JSONArray().put(
+                base(e).apply {
+                    putOpt("battery_level", status.batteryLevel)
+                    putOpt("is_charging", status.isCharging)
+                    putOpt("storage_total_bytes", status.storageTotalBytes)
+                    putOpt("storage_free_bytes", status.storageFreeBytes)
+                    put("captured_at", iso(System.currentTimeMillis()))
+                },
+            )
+            statusOk = client.upsert("device_status", statusArr) !is SupabaseClient.Result.Error
+            if (!statusOk) errors += "status"
         }
 
         return Report(usage.size, inventory.size, statusOk, callCount, errors)

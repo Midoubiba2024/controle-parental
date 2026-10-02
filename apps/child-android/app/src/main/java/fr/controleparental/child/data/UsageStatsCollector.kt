@@ -4,6 +4,7 @@ import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.os.Build
 import android.os.Process
 import java.util.Calendar
 import java.util.TimeZone
@@ -33,11 +34,23 @@ class UsageStatsCollector(private val context: Context) {
     /** La permission d'accès aux données d'usage est-elle accordée ? */
     fun hasUsageAccess(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            context.packageName,
-        )
+        // unsafeCheckOpNoThrow() n'existe qu'à partir de l'API 29 ; sous API 29
+        // (minSdk = 26, soit Android 8–9) il faut utiliser checkOpNoThrow(),
+        // sinon NoSuchMethodError au runtime.
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName,
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName,
+            )
+        }
         return mode == AppOpsManager.MODE_ALLOWED
     }
 

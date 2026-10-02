@@ -11,18 +11,22 @@ import java.security.MessageDigest
 /**
  * Journal d'appels — MÉTADONNÉES UNIQUEMENT (qui/quand/durée).
  *
- * LIGNE ROUGE (docs/02-CONFORMITE.md) : jamais le contenu, jamais d'enregistrement.
- * Le numéro du correspondant est HACHÉ (SHA-256 + pepper) et n'est jamais stocké
- * ni transmis en clair. Fonction SENSIBLE (READ_CALL_LOG) : désactivée par défaut
- * (Config.featureCallLog) et conditionnée au consentement runtime. Visible par
- * l'enfant dans l'écran « mes données ».
+ * LIGNE ROUGE (docs/02-CONFORMITE.md) : jamais le contenu, jamais d'enregistrement,
+ * jamais le nom du contact en clair. Seuls le numéro — immédiatement haché — le
+ * sens, la durée et la date sont collectés. Fonction SENSIBLE (READ_CALL_LOG) :
+ * désactivée par défaut (Config.featureCallLog) et conditionnée au consentement
+ * runtime. Visible par l'enfant dans l'écran « mes données ».
+ *
+ * ATTENTION : le hachage effectué ici est LOCAL et son poivre est compilé dans
+ * l'APK, donc réversible par force brute (voir Config.commHashPepper). Il ne doit
+ * PAS être considéré comme une protection du numéro : avant toute activation en
+ * release, le hachage/HMAC doit être déplacé côté serveur (Edge Function).
  */
 class CallLogCollector(private val context: Context) {
 
     data class CallRow(
         val direction: String,      // incoming/outgoing/missed/rejected/blocked
         val counterpartyHash: String?,
-        val counterpartyLabel: String?,
         val durationMs: Long,
         val occurredAt: Long,       // epoch ms
     )
@@ -36,9 +40,12 @@ class CallLogCollector(private val context: Context) {
     fun collect(sinceEpochMs: Long): List<CallRow> {
         if (!isEnabledAndGranted()) return emptyList()
         val rows = mutableListOf<CallRow>()
+        // CONFORMITÉ (ligne rouge) : on ne lit PAS CACHED_NAME (nom du contact en
+        // clair). Seuls le numéro — immédiatement haché — le sens, la durée et la
+        // date sont collectés.
         val projection = arrayOf(
             CallLog.Calls.NUMBER, CallLog.Calls.TYPE,
-            CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.CACHED_NAME,
+            CallLog.Calls.DATE, CallLog.Calls.DURATION,
         )
         val cursor = context.contentResolver.query(
             CallLog.Calls.CONTENT_URI,
@@ -53,17 +60,14 @@ class CallLogCollector(private val context: Context) {
             val iType = c.getColumnIndex(CallLog.Calls.TYPE)
             val iDate = c.getColumnIndex(CallLog.Calls.DATE)
             val iDur = c.getColumnIndex(CallLog.Calls.DURATION)
-            val iName = c.getColumnIndex(CallLog.Calls.CACHED_NAME)
             while (c.moveToNext()) {
                 val number = if (iNum >= 0) c.getString(iNum) else null
                 val type = if (iType >= 0) c.getInt(iType) else 0
                 val date = if (iDate >= 0) c.getLong(iDate) else continue
                 val durationS = if (iDur >= 0) c.getLong(iDur) else 0
-                val name = if (iName >= 0) c.getString(iName) else null
                 rows += CallRow(
                     direction = directionOf(type),
                     counterpartyHash = number?.takeIf { it.isNotBlank() }?.let { hash(it) },
-                    counterpartyLabel = name,
                     durationMs = durationS * 1000,
                     occurredAt = date,
                 )
@@ -81,6 +85,9 @@ class CallLogCollector(private val context: Context) {
         else -> "incoming"
     }
 
+    // NB : hachage LOCAL — poivre présent dans l'APK, donc réversible (numéros à
+    // faible entropie). Clé de regroupement uniquement, pas un anonymat. À déplacer
+    // côté serveur (HMAC) avant activation en release (cf. Config.commHashPepper).
     private fun hash(number: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val bytes = digest.digest("${Config.commHashPepper}:${number.trim()}".toByteArray())

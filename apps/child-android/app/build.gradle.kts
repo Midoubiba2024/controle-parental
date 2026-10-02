@@ -30,12 +30,18 @@ android {
         // Désactivée par défaut pour limiter le risque de refus Play ; activable
         // via -PfeatureCallLog=true à la compilation. Même activée, elle reste
         // conditionnée au consentement runtime et visible par l'enfant.
+        // NE PAS activer en release tant que le hachage des numéros n'est pas
+        // déplacé côté serveur (voir ci-dessous et Config.commHashPepper).
         val featureCallLog: Boolean =
             (project.findProperty("featureCallLog") as String?)?.toBoolean() ?: false
         buildConfigField("boolean", "FEATURE_CALL_LOG", featureCallLog.toString())
 
-        // Poivre (pepper) de hachage des numéros de correspondants (jamais en
-        // clair). À surcharger en release via -PcommHashPepper=… .
+        // Poivre (pepper) de hachage LOCAL des numéros de correspondants.
+        // LIMITE CONNUE : compilé dans l'APK, donc extractible → le hash local est
+        // réversible par force brute (numéros à faible entropie). Ce n'est PAS une
+        // protection réelle du numéro, seulement une clé de regroupement. Le
+        // hachage/HMAC doit passer CÔTÉ SERVEUR (Edge Function) avant toute
+        // activation de FEATURE_CALL_LOG en release.
         val commHashPepper: String =
             (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
         buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")

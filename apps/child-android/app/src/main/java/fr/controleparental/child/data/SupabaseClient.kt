@@ -59,6 +59,59 @@ class SupabaseClient(private val store: SupervisionStore) {
         }
     }
 
+    /**
+     * PATCH (UPDATE) ciblé par un filtre PostgREST ([query], ex.
+     * "child_id=eq.…&removed_at=is.null"). Applique [patch] aux lignes filtrées.
+     * Même logique de rafraîchissement de session que [upsert]. Retourne Ok si
+     * aucune ligne ne correspond (204).
+     */
+    suspend fun patch(
+        table: String,
+        query: String,
+        patch: JSONObject,
+    ): Result = withContext(Dispatchers.IO) {
+        val enrollment = store.load() ?: return@withContext Result.Error("not_enrolled")
+
+        var token = enrollment.accessToken
+        var attempt = 0
+        while (true) {
+            attempt++
+            val resp = patchRequest(table, query, patch, token)
+            when {
+                resp == 401 && attempt == 1 -> {
+                    when (val r = refresh()) {
+                        is RefreshResult.Ok -> token = r.accessToken
+                        is RefreshResult.Error -> return@withContext Result.Error("refresh_${r.code}")
+                    }
+                }
+                resp in 200..299 -> return@withContext Result.Ok
+                else -> return@withContext Result.Error("http_$resp")
+            }
+        }
+    }
+
+    private fun patchRequest(
+        table: String,
+        query: String,
+        patch: JSONObject,
+        accessToken: String,
+    ): Int {
+        val url = Config.restUrl(table) + "?" + query
+        val req = Request.Builder()
+            .url(url)
+            .addHeader("apikey", Config.supabaseAnonKey)
+            .addHeader("Authorization", "Bearer $accessToken")
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Prefer", "return=minimal")
+            .patch(patch.toString().toRequestBody(jsonType))
+            .build()
+        return try {
+            http.newCall(req).execute().use { it.code }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     private fun post(
         table: String,
         rows: JSONArray,

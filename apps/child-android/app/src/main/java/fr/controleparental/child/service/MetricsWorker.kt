@@ -26,7 +26,12 @@ class MetricsWorker(
     override suspend fun doWork(): Result {
         if (!SupervisionStore(applicationContext).isEnrolled) return Result.success()
         val report = MetricsCollector(applicationContext).collectAndUpload()
-        // En cas d'erreur réseau transitoire, laisser WorkManager réessayer.
+        // En cas d'erreur réseau transitoire, laisser WorkManager rejouer le cycle.
+        // Le rejeu est sûr : les remontées sont idempotentes (upsert on_conflict
+        // pour usage_daily/app_inventory/comm_events ; réconciliation d'inventaire
+        // qui ne re-marque pas une ligne déjà estampillée) et device_status n'est
+        // inséré qu'une fois le reste du cycle réussi (cf. MetricsCollector), donc
+        // un retry ne re-crée pas de doublon des uploads déjà aboutis.
         return if (report.errors.isEmpty()) Result.success() else Result.retry()
     }
 
