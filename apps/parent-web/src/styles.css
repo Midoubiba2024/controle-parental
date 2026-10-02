@@ -184,6 +184,7 @@ h3 { font-size: .95rem; margin: 0 0 8px; }
 .tile .delta { font-size: .82rem; font-weight: 600; }
 .tile .delta.up { color: var(--danger); }
 .tile .delta.down { color: var(--good); }
+.tile .delta.flat { color: var(--muted); }
 .tile .ic-badge { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 15px; }
 
 /* --- Barres de progression (stockage, batterie) ------------------------ */

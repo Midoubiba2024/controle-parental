@@ -118,29 +118,34 @@ class MetricsCollector(private val context: Context) {
             else { store.callLogWatermark = maxTs; callCount = calls.size }
         }
 
-        // 4) Batterie & stockage — EN DERNIER. C'est une série temporelle sans clé
-        //    d'unicité : un insert simple n'est PAS idempotent. Comme le worker
-        //    rejoue tout le cycle quand un seul upload échoue, on ne l'insère QUE
-        //    si tout le reste du cycle a réussi (errors vide). Ainsi un cycle
-        //    partiellement en échec n'écrit pas de device_status, et sa
-        //    ré-exécution n'en crée pas de doublon. (Résidu connu : si l'insert
-        //    aboutit côté serveur mais que la réponse est perdue, le retour en
-        //    échec peut, au retry, créer un doublon ; cas rare, à traiter par une
-        //    clé d'unicité serveur si besoin.)
+        // 4) Batterie & stockage — EN DERNIER, et seulement si le reste du cycle a
+        //    réussi. IDEMPOTENCE : on réutilise le captured_at en attente (filigrane)
+        //    tant que l'upload n'a pas abouti, et on upsert sur (device_id,
+        //    captured_at) en ignore-duplicates (migration 0009). Ainsi une réponse
+        //    perdue puis ré-émise au rejeu ne crée PAS de doublon. (La purge de
+        //    rétention de device_status est planifiée en L8.)
         var statusOk = false
         if (errors.isEmpty()) {
             val status = DeviceStatusCollector(context).collect()
+            val capturedAt = store.pendingStatusCapturedAt.takeIf { it != 0L }
+                ?: System.currentTimeMillis()
+            store.pendingStatusCapturedAt = capturedAt
             val statusArr = JSONArray().put(
                 base(e).apply {
                     putOpt("battery_level", status.batteryLevel)
                     putOpt("is_charging", status.isCharging)
                     putOpt("storage_total_bytes", status.storageTotalBytes)
                     putOpt("storage_free_bytes", status.storageFreeBytes)
-                    put("captured_at", iso(System.currentTimeMillis()))
+                    put("captured_at", iso(capturedAt))
                 },
             )
-            statusOk = client.upsert("device_status", statusArr) !is SupabaseClient.Result.Error
-            if (!statusOk) errors += "status"
+            when (val res = client.upsert(
+                "device_status", statusArr,
+                onConflict = "device_id,captured_at", ignoreDuplicates = true,
+            )) {
+                is SupabaseClient.Result.Error -> errors += "status:${res.code}"
+                else -> { statusOk = true; store.pendingStatusCapturedAt = 0L }
+            }
         }
 
         return Report(usage.size, inventory.size, statusOk, callCount, errors)

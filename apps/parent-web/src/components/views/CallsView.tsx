@@ -11,14 +11,18 @@ const DIR_LABEL: Record<CommDirection, string> = {
 export function CallsView({ obs }: { obs: ObservationData }) {
   const { comms } = obs;
 
+  // « non aboutis » = manqués + rejetés + bloqués (aucune durée). On les regroupe
+  // explicitement et on affiche la tuile (plutôt que de les diluer en silence).
   const counts = comms.reduce((acc, c) => {
     acc.total++;
     if (c.direction === "incoming") acc.in++;
     else if (c.direction === "outgoing") acc.out++;
-    else acc.missed++;
+    else acc.unanswered++;      // missed | rejected | blocked
     acc.duration += c.duration_ms ?? 0;
     return acc;
-  }, { total: 0, in: 0, out: 0, missed: 0, duration: 0 });
+  }, { total: 0, in: 0, out: 0, unanswered: 0, duration: 0 });
+
+  const connected = (c: CommEvent) => c.direction === "incoming" || c.direction === "outgoing";
 
   return (
     <div className="grid" style={{ gap: 18 }}>
@@ -37,18 +41,18 @@ export function CallsView({ obs }: { obs: ObservationData }) {
       ) : (
         <>
           <div className="grid cols-4">
-            <Tile label="Appels" value={counts.total} icon="📞"
-              iconBg="color-mix(in srgb, var(--primary) 18%, transparent)" />
             <Tile label="Entrants" value={counts.in} icon="📥"
               iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)" />
             <Tile label="Sortants" value={counts.out} icon="📤"
               iconBg="color-mix(in srgb, var(--series-1) 18%, transparent)" />
+            <Tile label="Manqués / rejetés" value={counts.unanswered} icon="📵"
+              iconBg="color-mix(in srgb, var(--danger) 16%, transparent)" />
             <Tile label="Durée totale" value={fmtDuration(counts.duration)} icon="⏱"
               iconBg="color-mix(in srgb, var(--series-4) 20%, transparent)" />
           </div>
 
           <div className="card">
-            <h2>Journal des appels <span className="muted small">(métadonnées)</span></h2>
+            <h2>Journal des appels <span className="muted small">(métadonnées · {counts.total} au total)</span></h2>
             <table className="tbl">
               <thead>
                 <tr><th>Sens</th><th>Correspondant</th><th>Durée</th><th>Date</th></tr>
@@ -58,7 +62,7 @@ export function CallsView({ obs }: { obs: ObservationData }) {
                   <tr key={c.id}>
                     <td><span className={`pill ${c.direction}`}>{DIR_LABEL[c.direction]}</span></td>
                     <td>{counterparty(c)}</td>
-                    <td>{c.direction === "missed" ? "—" : fmtDuration(c.duration_ms ?? 0)}</td>
+                    <td>{connected(c) ? fmtDuration(c.duration_ms ?? 0) : "—"}</td>
                     <td className="muted">{fmtDateTime(c.occurred_at)}</td>
                   </tr>
                 ))}

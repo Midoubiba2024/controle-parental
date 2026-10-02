@@ -17,6 +17,10 @@ export interface ObservationData {
   status: DeviceStatus[];        // derniers relevés par appareil
   comms: CommEvent[];
   devices: Device[];
+  // Jour de référence (« aujourd'hui ») dérivé des DONNÉES (dernier jour présent
+  // dans usage_daily), écrit dans le fuseau de l'APPAREIL enfant. On ne recalcule
+  // pas « aujourd'hui » dans le fuseau du navigateur parent (familles multi-fuseaux).
+  anchorDay: string;            // YYYY-MM-DD
   loading: boolean;
   error: string | null;
   reload: () => void;
@@ -36,38 +40,58 @@ export function useObservation(childId: string | null): ObservationData {
   const [status, setStatus] = useState<DeviceStatus[]>([]);
   const [comms, setComms] = useState<CommEvent[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [anchorDay, setAnchorDay] = useState<string>(dayKey(0));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
-  const load = useCallback(async () => {
+  const reload = useCallback(() => setReloadToken((t) => t + 1), []);
+
+  useEffect(() => {
+    // Garde anti-réponse-périmée (VIE PRIVÉE) : si l'enfant sélectionné change
+    // avant la fin du chargement, on ignore la réponse de l'enfant précédent pour
+    // ne JAMAIS afficher ses données sous l'entête d'un autre enfant.
+    let active = true;
     if (!childId) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     const since = dayKey(USAGE_WINDOW_DAYS);
 
-    const [u, inv, st, cm, dv] = await Promise.all([
-      supabase.from("usage_daily").select("*")
-        .eq("child_id", childId).gte("day", since).order("day", { ascending: false }),
-      supabase.from("app_inventory").select("*")
-        .eq("child_id", childId).order("last_seen_at", { ascending: false }),
-      supabase.from("device_status").select("*")
-        .eq("child_id", childId).order("captured_at", { ascending: false }).limit(200),
-      supabase.from("comm_events").select("*")
-        .eq("child_id", childId).order("occurred_at", { ascending: false }).limit(500),
-      supabase.from("devices").select("*").eq("child_id", childId).order("created_at"),
-    ]);
+    void (async () => {
+      const [u, inv, st, cm, dv] = await Promise.all([
+        supabase.from("usage_daily").select("*")
+          .eq("child_id", childId).gte("day", since).order("day", { ascending: false }),
+        supabase.from("app_inventory").select("*")
+          .eq("child_id", childId).order("last_seen_at", { ascending: false }),
+        supabase.from("device_status").select("*")
+          .eq("child_id", childId).order("captured_at", { ascending: false }).limit(200),
+        supabase.from("comm_events").select("*")
+          .eq("child_id", childId).order("occurred_at", { ascending: false }).limit(500),
+        supabase.from("devices").select("*").eq("child_id", childId).order("created_at"),
+      ]);
 
-    if (u.error) setError(u.error.message); else setUsage(u.data as UsageDaily[]);
-    if (!inv.error) setInventory(inv.data as AppInventory[]);
-    if (!st.error) setStatus(latestPerDevice(st.data as DeviceStatus[]));
-    if (!cm.error) setComms(cm.data as CommEvent[]);
-    if (!dv.error) setDevices(dv.data as Device[]);
-    setLoading(false);
-  }, [childId]);
+      if (!active) return;   // sélection changée entre-temps → on jette ce résultat
 
-  useEffect(() => { void load(); }, [load]);
+      if (u.error) {
+        setError(u.error.message);
+      } else {
+        const rows = u.data as UsageDaily[];
+        setUsage(rows);
+        // Ancre = dernier jour présent (données ordonnées day desc) ; repli sur le
+        // jour navigateur si aucune donnée. Jamais recalculé en TZ navigateur.
+        setAnchorDay(rows[0]?.day ?? dayKey(0));
+      }
+      if (!inv.error) setInventory(inv.data as AppInventory[]);
+      if (!st.error) setStatus(latestPerDevice(st.data as DeviceStatus[]));
+      if (!cm.error) setComms(cm.data as CommEvent[]);
+      if (!dv.error) setDevices(dv.data as Device[]);
+      setLoading(false);
+    })();
 
-  return { usage, inventory, status, comms, devices, loading, error, reload: load };
+    return () => { active = false; };
+  }, [childId, reloadToken]);
+
+  return { usage, inventory, status, comms, devices, anchorDay, loading, error, reload };
 }
 
 function latestPerDevice(rows: DeviceStatus[]): DeviceStatus[] {

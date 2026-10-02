@@ -4,7 +4,7 @@ import { useRules, AGE_PRESETS, DOW_LABELS, DOW_ORDER, SCHEDULE_KIND_LABEL,
   dowBit, dowMaskHas, dowMaskLabel, effectiveDailyLimit, hhmmToMinutes,
   isVacationActive, minutesToHHMM, sendCommand } from "../../lib/rules";
 import { byApp, byCategory, type ObservationData } from "../../lib/observation";
-import { appInitials, appLabelOf, categoryColor, categoryLabel, dayKey, fmtDuration } from "../../lib/format";
+import { appInitials, appLabelOf, categoryColor, categoryLabel, fmtDuration, shiftDay } from "../../lib/format";
 import { Meter, EmptyState } from "../Ui";
 import type {
   AccessPolicy, AgeProfile, Child, RuleAction, Schedule, ScheduleKind,
@@ -22,7 +22,7 @@ export function RulesView({ familyId, child, obs }: {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const today = dayKey(0);
+  const today = obs.anchorDay;   // jour de référence issu des données (TZ appareil)
   const usageTodayByPkg = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of byApp(obs.usage, today, today)) m.set(a.packageName, a.ms);
@@ -55,7 +55,7 @@ export function RulesView({ familyId, child, obs }: {
       <CategoryRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
         usageByCat={usageTodayByCat} />
       <AppRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
-        inventory={obs.inventory} usageByPkg={usageTodayByPkg} />
+        inventory={obs.inventory} usageByPkg={usageTodayByPkg} anchorDay={obs.anchorDay} />
       <SchedulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
     </div>
   );
@@ -372,12 +372,12 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
 }
 
 /* ------------------------- Règles par application ------------------------ */
-function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg }: CardBase & {
-  inventory: ObservationData["inventory"]; usageByPkg: Map<string, number>;
+function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, anchorDay }: CardBase & {
+  inventory: ObservationData["inventory"]; usageByPkg: Map<string, number>; anchorDay: string;
 }) {
   const [query, setQuery] = useState("");
   const [onlyRecent, setOnlyRecent] = useState(false);
-  const recentCut = dayKey(2); // apps vues pour la 1re fois dans les 3 derniers jours
+  const recentCut = shiftDay(anchorDay, -2); // apps vues pour la 1re fois dans les 3 derniers jours
 
   const ruleFor = (pkg: string) => r.appRules.find((x) => x.target_type === "package" && x.target_value === pkg) ?? null;
 

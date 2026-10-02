@@ -1,20 +1,20 @@
 import { useMemo, useState } from "react";
 import { byApp, dailyTotals, totalInRange, type ObservationData } from "../../lib/observation";
 import {
-  appInitials, appLabelOf, categoryColor, categoryLabel, dayKey, fmtDayLabel,
-  fmtDuration,
+  appInitials, appLabelOf, categoryColor, categoryLabel, fmtDayLabel,
+  fmtDuration, shiftDay,
 } from "../../lib/format";
 import { Bars, type Slice } from "../charts/ChartKit";
 import { EmptyState } from "../Ui";
 import type { AppInventory } from "../../lib/types";
 
 export function ApplicationsView({ obs }: { obs: ObservationData }) {
-  const { inventory, usage } = obs;
+  const { inventory, usage, anchorDay } = obs;
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
-  const from30 = dayKey(29);
-  const to = dayKey(0);
+  const from30 = shiftDay(anchorDay, -29);
+  const to = anchorDay;
 
   // Usage (30 j) par package pour trier/afficher même les apps non lançables vues en usage.
   const usageByPkg = useMemo(() => {
@@ -71,16 +71,16 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
         </div>
       </div>
 
-      {current && <AppDetail app={current} usage={usage} />}
+      {current && <AppDetail app={current} usage={usage} anchorDay={anchorDay} />}
     </div>
   );
 }
 
-function AppDetail({ app, usage }: { app: AppInventory; usage: ObservationData["usage"] }) {
-  const to = dayKey(0);
-  const from7 = dayKey(6);
+function AppDetail({ app, usage, anchorDay }: { app: AppInventory; usage: ObservationData["usage"]; anchorDay: string }) {
+  const to = anchorDay;
+  const from7 = shiftDay(anchorDay, -6);
   const pkgUsage = useMemo(() => usage.filter((u) => u.package_name === app.package_name), [usage, app.package_name]);
-  const days = Array.from({ length: 7 }, (_, i) => dayKey(6 - i));
+  const days = Array.from({ length: 7 }, (_, i) => shiftDay(anchorDay, -(6 - i)));
   const totals = dailyTotals(pkgUsage, days);
   const bars: Slice[] = days.map((d, i) => ({ key: d, label: fmtDayLabel(d), value: totals[i], color: categoryColor(app.category) }));
   const total7 = totalInRange(pkgUsage, from7, to);

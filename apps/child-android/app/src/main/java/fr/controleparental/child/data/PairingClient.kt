@@ -4,7 +4,6 @@ import android.os.Build
 import fr.controleparental.child.Config
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
@@ -13,7 +12,7 @@ import org.json.JSONObject
 /** Appelle l'Edge Function pairing-complete pour enrôler l'appareil. */
 class PairingClient {
 
-    private val http = OkHttpClient()
+    private val http = Http.client
     private val jsonType = "application/json".toMediaType()
 
     sealed interface Result {

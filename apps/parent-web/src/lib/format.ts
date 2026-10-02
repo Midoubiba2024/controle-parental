@@ -48,10 +48,26 @@ export function dayKey(offset = 0): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * Décale une clé de jour (YYYY-MM-DD) de [delta] jours, par pur calcul de dates
+ * (sans dépendre du fuseau). Utilisé pour dériver les plages d'affichage à partir
+ * du jour de référence issu des DONNÉES (voir useObservation.anchorDay), afin de
+ * ne pas mélanger le fuseau du navigateur parent et celui de l'appareil enfant.
+ */
+export function shiftDay(day: string, delta: number): string {
+  const d = new Date(day + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /* --- Catégories d'apps : libellé FR + slot de couleur de série ---------- */
-const CATEGORY_ORDER = [
-  "social", "game", "video", "audio", "productivity", "maps", "news", "image", "other",
-] as const;
+// 8 catégories nommées → 8 séries de la palette (CVD-safe). « other » n'a PAS de
+// série dédiée (il n'y a que 8 séries) : il prend une couleur NEUTRE, pour qu'aucune
+// autre catégorie ne partage sa teinte (cf. skill dataviz : pas deux entités de
+// même couleur dans un donut/une légende).
+const CATEGORY_SERIES: Record<string, number> = {
+  social: 1, game: 2, video: 3, audio: 4, productivity: 5, maps: 6, news: 7, image: 8,
+};
 
 const CATEGORY_LABELS: Record<string, string> = {
   social: "Réseaux sociaux",
@@ -69,14 +85,14 @@ export function categoryLabel(cat: string | null): string {
   return CATEGORY_LABELS[cat ?? "other"] ?? CATEGORY_LABELS.other;
 }
 
-/** Slot de série (1..8) stable pour une catégorie → variable CSS --series-N. */
+/** Slot de série (1..8) d'une catégorie, ou 0 pour « other » (couleur neutre). */
 export function categorySeries(cat: string | null): number {
-  const idx = CATEGORY_ORDER.indexOf((cat ?? "other") as (typeof CATEGORY_ORDER)[number]);
-  return ((idx < 0 ? CATEGORY_ORDER.length - 1 : idx) % 8) + 1;
+  return CATEGORY_SERIES[cat ?? "other"] ?? 0;
 }
 
 export function categoryColor(cat: string | null): string {
-  return `var(--series-${categorySeries(cat)})`;
+  const s = categorySeries(cat);
+  return s === 0 ? "var(--muted)" : `var(--series-${s})`;
 }
 
 export function appLabelOf(label: string | null, pkg: string): string {

@@ -71,6 +71,16 @@ class SupervisionStore(context: Context) {
         get() = prefs.getLong(KEY_CALL_WM, 0L)
         set(value) { prefs.edit().putLong(KEY_CALL_WM, value).apply() }
 
+    /**
+     * captured_at (epoch ms) du relevé device_status EN COURS, conservé tant que
+     * l'upload n'a pas abouti. En le RÉUTILISANT lors d'un rejeu, l'upsert sur
+     * (device_id, captured_at) devient idempotent : une réponse perdue puis
+     * ré-émise ne crée pas de doublon. 0 = aucun relevé en attente.
+     */
+    var pendingStatusCapturedAt: Long
+        get() = prefs.getLong(KEY_STATUS_TS, 0L)
+        set(value) { prefs.edit().putLong(KEY_STATUS_TS, value).apply() }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
@@ -81,5 +91,6 @@ class SupervisionStore(context: Context) {
         const val KEY_ACCESS = "access_token"
         const val KEY_REFRESH = "refresh_token"
         const val KEY_CALL_WM = "call_log_watermark"
+        const val KEY_STATUS_TS = "pending_status_captured_at"
     }
 }
