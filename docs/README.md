@@ -18,6 +18,7 @@ d'intrusivité adaptatif selon l'âge.
 | [`02-CONFORMITE.md`](02-CONFORMITE.md) | Cadre juridique (RGPD/CNIL, COPPA), ligne rouge, garde-fous obligatoires, fonctions **exclues** |
 | [`03-ARCHITECTURE.md`](03-ARCHITECTURE.md) | Composants, modèle de données, Supabase, sécurité (RLS, chiffrement) |
 | [`04-LOTS.md`](04-LOTS.md) | Découpage en **lots** (work packages), dépendances, ordre d'attaque |
+| [`05-VEILLE-CONCURRENTIELLE.md`](05-VEILLE-CONCURRENTIELLE.md) | **Veille** (features + design) : analyse d'écart vs 15+ concurrents (dont MMGuardian), manques légaux à récupérer par lot, zone sensible → équivalents légaux |
 
 ## État du projet
 
