@@ -25,6 +25,21 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
 
+        // --- LOT 1 — Observation transparente ---------------------------------
+        // Journal d'appels (métadonnées) : fonction SENSIBLE (READ_CALL_LOG).
+        // Désactivée par défaut pour limiter le risque de refus Play ; activable
+        // via -PfeatureCallLog=true à la compilation. Même activée, elle reste
+        // conditionnée au consentement runtime et visible par l'enfant.
+        val featureCallLog: Boolean =
+            (project.findProperty("featureCallLog") as String?)?.toBoolean() ?: false
+        buildConfigField("boolean", "FEATURE_CALL_LOG", featureCallLog.toString())
+
+        // Poivre (pepper) de hachage des numéros de correspondants (jamais en
+        // clair). À surcharger en release via -PcommHashPepper=… .
+        val commHashPepper: String =
+            (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
+        buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")
+
         // Déclaration anti-stalkerware : l'app est un outil de surveillance PARENTALE.
         // (Le flag Play Console child_monitoring se règle à la publication ; voir docs.)
     }
@@ -68,4 +83,8 @@ dependencies {
 
     // Stockage chiffré de la session + identifiants d'appareil
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Planification de la collecte d'agrégats (repli fiable hors du service,
+    // résistant à Doze : contrainte réseau + périodicité ~ toutes les heures).
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }
