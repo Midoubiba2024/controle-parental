@@ -11,6 +11,29 @@ val supabaseUrl: String = (project.findProperty("supabaseUrl") as String?)
 val supabaseAnonKey: String = (project.findProperty("supabaseAnonKey") as String?)
     ?: "sb_publishable_BJow0lDQQdmoiiDE1JUXYg_9Dw_DnBI"
 
+// --- LOT 8a — Signature release STABLE (sideload familial) -------------------
+// Une mise à jour installée par-dessus doit être signée avec la MÊME clé, sinon
+// Android refuse l'installation. Le keystore n'est JAMAIS commité : il est fourni
+// par l'environnement (secrets GitHub en CI, variables locales sinon). Si l'une des
+// 4 valeurs manque, aucune signature release n'est configurée (APK debug seulement).
+// Voir docs/10-INSTALLATION.md §0.
+fun signingValue(name: String): String? =
+    ((project.findProperty(name) as String?) ?: System.getenv(name))?.takeIf { it.isNotBlank() }
+
+val releaseKeystorePath: String? = signingValue("ANDROID_KEYSTORE_PATH")
+val releaseKeystorePassword: String? = signingValue("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias: String? = signingValue("ANDROID_KEY_ALIAS")
+val releaseKeyPassword: String? = signingValue("ANDROID_KEY_PASSWORD")
+val hasReleaseSigning: Boolean = releaseKeystorePath != null && file(releaseKeystorePath).exists() &&
+    releaseKeystorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null
+
+// versionCode croissant obligatoire pour installer une mise à jour par-dessus :
+// le CI passe -PversionCode=<numéro de run>. Défaut 1 en local.
+val appVersionCode: Int = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+// versionName visible dans Réglages → Applications : « 0.1.0 (build N) ». Sur un
+// tag v*, le CI passe -PversionName=<tag sans le v>.
+val appVersionName: String = (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() } ?: "0.1.0"
+
 android {
     namespace = "fr.controleparental.child"
     compileSdk = 35
@@ -19,8 +42,8 @@ android {
         applicationId = "fr.controleparental.child"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = "$appVersionName (build $appVersionCode)"
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
@@ -74,8 +97,22 @@ android {
         // (Le flag Play Console child_monitoring se règle à la publication ; voir docs.)
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Sans secrets de signature, l'APK release reste NON signé (non installable) :
+            // le CI produit alors l'APK debug et l'indique clairement.
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -117,6 +154,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
     implementation("androidx.activity:activity-compose:1.9.2")
+    // play-services-location tire transitivement androidx.fragment 1.0 : avant 1.3,
+    // FragmentActivity casse le retour des demandes de permission (ActivityResult).
+    // Version explicite récente (lint InvalidFragmentVersionForActivityResult).
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.09.03")
     implementation(composeBom)

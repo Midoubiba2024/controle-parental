@@ -86,7 +86,9 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
 }
 
 function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
-  const [mode, setMode] = useState<DeviceMode>(child.age_profile === "young_child" ? "reinforced" : "standard");
+  // « Standard » par défaut : le mode Renforcé exige que l'app soit propriétaire de
+  // l'appareil (device owner, via adb après réinitialisation) — docs/10-INSTALLATION.md §6.
+  const [mode, setMode] = useState<DeviceMode>("standard");
   const [code, setCode] = useState<{ code: string; expires_at: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -110,7 +112,7 @@ function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
       <div className="inline" style={{ marginTop: 8 }}>
         <select value={mode} onChange={(e) => setMode(e.target.value as DeviceMode)}>
           <option value="standard">Standard</option>
-          <option value="reinforced">Renforcé</option>
+          <option value="reinforced">Renforcé (device owner requis)</option>
         </select>
         <button className="ghost" disabled={busy} onClick={genCode}>{busy ? "…" : "Générer un code d'appairage"}</button>
       </div>

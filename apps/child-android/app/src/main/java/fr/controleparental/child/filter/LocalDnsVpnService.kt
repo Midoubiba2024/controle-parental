@@ -105,6 +105,7 @@ class LocalDnsVpnService : VpnService() {
             return
         }
         vpn = pfd
+        isRunning = true
         scope.launch { readLoop(pfd) }
         scope.launch { syncLoop() }
     }
@@ -253,6 +254,7 @@ class LocalDnsVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         scope.cancel()
         runCatching { vpn?.close() }
         vpn = null
@@ -263,6 +265,7 @@ class LocalDnsVpnService : VpnService() {
         if (reportInactive) scope.launch { runCatching { filterClient.reportStatus(vpnActive = false) } }
         runCatching { vpn?.close() }
         vpn = null
+        isRunning = false
         stopSelf()
     }
 
@@ -320,6 +323,14 @@ class LocalDnsVpnService : VpnService() {
         private const val ALERT_CHANNEL = "web_filter_alert"
         private const val NOTIF_ID = 1002
         private const val ALERT_NOTIF_ID = 2003
+
+        /**
+         * État RÉEL du tunnel dans ce processus (true une fois `establish()` réussi),
+         * lu par « mes données » pour ne pas afficher un état figé (transparence).
+         */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         /** Démarre le service (le consentement VpnService.prepare doit être accordé). */
         fun start(context: Context) {

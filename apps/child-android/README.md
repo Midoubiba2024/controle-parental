@@ -5,7 +5,7 @@ une notification de supervision persistante indique en permanence que l'accompag
 parental est actif (garde-fou anti-stalkerware, cf. `../../docs/02-CONFORMITE.md`).
 
 ## Stack
-Kotlin + Jetpack Compose (Material3), OkHttp, EncryptedSharedPreferences. AGP 8.5 / Kotlin 2.0.
+Kotlin + Jetpack Compose (Material3), OkHttp, EncryptedSharedPreferences. AGP 8.7 / Kotlin 2.0.
 
 ## Ce que fait le squelette (LOT 0)
 - **Écran d'appairage** : saisie du code à 8 chiffres → appelle l'Edge Function
@@ -94,14 +94,24 @@ visible). Flag `FEATURE_NETWORK_FILTER` (ON par défaut, `-PfeatureNetworkFilter
 pour une soumission Play sans VPN).
 
 ## Construire
+
+**Le plus simple : le CI.** Chaque push / PR lance `.github/workflows/android.yml` :
+tests JVM (`testWithBgLocationDebugUnitTest`) + Android Lint + APK debug
+(`withBgLocation`, et `noBgLocation` compilée pour vérification). L'APK **release signé**
+n'est construit que dans un contexte de confiance (push sur `main` ou tag `v*`, job
+rattaché à l'environnement GitHub `release`). Les APK sont publiés en artefacts (onglet
+Actions) ; un tag `v*` publie une Release GitHub (APK release signé uniquement — le job
+échoue sans signature).
+Installation sur le téléphone : **[`../../docs/10-INSTALLATION.md`](../../docs/10-INSTALLATION.md)**.
+
+En local (JDK 17 + Android SDK 35 requis ; le wrapper Gradle 8.9 est commité) :
 ```bash
 cd apps/child-android
-# Android Studio génère le wrapper et le dossier gradle/ ; sinon :
-gradle wrapper --gradle-version 8.9
+./gradlew :app:testWithBgLocationDebugUnitTest     # tests JVM (PolicyEngine, DNS…)
 # Un flavor de localisation doit être choisi (LOT 3) :
 ./gradlew :app:assembleWithBgLocationDebug   # avec localisation en arrière-plan (défaut)
-./gradlew :app:assembleNoBgLocationDebug      # variante sans arrière-plan (repli Play)
-# Filtrage réseau activé par défaut ; pour le retirer d'une soumission Play :
+./gradlew :app:assembleNoBgLocationDebug      # variante sans arrière-plan
+# Filtrage réseau activé par défaut ; pour le retirer :
 ./gradlew :app:assembleWithBgLocationDebug -PfeatureNetworkFilter=false
 # Résolveur amont surchargeable : -PdnsUpstream=1.1.1.1
 ```
@@ -110,10 +120,19 @@ URL/clé Supabase par défaut déjà dans `app/build.gradle.kts` ; surchargeable
 ./gradlew :app:assembleWithBgLocationDebug -PsupabaseUrl=... -PsupabaseAnonKey=...
 ```
 
+### Signature release & versions (LOT 8a)
+Une mise à jour sideloadée ne s'installe par-dessus que si elle est signée avec la
+**même clé**. `app/build.gradle.kts` lit 4 valeurs (propriété Gradle `-P…` ou variable
+d'environnement) : `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Si l'une manque, aucune signature release
+n'est configurée. En CI, le keystore vient du secret `ANDROID_KEYSTORE_BASE64` de
+l'environnement `release` (procédure : `docs/10-INSTALLATION.md` §0). **Ne jamais
+commiter de keystore** (`*.keystore`, `*.jks`, `*.p12`, `*.b64*` sont ignorés par Git).
+`versionCode` = `-PversionCode=<n>` (numéro de run CI ; défaut 1) pour qu'il croisse ;
+`versionName` = `<-PversionName, défaut 0.1.0> (build <n>)` (le tag `v*` fournit la version).
+
 ## À venir (lots suivants)
 Verrouillage/messagerie à distance (L5), bien-être & détection on-device ado (L6),
 durcissement & publication (L8) — chacun affiché dans « mes données » avant activation.
 Voir `../../docs/04-LOTS.md`.
 
-> Le binaire `gradle/wrapper/gradle-wrapper.jar` n'est pas commité (généré par
-> `gradle wrapper` ou Android Studio à la première ouverture).

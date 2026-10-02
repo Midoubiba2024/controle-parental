@@ -1,0 +1,7 @@
+# Mises à jour des actions GitHub épinglées par SHA (LOT 8a).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

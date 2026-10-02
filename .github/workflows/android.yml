@@ -1,0 +1,212 @@
+# LOT 8a — Build de l'app enfant (APK) + tests JVM + console parent (dist/).
+# Aucun hébergeur imposé, aucun compte externe : les livrables sont publiés en
+# ARTEFACTS du run (onglet Actions) et, sur un tag v*, en Release GitHub.
+#
+# Signature release : UNIQUEMENT dans un contexte de confiance (push sur main ou
+# tag v*), dans le job `android-release` rattaché au GitHub Environment `release`
+# qui détient les 4 secrets. Les PR et les lancements manuels d'autres branches ne
+# voient jamais la clé. Procédure : docs/10-INSTALLATION.md §0.
+#
+# Actions épinglées par SHA (version en commentaire) ; Dependabot les met à jour.
+name: Build APK & console
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # versionCode croissant → la mise à jour s'installe par-dessus.
+  GRADLE_ARGS: -PversionCode=${{ github.run_number }}
+
+jobs:
+  android:
+    name: App enfant (Android)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/child-android
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Valide aussi le gradle-wrapper.jar commité (somme de contrôle officielle).
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+
+      - name: Tests unitaires JVM
+        run: ./gradlew :app:testWithBgLocationDebugUnitTest $GRADLE_ARGS
+
+      # Android Lint : détecte notamment les API trop récentes non gardées pour
+      # minSdk 26 (NewApi), que la compilation Kotlin ne signale pas.
+      - name: Android Lint
+        run: ./gradlew :app:lintWithBgLocationDebug $GRADLE_ARGS
+
+      - name: APK debug (withBgLocation + noBgLocation)
+        run: ./gradlew :app:assembleWithBgLocationDebug :app:assembleNoBgLocationDebug $GRADLE_ARGS
+
+      - name: Renommer l'APK debug
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          # Variante noBgLocation : compilée pour vérification, non publiée.
+          cp app/build/outputs/apk/withBgLocation/debug/*.apk \
+            "$RUNNER_TEMP/apk/controle-parental-enfant-DEBUG-v${{ github.run_number }}.apk"
+          ls -l "$RUNNER_TEMP/apk"
+
+      - name: Publier l'APK debug (artefact)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: apk-enfant-DEBUG-${{ github.run_number }}
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+
+      - name: Rapports de tests / lint (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rapports-tests-${{ github.run_number }}
+          path: apps/child-android/app/build/reports/
+          if-no-files-found: ignore
+
+  # APK release signé — contexte de confiance uniquement (push main / tag v*).
+  android-release:
+    name: App enfant — release signé
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [android]
+    runs-on: ubuntu-latest
+    environment: release
+    defaults:
+      run:
+        working-directory: apps/child-android
+    env:
+      HAS_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - name: Vérifier les secrets de signature
+        run: |
+          if [ "$HAS_SIGNING" = "true" ]; then echo "Secrets de signature présents."; exit 0; fi
+          if [ "$IS_TAG" = "true" ]; then
+            echo "::error title=Release impossible sans signature::Tag $GITHUB_REF_NAME : les 4 secrets de signature sont absents. Une Release DOIT contenir l'APK release signé avec la clé stable. Créez les secrets (docs/10-INSTALLATION.md §0) puis relancez ce workflow."
+            exit 1
+          fi
+          echo "::warning title=APK non signé avec la clé stable::Secrets de signature absents : seul l'APK DEBUG est produit. Sa clé change d'un run à l'autre, donc une mise à jour ne pourra PAS s'installer par-dessus (désinstallation nécessaire). Créez les 4 secrets décrits dans docs/10-INSTALLATION.md §0."
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.HAS_SIGNING == 'true'
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        if: env.HAS_SIGNING == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+        if: env.HAS_SIGNING == 'true'
+
+      - name: Keystore release (depuis les secrets)
+        if: env.HAS_SIGNING == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          # Décodage tolérant aux retours à la ligne / espaces d'un copier-coller.
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n \t' | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: APK release signé (withBgLocation)
+        if: env.HAS_SIGNING == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          VERSION_ARGS=""
+          if [ "$IS_TAG" = "true" ]; then VERSION_ARGS="-PversionName=${GITHUB_REF_NAME#v}"; fi
+          ./gradlew :app:assembleWithBgLocationRelease $GRADLE_ARGS $VERSION_ARGS
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp app/build/outputs/apk/withBgLocation/release/*.apk \
+            "$RUNNER_TEMP/apk/controle-parental-enfant-release-v${{ github.run_number }}.apk"
+          ls -l "$RUNNER_TEMP/apk"
+
+      - name: Supprimer le keystore décodé
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
+
+      - name: Publier l'APK release (artefact)
+        if: env.HAS_SIGNING == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: apk-enfant-release-${{ github.run_number }}
+          path: ${{ runner.temp }}/apk/*-release-*.apk
+          if-no-files-found: error
+
+  web:
+    name: Console parent (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/parent-web
+    env:
+      # Valeurs PUBLIQUES par conception (URL + clé publiable/anon, cf. SETUP.md).
+      VITE_SUPABASE_URL: https://xjfuaszukuumqxgzitzq.supabase.co
+      VITE_SUPABASE_ANON_KEY: sb_publishable_BJow0lDQQdmoiiDE1JUXYg_9Dw_DnBI
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/parent-web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Publier la console (artefact dist/)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: console-parent-dist-${{ github.run_number }}
+          path: apps/parent-web/dist/
+          if-no-files-found: error
+
+  # Sur un tag v* (ex. v0.1.0) : Release GitHub avec l'APK release SIGNÉ (jamais
+  # l'APK DEBUG) et la console zippée. Échoue s'il n'y a pas d'APK signé.
+  release:
+    name: Release GitHub (tag v*)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android-release, web]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: out
+          pattern: apk-enfant-release-*
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: console-parent-dist-${{ github.run_number }}
+          path: out/console-parent-dist-${{ github.run_number }}
+      - name: Préparer les fichiers
+        run: |
+          mkdir -p rel
+          find out -name '*-release-*.apk' -exec cp {} rel/ \;
+          if ! ls rel/*-release-*.apk >/dev/null 2>&1; then
+            echo "::error title=Aucun APK release signé::La Release n'est pas publiée : aucun APK release signé n'a été produit. Vérifiez les secrets de signature (docs/10-INSTALLATION.md §0)."
+            exit 1
+          fi
+          (cd out/console-parent-dist-${{ github.run_number }} && zip -r ../../rel/console-parent-dist.zip .)
+          ls -l rel
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: rel/*
+          generate_release_notes: true
