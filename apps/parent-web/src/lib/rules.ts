@@ -193,6 +193,11 @@ export async function sendCommand(
     family_id: args.familyId, child_id: args.childId, device_id: args.deviceId,
     type: args.type, payload: args.payload ?? {},
   });
+  // Accélération best-effort (LOT 5) : réveille l'appareil pour qu'il synchronise
+  // tout de suite. Non bloquant — le polling reste le socle fiable sous Doze.
+  if (!error) {
+    void supabase.functions.invoke("dispatch-push", { body: { child_id: args.childId } }).catch(() => {});
+  }
   return { error: error?.message ?? null };
 }
 

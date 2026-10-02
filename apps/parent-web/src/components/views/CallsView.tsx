@@ -76,7 +76,8 @@ export function CallsView({ obs }: { obs: ObservationData }) {
 }
 
 function counterparty(c: CommEvent): string {
-  if (c.counterparty_label) return c.counterparty_label;
+  // Le numéro n'est jamais en clair ; on affiche un identifiant de regroupement
+  // stable (préfixe du hash) ou « Numéro masqué ».
   if (c.counterparty_hash) return `Numéro masqué · ${c.counterparty_hash.slice(0, 6)}`;
   return "Numéro masqué";
 }

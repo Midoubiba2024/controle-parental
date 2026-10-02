@@ -88,7 +88,10 @@ class SupervisionService : Service() {
             if (!SupervisionStore(this).isEnrolled) { withContext(Dispatchers.Main) { overlay.hide() }; delay(TICK_MS); continue }
 
             if (tick % SYNC_EVERY == 0L) runCatching { syncRules() }
-            if (tick % COMMANDS_EVERY == 0L) runCatching { executor.processPending() }
+            if (tick % COMMANDS_EVERY == 0L) {
+                runCatching { executor.processPending() }
+                runCatching { executor.processMessages() }
+            }
 
             val res = runCatching { manager.evaluateForeground() }.getOrNull()
             withContext(Dispatchers.Main) { applyDecision(res) }

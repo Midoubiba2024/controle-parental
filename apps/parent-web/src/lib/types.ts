@@ -88,7 +88,8 @@ export interface CommEvent {
   kind: "call";
   direction: CommDirection;
   counterparty_hash: string | null;
-  counterparty_label: string | null;
+  // counterparty_label retiré (colonne supprimée — cf. migration 0010) : le nom
+  // du contact n'est jamais stocké (métadonnées/agrégats uniquement).
   duration_ms: number | null;
   occurred_at: string;
 }
@@ -203,6 +204,20 @@ export interface TimeGrant {
   scope_package: string | null;
   source: GrantSource;
   request_id: string | null;
+  created_at: string;
+}
+
+/* --- LOT 5 — Messagerie interne parent ↔ enfant ------------------------- */
+
+export type MessageSender = "parent" | "child";
+
+export interface Message {
+  id: string;
+  family_id: string;
+  child_id: string;
+  sender: MessageSender;
+  body: string;
+  read_at: string | null;
   created_at: string;
 }
 

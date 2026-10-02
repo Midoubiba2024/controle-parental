@@ -12,8 +12,9 @@ import { CallsView } from "./views/CallsView";
 import { FamilyView } from "./views/FamilyView";
 import { RulesView } from "./views/RulesView";
 import { RequestsView } from "./views/RequestsView";
+import { MessagesView } from "./views/MessagesView";
 
-type View = "overview" | "screen" | "apps" | "calls" | "rules" | "requests" | "family";
+type View = "overview" | "screen" | "apps" | "calls" | "rules" | "requests" | "messages" | "family";
 
 const NAV: { key: View; label: string; icon: string }[] = [
   { key: "overview", label: "Vue d'ensemble", icon: "◎" },
@@ -22,13 +23,14 @@ const NAV: { key: View; label: string; icon: string }[] = [
   { key: "calls", label: "Appels", icon: "☏" },
   { key: "rules", label: "Règles d'accès", icon: "⛬" },
   { key: "requests", label: "Demandes", icon: "✉" },
+  { key: "messages", label: "Messages", icon: "💬" },
   { key: "family", label: "Famille", icon: "⌂" },
 ];
 
 const VIEW_TITLE: Record<View, string> = {
   overview: "Vue d'ensemble", screen: "Temps d'écran", apps: "Applications",
   calls: "Appels", rules: "Règles d'accès", requests: "Demandes",
-  family: "Famille & appareils",
+  messages: "Messages", family: "Famille & appareils",
 };
 
 export function Dashboard({ session }: { session: Session }) {
@@ -146,6 +148,8 @@ export function Dashboard({ session }: { session: Session }) {
           <div className="card"><p className="empty">Ajoutez un enfant dans l'onglet <b>Famille</b> pour voir ses données.</p></div>
         ) : view === "rules" ? (
           <RulesView familyId={familyId!} child={currentChild} obs={obs} />
+        ) : view === "messages" ? (
+          <MessagesView familyId={familyId!} child={currentChild} />
         ) : obs.loading ? (
           <p className="muted">Chargement des données…</p>
         ) : view === "overview" ? <OverviewView obs={obs} />

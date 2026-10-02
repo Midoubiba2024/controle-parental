@@ -17,6 +17,7 @@ class PolicyClient(private val store: SupervisionStore) {
     private val client = SupabaseClient(store)
 
     data class CommandRow(val id: String, val type: String, val payload: JSONObject)
+    data class MessageRow(val id: String, val body: String, val createdAt: String)
 
     /**
      * Synchronise les règles et les met en cache. Renvoie le [RuleSet] à jour, ou
@@ -95,6 +96,32 @@ class PolicyClient(private val store: SupervisionStore) {
         if (status == "delivered") patch.put("delivered_at", nowIso())
         if (status == "acked") patch.put("acked_at", nowIso())
         return client.patch("commands", "id=eq.$id", patch) is SupabaseClient.Result.Ok
+    }
+
+    /** Messages du PARENT postés après [sinceIso] (null = depuis l'origine). */
+    suspend fun newParentMessages(sinceIso: String?): List<MessageRow> {
+        val e = store.load() ?: return emptyList()
+        val since = sinceIso ?: "1970-01-01T00:00:00Z"
+        val res = client.get(
+            "messages",
+            "child_id=eq.${e.childId}&sender=eq.parent&created_at=gt.$since" +
+                "&order=created_at.asc&select=id,body,created_at",
+        )
+        val arr = rows(res) ?: return emptyList()
+        val out = mutableListOf<MessageRow>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out += MessageRow(o.optString("id"), o.optString("body"), o.optString("created_at"))
+        }
+        return out
+    }
+
+    /** Accuse réception (read_at) des messages notifiés. */
+    suspend fun markMessagesRead(ids: List<String>): Boolean {
+        if (ids.isEmpty()) return true
+        val inList = ids.joinToString(",")
+        val patch = JSONObject().put("read_at", nowIso())
+        return client.patch("messages", "id=in.($inList)", patch) is SupabaseClient.Result.Ok
     }
 
     /** L'enfant crée une demande (temps supplémentaire, déblocage) — co-régulation. */

@@ -39,13 +39,26 @@ class CommandExecutor(
         }
     }
 
+    /** Notifie les nouveaux messages du parent (visible), puis accuse réception. */
+    suspend fun processMessages() {
+        if (!store.isEnrolled) return
+        val msgs = policyClient.newParentMessages(store.messageWatermark)
+        if (msgs.isEmpty()) return
+        var offset = 0
+        for (m in msgs) {
+            notifyMessage(m.body, MSG_NOTIF_BASE + (offset++ % 20))
+        }
+        store.messageWatermark = msgs.last().createdAt
+        policyClient.markMessagesRead(msgs.map { it.id })
+    }
+
     private fun apply(c: PolicyClient.CommandRow) {
         when (c.type) {
             "pause" -> cache.pauseActive = true
             "resume" -> cache.pauseActive = false
             "lock_now" -> if (!reinforced.lockNow()) cache.pauseActive = true
             "ring" -> ring()
-            "message" -> notifyMessage(c.payload.optString("message").ifBlank { "Message de tes parents." })
+            "message" -> notifyMessage(c.payload.optString("message").ifBlank { "Message de tes parents." }, MSG_NOTIF_BASE)
         }
     }
 
@@ -68,7 +81,7 @@ class CommandExecutor(
         }
     }
 
-    private fun notifyMessage(message: String) {
+    private fun notifyMessage(message: String, notifId: Int) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
@@ -83,11 +96,11 @@ class CommandExecutor(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
-        nm.notify(MSG_NOTIF_ID, n)
+        nm.notify(notifId, n)
     }
 
     private companion object {
         const val CHANNEL = "parent_messages"
-        const val MSG_NOTIF_ID = 2002
+        const val MSG_NOTIF_BASE = 2002
     }
 }

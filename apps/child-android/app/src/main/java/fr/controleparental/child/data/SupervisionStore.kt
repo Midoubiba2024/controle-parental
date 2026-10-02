@@ -81,6 +81,11 @@ class SupervisionStore(context: Context) {
         get() = prefs.getLong(KEY_STATUS_TS, 0L)
         set(value) { prefs.edit().putLong(KEY_STATUS_TS, value).apply() }
 
+    /** created_at (ISO) du dernier message parent déjà notifié. null = aucun. */
+    var messageWatermark: String?
+        get() = prefs.getString(KEY_MSG_WM, null)
+        set(value) { prefs.edit().putString(KEY_MSG_WM, value).apply() }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
@@ -92,5 +97,6 @@ class SupervisionStore(context: Context) {
         const val KEY_REFRESH = "refresh_token"
         const val KEY_CALL_WM = "call_log_watermark"
         const val KEY_STATUS_TS = "pending_status_captured_at"
+        const val KEY_MSG_WM = "message_watermark"
     }
 }

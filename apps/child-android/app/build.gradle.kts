@@ -93,4 +93,7 @@ dependencies {
     // Planification de la collecte d'agrégats (repli fiable hors du service,
     // résistant à Doze : contrainte réseau + périodicité ~ toutes les heures).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Tests unitaires JVM (moteur de règles PUR, sans dépendance Android).
+    testImplementation("junit:junit:4.13.2")
 }
