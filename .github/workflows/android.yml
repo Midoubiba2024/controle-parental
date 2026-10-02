@@ -66,7 +66,7 @@ jobs:
           ls -l "$RUNNER_TEMP/apk"
 
       - name: Publier l'APK debug (artefact)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: apk-enfant-DEBUG-${{ github.run_number }}
           path: ${{ runner.temp }}/apk/*.apk
@@ -74,7 +74,7 @@ jobs:
 
       - name: Rapports de tests / lint (en cas d'échec)
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rapports-tests-${{ github.run_number }}
           path: apps/child-android/app/build/reports/
@@ -145,7 +145,7 @@ jobs:
 
       - name: Publier l'APK release (artefact)
         if: env.HAS_SIGNING == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: apk-enfant-release-${{ github.run_number }}
           path: ${{ runner.temp }}/apk/*-release-*.apk
@@ -172,7 +172,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - name: Publier la console (artefact dist/)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: console-parent-dist-${{ github.run_number }}
           path: apps/parent-web/dist/
