@@ -25,6 +25,15 @@ object Config {
     val featureCallLog: Boolean = BuildConfig.FEATURE_CALL_LOG
 
     /**
+     * Localisation en arrière-plan (LOT 3). Permission SENSIBLE Play (formulaire +
+     * vidéo). Quand false, on ne demande jamais ACCESS_BACKGROUND_LOCATION : le
+     * suivi périodique ne fonctionne qu'app ouverte / service au premier plan, et
+     * le geofencing peut manquer des transitions app fermée. Le check-in à la
+     * demande (D2) et le SOS restent possibles. Voir docs/08-LOT3-LOCALISATION.md.
+     */
+    val featureBackgroundLocation: Boolean = BuildConfig.FEATURE_BACKGROUND_LOCATION
+
+    /**
      * Poivre de hachage des numéros de correspondants.
      *
      * LIMITE DE SÉCURITÉ CONNUE (à corriger avant toute activation en release) :

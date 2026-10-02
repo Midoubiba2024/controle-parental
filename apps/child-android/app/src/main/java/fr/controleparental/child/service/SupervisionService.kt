@@ -4,12 +4,18 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.MainActivity
 import fr.controleparental.child.R
 import fr.controleparental.child.data.AppInventoryCollector
@@ -21,6 +27,7 @@ import fr.controleparental.child.enforce.EnforcementManager
 import fr.controleparental.child.enforce.PolicyCache
 import fr.controleparental.child.enforce.PolicyClient
 import fr.controleparental.child.enforce.ReinforcedEnforcer
+import fr.controleparental.child.location.LocationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,6 +63,11 @@ class SupervisionService : Service() {
     private lateinit var reinforced: ReinforcedEnforcer
     private lateinit var executor: CommandExecutor
     private lateinit var policyClient: PolicyClient
+    private lateinit var location: LocationCoordinator
+
+    // Receiver dynamique batterie faible (ACTION_BATTERY_LOW ne peut pas être
+    // déclaré en manifeste pour un broadcast implicite depuis Android 8).
+    private var batteryReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -65,12 +77,24 @@ class SupervisionService : Service() {
         overlay = BlockOverlay(this)
         manager = EnforcementManager(this).apply { loadFromCache() }
         reinforced = ReinforcedEnforcer(this)
-        executor = CommandExecutor(this, PolicyCache(this), reinforced)
+        location = LocationCoordinator(this)
+        executor = CommandExecutor(this, PolicyCache(this), reinforced, location)
         policyClient = PolicyClient(SupervisionStore(this))
+        registerBatteryReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIF_ID, buildNotification())
+        // Type de service de premier plan calculé À L'EXÉCUTION : dataSync toujours
+        // (observation L1), + location UNIQUEMENT si la permission de localisation
+        // est accordée. Android 14 exige en effet la permission au démarrage pour
+        // le type `location` : l'inclure sans permission ferait planter le service
+        // (qui doit vivre pour L1/L2 même sans localisation). Après l'octroi de la
+        // permission, l'app relance le service pour activer le type `location`.
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        if (LocationClient(this).hasAnyLocationPermission()) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), type)
         MetricsWorker.schedule(this)
         if (!loopStarted) { loopStarted = true; scope.launch { loop() } }
         return START_STICKY
@@ -79,7 +103,25 @@ class SupervisionService : Service() {
     override fun onDestroy() {
         scope.cancel()
         runCatching { overlay.hide() }
+        batteryReceiver?.let { runCatching { unregisterReceiver(it) } }
         super.onDestroy()
+    }
+
+    private fun registerBatteryReceiver() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_BATTERY_LOW) {
+                    scope.launch { runCatching { location.onBatteryLow() } }
+                }
+            }
+        }
+        // ACTION_BATTERY_LOW est un broadcast système protégé (exempté de
+        // l'obligation d'export sur Android 14) ; on passe NOT_EXPORTED par sûreté.
+        ContextCompat.registerReceiver(
+            this, receiver, IntentFilter(Intent.ACTION_BATTERY_LOW),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        batteryReceiver = receiver
     }
 
     private suspend fun loop() {
@@ -87,8 +129,15 @@ class SupervisionService : Service() {
         while (scope.isActive) {
             if (!SupervisionStore(this).isEnrolled) { withContext(Dispatchers.Main) { overlay.hide() }; delay(TICK_MS); continue }
 
-            if (tick % SYNC_EVERY == 0L) runCatching { syncRules() }
+            if (tick % SYNC_EVERY == 0L) {
+                runCatching { syncRules() }
+                runCatching { location.onSync() }   // réglages + ré-enregistrement geofences
+            }
             if (tick % COMMANDS_EVERY == 0L) runCatching { executor.processPending() }
+            // Localisation : relevé périodique (si activé) + diffusion SOS live.
+            // Le coordinateur borne lui-même ses cadences, l'appel à chaque tick
+            // est donc bon marché.
+            runCatching { location.onTick() }
 
             val res = runCatching { manager.evaluateForeground() }.getOrNull()
             withContext(Dispatchers.Main) { applyDecision(res) }

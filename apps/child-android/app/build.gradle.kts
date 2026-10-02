@@ -46,6 +46,17 @@ android {
             (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
         buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")
 
+        // --- LOT 3 — Localisation & Sécurité ----------------------------------
+        // Localisation EN ARRIÈRE-PLAN (ACCESS_BACKGROUND_LOCATION) : permission
+        // SENSIBLE Play (formulaire + vidéo de démo « child_monitoring »). On la
+        // met derrière un flag Gradle pour pouvoir publier une variante SANS
+        // arrière-plan si Google refuse la justification (le suivi périodique
+        // fonctionne alors uniquement app ouverte / service au premier plan).
+        // Le check-in à la demande (D2) et le SOS restent possibles sans ce flag.
+        val featureBackgroundLocation: Boolean =
+            (project.findProperty("featureBackgroundLocation") as String?)?.toBoolean() ?: true
+        buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", featureBackgroundLocation.toString())
+
         // Déclaration anti-stalkerware : l'app est un outil de surveillance PARENTALE.
         // (Le flag Play Console child_monitoring se règle à la publication ; voir docs.)
     }
@@ -93,4 +104,7 @@ dependencies {
     // Planification de la collecte d'agrégats (repli fiable hors du service,
     // résistant à Doze : contrainte réseau + périodicité ~ toutes les heures).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // LOT 3 — Localisation : FusedLocationProviderClient + GeofencingClient.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

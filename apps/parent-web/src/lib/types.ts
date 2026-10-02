@@ -157,7 +157,7 @@ export interface ChildSchedule {
   enabled: boolean;
 }
 
-export type CommandType = "lock_now" | "pause" | "resume" | "ring" | "message";
+export type CommandType = "lock_now" | "pause" | "resume" | "ring" | "message" | "locate";
 export type CommandStatus = "pending" | "delivered" | "acked" | "expired" | "cancelled";
 
 export interface Command {
@@ -203,6 +203,88 @@ export interface TimeGrant {
   scope_package: string | null;
   source: GrantSource;
   request_id: string | null;
+  created_at: string;
+}
+
+/* --- LOT 3 — Localisation & Sécurité ------------------------------------ */
+
+export type LocationMode = "off" | "on_demand" | "periodic";
+export type LocationSource = "periodic" | "on_demand" | "sos";
+export type GeofenceType = "home" | "school" | "custom";
+export type GeofenceTransition = "enter" | "exit" | "dwell";
+export type SosStatus = "active" | "acked" | "resolved";
+export type SafetyAlertKind = "low_battery";
+
+export interface LocationSettings {
+  id: string;
+  family_id: string;
+  child_id: string;
+  enabled: boolean;
+  mode: LocationMode;
+  periodic_interval_sec: number;
+  retention_days: number;
+  high_accuracy: boolean;
+}
+
+export interface LocationFix {
+  id: string;
+  child_id: string;
+  device_id: string;
+  captured_at: string;
+  latitude: number;
+  longitude: number;
+  accuracy_m: number | null;
+  source: LocationSource;
+  battery_level: number | null;
+}
+
+export interface Geofence {
+  id: string;
+  family_id: string;
+  child_id: string;
+  name: string;
+  type: GeofenceType;
+  center_lat: number;
+  center_lng: number;
+  radius_m: number;
+  enabled: boolean;
+  notify_enter: boolean;
+  notify_exit: boolean;
+  created_at: string;
+}
+
+export interface GeofenceEvent {
+  id: string;
+  child_id: string;
+  device_id: string;
+  geofence_id: string | null;
+  geofence_name: string | null;
+  transition: GeofenceTransition;
+  occurred_at: string;
+}
+
+export interface SosEvent {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  status: SosStatus;
+  message: string | null;
+  started_at: string;
+  acked_by: string | null;
+  acked_at: string | null;
+  ended_at: string | null;
+}
+
+export interface SafetyAlert {
+  id: string;
+  child_id: string;
+  device_id: string;
+  kind: SafetyAlertKind;
+  battery_level: number | null;
+  location_fix_id: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
   created_at: string;
 }
 

@@ -35,6 +35,19 @@ export function fmtDateTime(iso: string): string {
   });
 }
 
+/** Temps écoulé lisible : « à l'instant », « il y a 5 min », « il y a 2 h ». */
+export function fmtAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 0) return "à l'instant";
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const d = Math.floor(h / 24);
+  return `il y a ${d} j`;
+}
+
 export function fmtDayLabel(day: string): string {
   // day = YYYY-MM-DD → « lun. 30 »
   const d = new Date(day + "T00:00:00");
