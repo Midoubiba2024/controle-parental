@@ -151,6 +151,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
     implementation("androidx.activity:activity-compose:1.9.2")
+    // play-services-location tire transitivement androidx.fragment 1.0 : avant 1.3,
+    // FragmentActivity casse le retour des demandes de permission (ActivityResult).
+    // Version explicite récente (lint InvalidFragmentVersionForActivityResult).
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.09.03")
     implementation(composeBom)
