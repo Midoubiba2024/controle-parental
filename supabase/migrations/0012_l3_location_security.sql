@@ -326,12 +326,15 @@ do $$ begin
     for insert to authenticated
     with check (child_id = app.current_child_id()
                 and app.device_belongs_to_current_child(device_id)
-                and family_id = (select c.family_id from public.children c where c.id = child_id)
+                and family_id = (select c.family_id from public.children c where c.id = geofence_events.child_id)
+                -- Colonnes QUALIFIÉES par geofence_events : dans la sous-requête
+                -- `from geofences g`, un family_id/child_id nu se lierait à g
+                -- (portée interne) → tautologie neutralisant le contrôle.
                 and (geofence_id is null
                      or exists (select 1 from public.geofences g
-                                where g.id = geofence_id
-                                  and g.family_id = family_id
-                                  and g.child_id = child_id)));
+                                where g.id = geofence_events.geofence_id
+                                  and g.family_id = geofence_events.family_id
+                                  and g.child_id = geofence_events.child_id)));
 exception when duplicate_object then null; end $$;
 
 -- sos_events ------------------------------------------------------------------
