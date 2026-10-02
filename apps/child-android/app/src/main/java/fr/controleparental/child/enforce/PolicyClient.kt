@@ -2,6 +2,7 @@ package fr.controleparental.child.enforce
 
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
+import java.net.URLEncoder
 import java.time.LocalDate
 import org.json.JSONArray
 import org.json.JSONObject
@@ -101,7 +102,9 @@ class PolicyClient(private val store: SupervisionStore) {
     /** Messages du PARENT postés après [sinceIso] (null = depuis l'origine). */
     suspend fun newParentMessages(sinceIso: String?): List<MessageRow> {
         val e = store.load() ?: return emptyList()
-        val since = sinceIso ?: "1970-01-01T00:00:00Z"
+        // URL-encode : created_at renvoyé par PostgREST contient « +00:00 », dont le
+        // '+' deviendrait un espace dans la query → le curseur casserait au 2e sondage.
+        val since = URLEncoder.encode(sinceIso ?: "1970-01-01T00:00:00Z", "UTF-8")
         val res = client.get(
             "messages",
             "child_id=eq.${e.childId}&sender=eq.parent&created_at=gt.$since" +

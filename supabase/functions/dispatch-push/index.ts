@@ -43,6 +43,18 @@ function b64url(data: ArrayBuffer | Uint8Array | string): string {
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// fetch borné dans le temps (#9) : évite qu'une fonction reste bloquée si Google
+// ne répond pas. 5 s par appel réseau.
+async function fetchWithTimeout(url: string, init: RequestInit, ms = 5000): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 function pemToDer(pem: string): Uint8Array {
   const body = pem.replace(/-----BEGIN [^-]+-----/g, "")
     .replace(/-----END [^-]+-----/g, "").replace(/\s+/g, "");
@@ -74,7 +86,7 @@ async function fcmAccessToken(clientEmail: string, privateKeyPem: string): Promi
   const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(unsigned));
   const assertion = `${unsigned}.${b64url(sig)}`;
 
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
+  const resp = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -142,8 +154,10 @@ Deno.serve(async (req) => {
   let accessToken: string;
   try {
     accessToken = await fcmAccessToken(clientEmail, privateKey);
-  } catch (e) {
-    return json({ sent: 0, skipped: tokenList.length, reason: "fcm_auth_failed", detail: String(e) }, 502);
+  } catch (_e) {
+    // #14 : non bloquant (comme fcm_not_configured) ; pas de détail brut exposé.
+    // Le polling de l'appareil reste le socle de livraison.
+    return json({ sent: 0, skipped: tokenList.length, reason: "fcm_auth_failed" });
   }
 
   const endpoint = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
@@ -158,13 +172,13 @@ Deno.serve(async (req) => {
       },
     };
     try {
-      const r = await fetch(endpoint, {
+      const r = await fetchWithTimeout(endpoint, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
       if (r.ok) sent++;
-    } catch { /* best-effort : le polling reste le socle */ }
+    } catch { /* best-effort (timeout inclus) : le polling reste le socle */ }
   }
 
   return json({ sent, skipped: tokenList.length - sent });

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.location.LocationCoordinator
 
@@ -43,18 +44,42 @@ class CommandExecutor(
         }
     }
 
-    /** Notifie les nouveaux messages du parent (visible), puis accuse réception. */
+    /**
+     * Notifie les nouveaux messages du parent (visible), puis accuse réception.
+     *
+     * TRANSPARENCE (#2) : si les notifications sont désactivées (POST_NOTIFICATIONS
+     * refusée, canal coupé), on NE notifie PAS, on N'AVANCE PAS le filigrane et on
+     * NE marque PAS lu → le message n'est pas perdu : l'enfant le verra dans la
+     * section « Messages de mes parents » de l'écran « mes données » (repli), qui
+     * posera alors l'accusé de lecture.
+     * FIABILITÉ (#5) : le filigrane n'avance qu'après un markMessagesRead réussi
+     * (sinon re-tenté au prochain cycle ; les IDs stables évitent les doublons).
+     */
     suspend fun processMessages() {
         if (!store.isEnrolled) return
+        if (!canNotify()) return
         val msgs = policyClient.newParentMessages(store.messageWatermark)
         if (msgs.isEmpty()) return
-        var offset = 0
-        for (m in msgs) {
-            notifyMessage(m.body, MSG_NOTIF_BASE + (offset++ % 20))
+        for (m in msgs) notifyMessage(m.body, messageNotifId(m.id))
+        if (policyClient.markMessagesRead(msgs.map { it.id })) {
+            store.messageWatermark = msgs.last().createdAt
         }
-        store.messageWatermark = msgs.last().createdAt
-        policyClient.markMessagesRead(msgs.map { it.id })
     }
+
+    /** Les notifications sont-elles réellement affichables (app + canal) ? */
+    private fun canNotify(): Boolean {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val ch = nm.getNotificationChannel(CHANNEL)
+            if (ch != null && ch.importance == NotificationManager.IMPORTANCE_NONE) return false
+        }
+        return true
+    }
+
+    /** ID de notification STABLE par message, dans une plage disjointe de la
+     *  commande `message` (#4/#8) → pas de collision ni de spam au re-sondage. */
+    private fun messageNotifId(id: String): Int = MSG_NOTIF_BASE + ((id.hashCode() and 0x7fffffff) % 1000)
 
     private suspend fun apply(c: PolicyClient.CommandRow) {
         when (c.type) {
@@ -62,7 +87,7 @@ class CommandExecutor(
             "resume" -> cache.pauseActive = false
             "lock_now" -> if (!reinforced.lockNow()) cache.pauseActive = true
             "ring" -> ring()
-            "message" -> notifyMessage(c.payload.optString("message").ifBlank { "Message de tes parents." }, MSG_NOTIF_BASE)
+            "message" -> notifyMessage(c.payload.optString("message").ifBlank { "Message de tes parents." }, CMD_MSG_NOTIF_ID)
             "locate" -> location?.checkInOnDemand()
         }
     }
@@ -99,6 +124,7 @@ class CommandExecutor(
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setSmallIcon(android.R.drawable.ic_dialog_email)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup(CHANNEL)
             .setAutoCancel(true)
             .build()
         nm.notify(notifId, n)
@@ -106,6 +132,9 @@ class CommandExecutor(
 
     private companion object {
         const val CHANNEL = "parent_messages"
-        const val MSG_NOTIF_BASE = 2002
+        // Plages d'ID DISJOINTES : la commande `message` (one-shot) a son ID dédié,
+        // les messages sondés occupent [3000,3999] via un hash stable de leur id.
+        const val CMD_MSG_NOTIF_ID = 2002
+        const val MSG_NOTIF_BASE = 3000
     }
 }

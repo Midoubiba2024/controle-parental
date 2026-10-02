@@ -30,30 +30,42 @@ create index if not exists idx_messages_family on public.messages (family_id, cr
 
 alter table public.messages enable row level security;
 
+-- NB : policies enveloppées (duplicate_object) pour l'idempotence d'un déploiement
+-- neuf. Le durcissement (immutabilité du corps, sens de l'accusé, created_by) est
+-- appliqué par la migration 0018 (ALTER POLICY + privilège colonne + trigger).
+
 -- SELECT : parent de la famille + enfant concerné (visibilité mutuelle).
-create policy messages_select on public.messages
-  for select to authenticated
-  using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+do $$ begin
+  create policy messages_select on public.messages
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
 
 -- INSERT : le parent envoie (sender='parent') ; l'enfant envoie (sender='child').
 -- Le rôle d'expéditeur est contraint pour empêcher l'usurpation.
-create policy messages_insert_parent on public.messages
-  for insert to authenticated
-  with check (app.is_parent_of(family_id)
-              and sender = 'parent'
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
-create policy messages_insert_child on public.messages
-  for insert to authenticated
-  with check (child_id = app.current_child_id()
-              and sender = 'child'
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
+do $$ begin
+  create policy messages_insert_parent on public.messages
+    for insert to authenticated
+    with check (app.is_parent_of(family_id)
+                and sender = 'parent'
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy messages_insert_child on public.messages
+    for insert to authenticated
+    with check (child_id = app.current_child_id()
+                and sender = 'child'
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
 
--- UPDATE : accusé de lecture (read_at). Parent sur les messages de l'enfant,
--- enfant sur ceux du parent. (Le corps reste visible des deux côtés de toute
--- façon ; cette tranche ne vise que read_at.)
-create policy messages_update_parent on public.messages
-  for update to authenticated
-  using (app.is_parent_of(family_id)) with check (app.is_parent_of(family_id));
-create policy messages_update_child on public.messages
-  for update to authenticated
-  using (child_id = app.current_child_id()) with check (child_id = app.current_child_id());
+-- UPDATE : accusé de lecture (read_at). Resserré par 0018.
+do $$ begin
+  create policy messages_update_parent on public.messages
+    for update to authenticated
+    using (app.is_parent_of(family_id)) with check (app.is_parent_of(family_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy messages_update_child on public.messages
+    for update to authenticated
+    using (child_id = app.current_child_id()) with check (child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;

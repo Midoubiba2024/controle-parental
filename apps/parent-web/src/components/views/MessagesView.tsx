@@ -18,6 +18,15 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const childRef = useRef<string>(childId);
+
+  // Fusionne une ligne (INSERT/UPDATE) dans le fil, dédupliquée par id, triée.
+  const mergeRow = useCallback((row: Message) => {
+    setMessages((cur) => {
+      const rest = cur.filter((m) => m.id !== row.id);
+      return [...rest, row].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    });
+  }, []);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("messages").select("*")
@@ -26,15 +35,31 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
     const list = (data ?? []) as Message[];
     setMessages(list);
     setErr(null);
-    // Accusé de lecture des messages de l'enfant encore non lus.
+    // Accusé de lecture des messages DE L'ENFANT encore non lus (sens de l'accusé :
+    // le parent n'acquitte que les messages reçus ; seul read_at est modifiable).
     const unread = list.filter((m) => m.sender === "child" && !m.read_at).map((m) => m.id);
     if (unread.length > 0) {
       await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unread);
     }
   }, [childId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { childRef.current = childId; void load(); }, [load, childId]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages]);
+
+  // Realtime (#6) : voit en direct les réponses de l'enfant et les accusés de
+  // lecture, sans recharger. La RLS SELECT s'applique au flux.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`msg:${childId}`)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `child_id=eq.${childId}` },
+        (payload) => { if (childRef.current === childId) mergeRow(payload.new as Message); })
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages", filter: `child_id=eq.${childId}` },
+        (payload) => { if (childRef.current === childId) mergeRow(payload.new as Message); })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [childId, mergeRow]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -60,7 +85,7 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
       </p>
 
       <div className="scroll" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 2px", maxHeight: 460 }}>
-        {messages.length === 0 && <EmptyState icon="💬" title="Aucun message"
+        {messages.length === 0 && !err && <EmptyState icon="💬" title="Aucun message"
           hint="Écrivez un premier mot — il apparaîtra sur l'appareil de l'enfant." />}
         {messages.map((m) => {
           const mine = m.sender === "parent";
