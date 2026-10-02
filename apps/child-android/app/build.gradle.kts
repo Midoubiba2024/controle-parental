@@ -46,6 +46,30 @@ android {
             (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
         buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")
 
+        // --- LOT 4 — Filtrage réseau (sinkhole DNS local) ---------------------
+        // Résolveur public amont pour les requêtes AUTORISÉES. Quad9 (9.9.9.9) par
+        // défaut : respectueux de la vie privée et bloque lui-même les domaines
+        // malveillants (défense en profondeur). Aucun MITM : on ne transfère que la
+        // requête DNS, jamais le trafic applicatif. Surchargeable -PdnsUpstream=.
+        val dnsUpstream: String = (project.findProperty("dnsUpstream") as String?) ?: "9.9.9.9"
+        buildConfigField("String", "DNS_UPSTREAM", "\"$dnsUpstream\"")
+
+        // Filtrage réseau (VpnService local). ON par défaut ; désactivable via
+        // -PfeatureNetworkFilter=false pour une variante/soumission Play sans VPN
+        // (voir docs/09-LOT4-FILTRAGE.md §déclaration Play). Le VpnService exige en
+        // plus le consentement runtime (VpnService.prepare), toujours visible.
+        val featureNetworkFilter: Boolean =
+            (project.findProperty("featureNetworkFilter") as String?)?.toBoolean() ?: true
+        buildConfigField("boolean", "FEATURE_NETWORK_FILTER", featureNetworkFilter.toString())
+
+        // --- LOT 3 — Localisation EN ARRIÈRE-PLAN -----------------------------
+        // ACCESS_BACKGROUND_LOCATION = permission SENSIBLE Play. Pilotée par un
+        // PRODUCT FLAVOR (ci-dessous), PAS seulement par BuildConfig : la variante
+        // « noBgLocation » RETIRE réellement la permission du manifeste fusionné
+        // (overlay tools:node="remove"), pour une soumission Play sans arrière-plan
+        // si Google refuse la justification. BuildConfig.FEATURE_BACKGROUND_LOCATION
+        // (défini par flavor) gate en plus la demande au runtime.
+
         // Déclaration anti-stalkerware : l'app est un outil de surveillance PARENTALE.
         // (Le flag Play Console child_monitoring se règle à la publication ; voir docs.)
     }
@@ -54,6 +78,26 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    // --- LOT 3 — Variantes de localisation en arrière-plan --------------------
+    // withBgLocation (défaut) : conserve ACCESS_BACKGROUND_LOCATION (manifeste
+    //   principal) ; FEATURE_BACKGROUND_LOCATION=true.
+    // noBgLocation : l'overlay src/noBgLocation/AndroidManifest.xml RETIRE la
+    //   permission du manifeste fusionné (tools:node="remove") ;
+    //   FEATURE_BACKGROUND_LOCATION=false. Variante de repli pour Play.
+    // Build : ./gradlew :app:assembleWithBgLocationDebug (ou assembleNoBgLocationDebug).
+    flavorDimensions += "backgroundLocation"
+    productFlavors {
+        create("withBgLocation") {
+            dimension = "backgroundLocation"
+            isDefault = true
+            buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", "true")
+        }
+        create("noBgLocation") {
+            dimension = "backgroundLocation"
+            buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", "false")
         }
     }
 
@@ -93,6 +137,9 @@ dependencies {
     // Planification de la collecte d'agrégats (repli fiable hors du service,
     // résistant à Doze : contrainte réseau + périodicité ~ toutes les heures).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // LOT 3 — Localisation : FusedLocationProviderClient + GeofencingClient.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Tests unitaires JVM (moteur de règles PUR, sans dépendance Android).
     testImplementation("junit:junit:4.13.2")

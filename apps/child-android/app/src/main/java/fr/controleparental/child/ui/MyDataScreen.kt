@@ -1,8 +1,10 @@
 package fr.controleparental.child.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.VpnService
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +26,13 @@ import fr.controleparental.child.enforce.BlockOverlay
 import fr.controleparental.child.enforce.PolicyCache
 import fr.controleparental.child.enforce.PolicyClient
 import fr.controleparental.child.enforce.RuleSet
+import fr.controleparental.child.filter.FilterCache
+import fr.controleparental.child.filter.FilterClient
+import fr.controleparental.child.filter.LocalDnsVpnService
+import fr.controleparental.child.location.LocationClient
+import fr.controleparental.child.location.LocationRepository
+import fr.controleparental.child.service.SupervisionService
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
@@ -66,6 +75,55 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         ActivityResultContracts.RequestPermission(),
     ) { callLogGranted = it }
 
+    // --- LOT 3 — Localisation & SOS ------------------------------------------
+    val scope = rememberCoroutineScope()
+    val store = remember { SupervisionStore(context) }
+    val locationRepo = remember { LocationRepository(store) }
+    val locationClient = remember { LocationClient(context) }
+
+    var fineGranted by remember { mutableStateOf(locationClient.hasFine()) }
+    val finePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        fineGranted = locationClient.hasFine()
+        // Relance le service pour activer le type de premier plan `location`
+        // (nécessite la permission au démarrage sur Android 14).
+        if (fineGranted) SupervisionService.start(context)
+    }
+
+    var bgGranted by remember { mutableStateOf(locationClient.hasBackground()) }
+    val bgPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { bgGranted = locationClient.hasBackground() }
+
+    // Mode de partage actuel (affiché à l'enfant — transparence).
+    var locMode by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        locMode = runCatching { locationRepo.settings().mode }.getOrNull()
+    }
+
+    // --- LOT 4 — Filtrage du web (VpnService local) --------------------------
+    val filterCache = remember { FilterCache(context) }
+    val filterConfig = remember { FilterClient(store).fromCache(filterCache) }
+    var filterOn by remember { mutableStateOf(false) }
+    val vpnConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            LocalDnsVpnService.start(context); filterOn = true
+        }
+    }
+    fun enableFilter() {
+        // VpnService.prepare : demande le consentement (toujours visible) ou null
+        // si déjà accordé. Gère proprement l'absence de permission (pas de crash).
+        val intent = runCatching { VpnService.prepare(context) }.getOrNull()
+        if (intent != null) vpnConsent.launch(intent)
+        else { LocalDnsVpnService.start(context); filterOn = true }
+    }
+
+    var sosBusy by remember { mutableStateOf(false) }
+    var sosMsg by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
     ) {
@@ -78,6 +136,45 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(20.dp))
+
+        // --- Bouton SOS (déclenché par l'enfant → transparent, E1/E2) --------
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Besoin d'aide ? SOS", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Envoie une alerte à tes parents avec ta position en direct. " +
+                        "C'est toi qui le déclenches. Les appels d'urgence (112) restent " +
+                        "toujours possibles, séparément.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    enabled = !sosBusy,
+                    onClick = {
+                        scope.launch {
+                            sosBusy = true; sosMsg = null
+                            val ok = locationRepo.startSos(null)
+                            if (ok) {
+                                val loc = locationClient.currentFix(highAccuracy = true)
+                                if (loc != null) locationRepo.insertFix(loc, source = "sos", batteryLevel = null)
+                            }
+                            sosBusy = false
+                            sosMsg = if (ok) {
+                                "SOS envoyé. Tes parents sont prévenus et voient ta position en direct."
+                            } else {
+                                "Impossible d'envoyer le SOS (pas de réseau ?). Réessaie ou appelle le 112."
+                            }
+                        }
+                    },
+                ) { Text(if (sosBusy) "Envoi…" else "🆘  Envoyer un SOS") }
+                sosMsg?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
 
         InfoCard("Niveau de supervision") {
             Text(
@@ -93,9 +190,26 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             "Le temps que tu passes sur chaque application (durées seulement).",
             "La liste des applications installées sur l'appareil.",
             "Le niveau de batterie et l'espace de stockage de l'appareil.",
+            when (locMode) {
+                "off" -> "Ta position : partage désactivé pour l'instant."
+                "periodic" -> "Ta position, de temps en temps et quand tes parents la demandent — " +
+                    "et en direct seulement si tu déclenches un SOS. Jamais en secret."
+                else -> "Ta position quand tes parents la demandent (check-in), " +
+                    "et en direct seulement si tu déclenches un SOS. Jamais en secret."
+            },
             if (Config.featureCallLog)
                 "Le journal des appels en métadonnées : qui (sans le numéro en clair), " +
                     "quand et combien de temps — jamais ce qui a été dit."
+            else null,
+            if (Config.featureNetworkFilter)
+                "Le filtrage du web bloque certains sites. Le journal retient seulement le " +
+                    "nom de domaine (ex. « exemple.com »), sa catégorie et l'heure — " +
+                    "jamais les pages que tu consultes ni leur contenu."
+            else null,
+            if (Config.featureNetworkFilter && filterConfig?.policy?.logAllowed == true)
+                "En ce moment, le nom (pas le contenu) de CHAQUE site que tu visites est " +
+                    "enregistré — pas seulement les sites bloqués. Tes parents ont activé " +
+                    "ce réglage ; tu peux leur demander de le désactiver."
             else null,
         ).filterNotNull().forEach {
             Text("•  $it", style = MaterialTheme.typography.bodyMedium)
@@ -103,8 +217,9 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Jamais partagé : le contenu de tes messages et appels, tes mots de passe, " +
-                "ni l'image de ton écran, de ta caméra ou de ton micro.",
+            "Jamais partagé : le contenu de tes messages et appels, les pages web que tu " +
+                "consultes, tes mots de passe, ni l'image de ton écran, de ta caméra ou de ton micro. " +
+                "Le filtrage regarde seulement le nom du site (DNS), jamais ce qu'il y a dedans.",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
@@ -158,6 +273,56 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 overlaySettings.launch(intent)
             },
         )
+
+        Spacer(Modifier.height(12.dp))
+        PermissionCard(
+            title = "Localisation",
+            granted = fineGranted,
+            explanation = "Permet de partager ta position avec tes parents (check-in, " +
+                "zones « bien arrivé », et SOS). Tu la vois toujours dans cet écran — " +
+                "rien n'est caché.",
+            actionLabel = if (fineGranted) "Activé" else "Autoriser la position",
+            onAction = { finePermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+        )
+
+        if (Config.featureBackgroundLocation && fineGranted) {
+            Spacer(Modifier.height(12.dp))
+            PermissionCard(
+                title = "Position en arrière-plan",
+                granted = bgGranted,
+                explanation = "Pour que les zones de sécurité fonctionnent même quand l'app " +
+                    "est fermée. Choisis « Toujours autoriser » dans les réglages. " +
+                    "Tu peux refuser : le partage marchera quand l'app est ouverte.",
+                actionLabel = if (bgGranted) "Activé" else "Autoriser en arrière-plan",
+                onAction = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        bgPermission.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    }
+                },
+            )
+        }
+
+        if (Config.featureNetworkFilter) {
+            Spacer(Modifier.height(12.dp))
+            val filterHint = buildString {
+                append("Bloque les sites inappropriés en filtrant les noms de domaine (DNS), ")
+                append("sur l'appareil. Aucun site n'est espionné : on ne regarde jamais le ")
+                append("contenu des pages.")
+                filterConfig?.policy?.let { p ->
+                    if (p.whitelistOnly) append(" Mode liste blanche : seuls les sites autorisés s'ouvrent.")
+                    else if (p.blockedCategories.isNotEmpty())
+                        append(" ${p.blockedCategories.size} catégorie(s) bloquée(s).")
+                    if (p.safeSearch) append(" Recherche sécurisée activée.")
+                }
+            }
+            PermissionCard(
+                title = "Filtrage du web",
+                granted = filterOn,
+                explanation = filterHint,
+                actionLabel = if (filterOn) "Activé" else "Activer le filtrage",
+                onAction = { enableFilter() },
+            )
+        }
 
         if (Config.featureCallLog) {
             Spacer(Modifier.height(12.dp))

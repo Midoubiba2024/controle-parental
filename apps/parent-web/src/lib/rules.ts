@@ -212,4 +212,5 @@ export const REQUEST_KIND_LABEL: Record<AccessRequest["kind"], string> = {
   extra_time: "Temps supplémentaire",
   unblock_app: "Débloquer une app",
   reward: "Récompense",
+  browse: "Accès à un site (Ask-to-Browse)",
 };

@@ -8,6 +8,24 @@
     <!-- Type de service de premier plan (Android 14+). dataSync : l'app
          synchronise des AGRÉGATS d'usage ; sert aussi d'indicateur permanent. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- LOT 3 — Localisation : service de premier plan de type `location`
+         (Android 14+) + permissions de position fine/approchée. La notification
+         de supervision persistante (K1) rend ce suivi TOUJOURS visible : aucune
+         géolocalisation occulte (docs/02-CONFORMITE.md). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- LOT 4 — Filtrage réseau : VpnService LOCAL (sinkhole DNS). Le service de
+         premier plan est de type `specialUse` (il n'y a pas de type `vpn` dédié) ;
+         justification = filtrage de contenu par contrôle parental, trafic LOCAL,
+         AUCUN MITM. Voir docs/09-LOT4-FILTRAGE.md (déclaration Play). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Localisation en arrière-plan : permission SENSIBLE (formulaire Play +
+         vidéo de démo « child_monitoring »). Demandée au runtime UNIQUEMENT si
+         BuildConfig.FEATURE_BACKGROUND_LOCATION est actif (voir build.gradle.kts).
+         Pour publier une variante sans arrière-plan en cas de refus Play,
+         retirer aussi cette ligne (ou la placer dans un product flavor). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- LOT 2 — Application des règles en mode Standard : overlay de blocage
@@ -63,7 +81,30 @@
         <service
             android:name=".service.SupervisionService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|location" />
+
+        <!-- LOT 4 — VpnService LOCAL de filtrage DNS (sinkhole). Rôle « core » :
+             trafic LOCAL, aucun MITM, aucun proxy distant (docs/09-LOT4-FILTRAGE.md).
+             Protégé par BIND_VPN_SERVICE ; le consentement VpnService.prepare est
+             demandé à l'utilisateur (toujours visible, icône clé + notification). -->
+        <service
+            android:name=".filter.LocalDnsVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Filtrage de contenu par contrôle parental : résolveur DNS local (sinkhole), sans MITM ni proxy distant." />
+        </service>
+
+        <!-- LOT 3 — Réception des transitions de geofence (ENTER/EXIT/DWELL).
+             Déclenché par les services Google Play ; non exporté aux autres apps. -->
+        <receiver
+            android:name=".location.GeofenceBroadcastReceiver"
+            android:exported="false" />
 
         <!-- Relance la supervision après redémarrage. -->
         <receiver

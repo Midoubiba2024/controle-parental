@@ -10,14 +10,17 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationCompat
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.location.LocationCoordinator
 
 /**
- * LOT 2 — Applique les COMMANDES parent → enfant récupérées par PolicyClient,
+ * LOT 2/3 — Applique les COMMANDES parent → enfant récupérées par PolicyClient,
  * puis les acquitte. Toutes les actions sont VISIBLES par l'enfant :
  *   * pause / lock_now  → l'overlay de pause s'affiche (via la boucle du service)
  *   * resume            → la pause est levée
  *   * ring              → l'appareil sonne (même en silencieux) — « où est le tél. »
  *   * message           → notification visible avec le message du parent
+ *   * locate            → check-in de position ponctuel (LOT 3, D2) — un relevé,
+ *                         remonté et visible de l'enfant (jamais occulte)
  *
  * Le verrouillage réel passe par ReinforcedEnforcer.lockNow() si l'app est admin ;
  * sinon on bascule en pause visible (overlay). L'urgence 112 reste toujours
@@ -27,6 +30,7 @@ class CommandExecutor(
     private val context: Context,
     private val cache: PolicyCache,
     private val reinforced: ReinforcedEnforcer,
+    private val location: LocationCoordinator? = null,
 ) {
     private val store = SupervisionStore(context)
     private val policyClient = PolicyClient(store)
@@ -52,13 +56,14 @@ class CommandExecutor(
         policyClient.markMessagesRead(msgs.map { it.id })
     }
 
-    private fun apply(c: PolicyClient.CommandRow) {
+    private suspend fun apply(c: PolicyClient.CommandRow) {
         when (c.type) {
             "pause" -> cache.pauseActive = true
             "resume" -> cache.pauseActive = false
             "lock_now" -> if (!reinforced.lockNow()) cache.pauseActive = true
             "ring" -> ring()
             "message" -> notifyMessage(c.payload.optString("message").ifBlank { "Message de tes parents." }, MSG_NOTIF_BASE)
+            "locate" -> location?.checkInOnDemand()
         }
     }
 

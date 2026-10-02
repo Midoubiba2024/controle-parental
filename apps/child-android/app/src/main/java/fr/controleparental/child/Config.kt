@@ -16,6 +16,17 @@ object Config {
     fun restUrl(table: String): String = "$supabaseUrl/rest/v1/$table"
 
     /**
+     * LOT 4 — Filtrage réseau (sinkhole DNS local).
+     *
+     * [dnsUpstream] : résolveur public amont pour les requêtes AUTORISÉES
+     * (défaut Quad9). On ne lui transfère QUE la requête DNS — jamais le trafic
+     * applicatif, aucun MITM. [featureNetworkFilter] gate l'exposition de la
+     * fonction (le VpnService exige en plus le consentement runtime, visible).
+     */
+    val dnsUpstream: String = BuildConfig.DNS_UPSTREAM
+    val featureNetworkFilter: Boolean = BuildConfig.FEATURE_NETWORK_FILTER
+
+    /**
      * Journal d'appels (métadonnées) : fonction SENSIBLE, OFF par défaut.
      *
      * NE PAS activer en release tant que le hachage des numéros n'est pas déplacé
@@ -23,6 +34,15 @@ object Config {
      * avec le hachage local actuel réintroduirait la faille décrite ci-dessous.
      */
     val featureCallLog: Boolean = BuildConfig.FEATURE_CALL_LOG
+
+    /**
+     * Localisation en arrière-plan (LOT 3). Permission SENSIBLE Play (formulaire +
+     * vidéo). Quand false, on ne demande jamais ACCESS_BACKGROUND_LOCATION : le
+     * suivi périodique ne fonctionne qu'app ouverte / service au premier plan, et
+     * le geofencing peut manquer des transitions app fermée. Le check-in à la
+     * demande (D2) et le SOS restent possibles. Voir docs/08-LOT3-LOCALISATION.md.
+     */
+    val featureBackgroundLocation: Boolean = BuildConfig.FEATURE_BACKGROUND_LOCATION
 
     /**
      * Poivre de hachage des numéros de correspondants.

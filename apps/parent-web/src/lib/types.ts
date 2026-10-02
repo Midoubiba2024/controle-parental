@@ -158,7 +158,7 @@ export interface ChildSchedule {
   enabled: boolean;
 }
 
-export type CommandType = "lock_now" | "pause" | "resume" | "ring" | "message";
+export type CommandType = "lock_now" | "pause" | "resume" | "ring" | "message" | "locate";
 export type CommandStatus = "pending" | "delivered" | "acked" | "expired" | "cancelled";
 
 export interface Command {
@@ -175,7 +175,7 @@ export interface Command {
   created_at: string;
 }
 
-export type RequestKind = "extra_time" | "unblock_app" | "reward";
+export type RequestKind = "extra_time" | "unblock_app" | "reward" | "browse";
 export type RequestStatus = "pending" | "approved" | "denied" | "cancelled";
 
 export interface AccessRequest {
@@ -184,7 +184,7 @@ export interface AccessRequest {
   child_id: string;
   device_id: string | null;
   kind: RequestKind;
-  payload: { minutes?: number; package_name?: string; scope?: "app" | "global"; [k: string]: unknown };
+  payload: { minutes?: number; package_name?: string; scope?: "app" | "global"; domain?: string; [k: string]: unknown };
   status: RequestStatus;
   child_note: string | null;
   parent_note: string | null;
@@ -219,6 +219,144 @@ export interface Message {
   body: string;
   read_at: string | null;
   created_at: string;
+}
+
+/* --- LOT 3 — Localisation & Sécurité ------------------------------------ */
+
+export type LocationMode = "off" | "on_demand" | "periodic";
+export type LocationSource = "periodic" | "on_demand" | "sos";
+export type GeofenceType = "home" | "school" | "custom";
+export type GeofenceTransition = "enter" | "exit" | "dwell";
+export type SosStatus = "active" | "acked" | "resolved";
+export type SafetyAlertKind = "low_battery";
+
+export interface LocationSettings {
+  id: string;
+  family_id: string;
+  child_id: string;
+  enabled: boolean;
+  mode: LocationMode;
+  periodic_interval_sec: number;
+  retention_days: number;
+  high_accuracy: boolean;
+}
+
+export interface LocationFix {
+  id: string;
+  child_id: string;
+  device_id: string;
+  captured_at: string;
+  latitude: number;
+  longitude: number;
+  accuracy_m: number | null;
+  source: LocationSource;
+  battery_level: number | null;
+}
+
+export interface Geofence {
+  id: string;
+  family_id: string;
+  child_id: string;
+  name: string;
+  type: GeofenceType;
+  center_lat: number;
+  center_lng: number;
+  radius_m: number;
+  enabled: boolean;
+  notify_enter: boolean;
+  notify_exit: boolean;
+  created_at: string;
+}
+
+export interface GeofenceEvent {
+  id: string;
+  child_id: string;
+  device_id: string;
+  geofence_id: string | null;
+  geofence_name: string | null;
+  transition: GeofenceTransition;
+  occurred_at: string;
+}
+
+export interface SosEvent {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  status: SosStatus;
+  message: string | null;
+  started_at: string;
+  acked_by: string | null;
+  acked_at: string | null;
+  ended_at: string | null;
+}
+
+export interface SafetyAlert {
+  id: string;
+  child_id: string;
+  device_id: string;
+  kind: SafetyAlertKind;
+  battery_level: number | null;
+  location_fix_id: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  created_at: string;
+}
+
+/* --- LOT 4 — Filtrage réseau & contenu ---------------------------------- */
+
+export type FilterCategory =
+  | "adult" | "violence" | "gambling" | "drugs" | "weapons" | "hate"
+  | "dating" | "social" | "piracy" | "malware" | "ads_trackers";
+export type FilterRuleAction = "allow" | "block";
+export type YoutubeMode = "off" | "moderate" | "strict";
+export type DomainEventAction = "blocked" | "allowed" | "rewritten";
+
+export interface FilterPolicy {
+  id: string;
+  family_id: string;
+  child_id: string;
+  enabled: boolean;
+  age_preset: AgeProfile;
+  blocked_categories: FilterCategory[];
+  safe_search: boolean;
+  youtube_restriction: YoutubeMode;
+  whitelist_only: boolean;
+  ask_to_browse: boolean;
+  log_allowed: boolean;
+  retention_days: number;
+}
+
+export interface FilterRule {
+  id: string;
+  family_id: string;
+  child_id: string;
+  domain: string;
+  action: FilterRuleAction;
+  note: string | null;
+  created_at: string;
+}
+
+export interface DomainEvent {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  domain: string;
+  category: FilterCategory | null;
+  action: DomainEventAction;
+  occurred_at: string;
+}
+
+export interface FilterStatus {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  vpn_active: boolean;
+  last_active_at: string | null;
+  last_revoked_at: string | null;
+  updated_at: string;
 }
 
 // Déduit un profil d'âge par défaut à partir de la date de naissance.

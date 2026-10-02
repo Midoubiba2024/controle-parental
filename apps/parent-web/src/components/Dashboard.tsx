@@ -13,8 +13,13 @@ import { FamilyView } from "./views/FamilyView";
 import { RulesView } from "./views/RulesView";
 import { RequestsView } from "./views/RequestsView";
 import { MessagesView } from "./views/MessagesView";
+import { LocationView } from "./views/LocationView";
+import { SecurityView } from "./views/SecurityView";
+import { FilteringView } from "./views/FilteringView";
 
-type View = "overview" | "screen" | "apps" | "calls" | "rules" | "requests" | "messages" | "family";
+type View =
+  | "overview" | "screen" | "apps" | "calls" | "rules" | "filter"
+  | "location" | "security" | "requests" | "messages" | "family";
 
 const NAV: { key: View; label: string; icon: string }[] = [
   { key: "overview", label: "Vue d'ensemble", icon: "◎" },
@@ -22,6 +27,9 @@ const NAV: { key: View; label: string; icon: string }[] = [
   { key: "apps", label: "Applications", icon: "▦" },
   { key: "calls", label: "Appels", icon: "☏" },
   { key: "rules", label: "Règles d'accès", icon: "⛬" },
+  { key: "filter", label: "Filtrage", icon: "🛡" },
+  { key: "location", label: "Localisation", icon: "📍" },
+  { key: "security", label: "Sécurité / SOS", icon: "🆘" },
   { key: "requests", label: "Demandes", icon: "✉" },
   { key: "messages", label: "Messages", icon: "💬" },
   { key: "family", label: "Famille", icon: "⌂" },
@@ -29,7 +37,8 @@ const NAV: { key: View; label: string; icon: string }[] = [
 
 const VIEW_TITLE: Record<View, string> = {
   overview: "Vue d'ensemble", screen: "Temps d'écran", apps: "Applications",
-  calls: "Appels", rules: "Règles d'accès", requests: "Demandes",
+  calls: "Appels", rules: "Règles d'accès", filter: "Filtrage web & contenu",
+  location: "Localisation", security: "Sécurité & SOS", requests: "Demandes",
   messages: "Messages", family: "Famille & appareils",
 };
 
@@ -150,6 +159,12 @@ export function Dashboard({ session }: { session: Session }) {
           <RulesView familyId={familyId!} child={currentChild} obs={obs} />
         ) : view === "messages" ? (
           <MessagesView familyId={familyId!} child={currentChild} />
+        ) : view === "filter" ? (
+          <FilteringView familyId={familyId!} child={currentChild} />
+        ) : view === "location" ? (
+          <LocationView familyId={familyId!} child={currentChild} />
+        ) : view === "security" ? (
+          <SecurityView familyId={familyId!} child={currentChild} />
         ) : obs.loading ? (
           <p className="muted">Chargement des données…</p>
         ) : view === "overview" ? <OverviewView obs={obs} />

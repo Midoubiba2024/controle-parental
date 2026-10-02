@@ -1,0 +1,15 @@
+-- =============================================================================
+-- LOT 3 — Commande « locate » : check-in de position À LA DEMANDE (D2).
+--
+-- Le parent demande une position ponctuelle ; l'appareil enfant exécute un
+-- getCurrentLocation() one-shot, insère un location_fix source='on_demand', puis
+-- acquitte la commande (même boucle que pause/ring/message, migration 0008).
+--
+-- ADDITIF : on ajoute une valeur à l'enum app.command_type. ALTER TYPE ... ADD
+-- VALUE est autorisé hors contexte destructif (pas de DROP). IF NOT EXISTS rend
+-- la migration ré-exécutable. La valeur n'est PAS référencée dans cette migration
+-- (contrainte PostgreSQL : une nouvelle valeur d'enum n'est pas utilisable dans
+-- la transaction qui l'ajoute) — elle ne sert qu'au runtime (insert d'une
+-- commande 'locate' par la console parent).
+-- =============================================================================
+alter type app.command_type add value if not exists 'locate';
