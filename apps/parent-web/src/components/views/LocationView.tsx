@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation, requestLocate, GEOFENCE_TRANSITION_LABEL, LOCATION_MODE_LABEL,
   geofenceColor, activeSos } from "../../lib/location";
 import { GEOFENCE_TYPE_LABEL } from "../../lib/location";
-import { fmtAgo, fmtDateTime } from "../../lib/format";
+import { fmtAgo, fmtDateTime, localDayKey } from "../../lib/format";
 import { Tile, EmptyState } from "../Ui";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
 import type { Child, LocationFix } from "../../lib/types";
@@ -14,12 +14,6 @@ import type { Child, LocationFix } from "../../lib/types";
    l'enfant. Le partage dépend du réglage (mode) piloté par le parent (onglet
    Sécurité) et affiché à l'enfant dans « mes données ».
    ============================================================================= */
-
-/** Clé de jour locale d'un horodatage ISO (regroupement des trajets). */
-function dayOf(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export function LocationView({ familyId, child }: { familyId: string; child: Child }) {
   const loc = useLocation(child.id);
@@ -33,24 +27,27 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
   // Jours disponibles (trajets), du plus récent au plus ancien.
   const days = useMemo(() => {
     const m = new Map<string, number>();
-    for (const f of loc.fixes) m.set(dayOf(f.captured_at), (m.get(dayOf(f.captured_at)) ?? 0) + 1);
+    for (const f of loc.fixes) {
+      const k = localDayKey(f.captured_at);
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [loc.fixes]);
 
   // Relevés du jour sélectionné (sinon les 60 plus récents, tous confondus).
   const shown: LocationFix[] = useMemo(() => {
     if (selectedDay) {
-      return loc.fixes.filter((f) => dayOf(f.captured_at) === selectedDay)
+      return loc.fixes.filter((f) => localDayKey(f.captured_at) === selectedDay)
         .slice().sort((a, b) => a.captured_at.localeCompare(b.captured_at));
     }
     return loc.fixes.slice(0, 60).slice().reverse();
   }, [loc.fixes, selectedDay]);
 
-  const circles: MapCircle[] = loc.geofences.filter((g) => g.enabled).map((g) => ({
+  const circles: MapCircle[] = useMemo(() => loc.geofences.filter((g) => g.enabled).map((g) => ({
     id: g.id, lat: g.center_lat, lng: g.center_lng, radiusM: g.radius_m,
     color: geofenceColor(g.type),
     label: `${GEOFENCE_TYPE_LABEL[g.type]} · ${g.name} (${g.radius_m} m)`,
-  }));
+  })), [loc.geofences]);
 
   const markers: MapMarker[] = useMemo(() => {
     const out: MapMarker[] = [];
@@ -76,7 +73,7 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
     return out;
   }, [shown, last, selectedDay, sos]);
 
-  const path = shown.map((f) => ({ lat: f.latitude, lng: f.longitude }));
+  const path = useMemo(() => shown.map((f) => ({ lat: f.latitude, lng: f.longitude })), [shown]);
 
   const device = loc.devices.find((d) => !d.revoked_at) ?? loc.devices[0] ?? null;
 

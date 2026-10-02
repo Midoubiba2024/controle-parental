@@ -221,7 +221,7 @@ begin
 end;
 $$;
 revoke execute on function app.sos_guard_child_update() from public, anon;
-create trigger trg_sos_guard_child_update
+create or replace trigger trg_sos_guard_child_update
   before update on public.sos_events
   for each row execute function app.sos_guard_child_update();
 
@@ -235,100 +235,155 @@ alter table public.geofence_events   enable row level security;
 alter table public.sos_events        enable row level security;
 alter table public.safety_alerts     enable row level security;
 
+-- NB (ISOLATION INTER-ENFANTS) : les SELECT utilisent
+-- `is_parent_of(family_id) OR child_id = current_child_id()` et JAMAIS
+-- `is_member_of(family_id)` : un compte enfant est membre de la famille, donc
+-- is_member_of laisserait un enfant lire les données de localisation d'un AUTRE
+-- enfant du foyer (fuite = ligne rouge anti-stalkerware + RGPD). L'appareil enfant
+-- ne lit QUE ses propres lignes (ses réglages, ses zones) — suffisant pour
+-- enregistrer ses geofences. Chaque policy est enveloppée (do $$ … exception
+-- when duplicate_object) pour une migration ré-exécutable (comme les CREATE TYPE).
+
 -- location_settings -----------------------------------------------------------
--- Lecture par tous les membres (enfant = transparence : il voit son réglage) ;
+-- Lecture : parent + l'enfant concerné (transparence : il voit son réglage) ;
 -- écriture par le parent uniquement (family_id ↔ child_id validé).
-create policy location_settings_select on public.location_settings
-  for select to authenticated using (app.is_member_of(family_id));
-create policy location_settings_insert on public.location_settings
-  for insert to authenticated
-  with check (app.is_parent_of(family_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
-create policy location_settings_update on public.location_settings
-  for update to authenticated
-  using (app.is_parent_of(family_id))
-  with check (app.is_parent_of(family_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
-create policy location_settings_delete on public.location_settings
-  for delete to authenticated using (app.is_parent_of(family_id));
+do $$ begin
+  create policy location_settings_select on public.location_settings
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy location_settings_insert on public.location_settings
+    for insert to authenticated
+    with check (app.is_parent_of(family_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy location_settings_update on public.location_settings
+    for update to authenticated
+    using (app.is_parent_of(family_id))
+    with check (app.is_parent_of(family_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy location_settings_delete on public.location_settings
+    for delete to authenticated using (app.is_parent_of(family_id));
+exception when duplicate_object then null; end $$;
 
 -- location_fixes --------------------------------------------------------------
--- Lecture : tous les membres (parent = carte/historique ; enfant = transparence).
+-- Lecture : parent (carte/historique) + l'enfant concerné (transparence).
 -- Écriture : l'ENFANT insère SES positions, pour SON appareil. Pas d'update/delete
 -- en direct (append-only ; purge de rétention via service_role en L8).
-create policy location_fixes_select on public.location_fixes
-  for select to authenticated using (app.is_member_of(family_id));
-create policy location_fixes_insert on public.location_fixes
-  for insert to authenticated
-  with check (child_id = app.current_child_id()
-              and app.device_belongs_to_current_child(device_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
+do $$ begin
+  create policy location_fixes_select on public.location_fixes
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy location_fixes_insert on public.location_fixes
+    for insert to authenticated
+    with check (child_id = app.current_child_id()
+                and app.device_belongs_to_current_child(device_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
 
 -- geofences -------------------------------------------------------------------
--- Lecture par tous les membres : l'appareil enfant DOIT lire les zones pour les
--- enregistrer (GeofencingClient). Écriture par le parent (family_id ↔ child_id).
-create policy geofences_select on public.geofences
-  for select to authenticated using (app.is_member_of(family_id));
-create policy geofences_insert on public.geofences
-  for insert to authenticated
-  with check (app.is_parent_of(family_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
-create policy geofences_update on public.geofences
-  for update to authenticated
-  using (app.is_parent_of(family_id))
-  with check (app.is_parent_of(family_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
-create policy geofences_delete on public.geofences
-  for delete to authenticated using (app.is_parent_of(family_id));
+-- Lecture : parent + l'enfant concerné (son appareil DOIT lire SES zones pour les
+-- enregistrer dans GeofencingClient). Écriture par le parent (family_id ↔ child_id).
+do $$ begin
+  create policy geofences_select on public.geofences
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy geofences_insert on public.geofences
+    for insert to authenticated
+    with check (app.is_parent_of(family_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy geofences_update on public.geofences
+    for update to authenticated
+    using (app.is_parent_of(family_id))
+    with check (app.is_parent_of(family_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy geofences_delete on public.geofences
+    for delete to authenticated using (app.is_parent_of(family_id));
+exception when duplicate_object then null; end $$;
 
 -- geofence_events -------------------------------------------------------------
--- Lecture : tous les membres. Écriture : l'enfant insère ses transitions pour son
--- appareil ; la zone référencée doit appartenir à la même famille (anti-usurpation).
-create policy geofence_events_select on public.geofence_events
-  for select to authenticated using (app.is_member_of(family_id));
-create policy geofence_events_insert on public.geofence_events
-  for insert to authenticated
-  with check (child_id = app.current_child_id()
-              and app.device_belongs_to_current_child(device_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id)
-              and (geofence_id is null
-                   or family_id = (select g.family_id from public.geofences g where g.id = geofence_id)));
+-- Lecture : parent + l'enfant concerné. Écriture : l'enfant insère ses transitions
+-- pour SON appareil ; la zone référencée doit appartenir au MÊME enfant (anti-usurpation).
+do $$ begin
+  create policy geofence_events_select on public.geofence_events
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy geofence_events_insert on public.geofence_events
+    for insert to authenticated
+    with check (child_id = app.current_child_id()
+                and app.device_belongs_to_current_child(device_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id)
+                and (geofence_id is null
+                     or exists (select 1 from public.geofences g
+                                where g.id = geofence_id
+                                  and g.family_id = family_id
+                                  and g.child_id = child_id)));
+exception when duplicate_object then null; end $$;
 
 -- sos_events ------------------------------------------------------------------
 -- Lecture : parent (sa famille) + enfant (ses épisodes → transparence).
 -- Insert : l'ENFANT déclenche son SOS (status 'active' forcé), pour son appareil.
 -- Update : parent (ack/clôture) OU enfant (clôture only, borné par le trigger).
-create policy sos_events_select on public.sos_events
-  for select to authenticated
-  using (app.is_parent_of(family_id) or child_id = app.current_child_id());
-create policy sos_events_insert on public.sos_events
-  for insert to authenticated
-  with check (child_id = app.current_child_id()
-              and app.device_belongs_to_current_child(device_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id)
-              and status = 'active'
-              and acked_by is null and acked_at is null);
-create policy sos_events_update_parent on public.sos_events
-  for update to authenticated
-  using (app.is_parent_of(family_id)) with check (app.is_parent_of(family_id));
-create policy sos_events_update_child on public.sos_events
-  for update to authenticated
-  using (child_id = app.current_child_id())
-  with check (child_id = app.current_child_id());
+do $$ begin
+  create policy sos_events_select on public.sos_events
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy sos_events_insert on public.sos_events
+    for insert to authenticated
+    with check (child_id = app.current_child_id()
+                and app.device_belongs_to_current_child(device_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id)
+                and status = 'active'
+                and acked_by is null and acked_at is null);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy sos_events_update_parent on public.sos_events
+    for update to authenticated
+    using (app.is_parent_of(family_id)) with check (app.is_parent_of(family_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy sos_events_update_child on public.sos_events
+    for update to authenticated
+    using (child_id = app.current_child_id())
+    with check (child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
 
 -- safety_alerts ---------------------------------------------------------------
--- Lecture : tous les membres. Insert : l'enfant (batterie faible auto). Update :
--- le parent (acquittement). Pas de delete direct (append-only ; purge en L8).
-create policy safety_alerts_select on public.safety_alerts
-  for select to authenticated using (app.is_member_of(family_id));
-create policy safety_alerts_insert on public.safety_alerts
-  for insert to authenticated
-  with check (child_id = app.current_child_id()
-              and app.device_belongs_to_current_child(device_id)
-              and family_id = (select c.family_id from public.children c where c.id = child_id));
-create policy safety_alerts_update on public.safety_alerts
-  for update to authenticated
-  using (app.is_parent_of(family_id)) with check (app.is_parent_of(family_id));
+-- Lecture : parent + l'enfant concerné. Insert : l'enfant (batterie faible auto).
+-- Update : le parent (acquittement). Pas de delete direct (append-only ; purge L8).
+do $$ begin
+  create policy safety_alerts_select on public.safety_alerts
+    for select to authenticated
+    using (app.is_parent_of(family_id) or child_id = app.current_child_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy safety_alerts_insert on public.safety_alerts
+    for insert to authenticated
+    with check (child_id = app.current_child_id()
+                and app.device_belongs_to_current_child(device_id)
+                and family_id = (select c.family_id from public.children c where c.id = child_id));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy safety_alerts_update on public.safety_alerts
+    for update to authenticated
+    using (app.is_parent_of(family_id)) with check (app.is_parent_of(family_id));
+exception when duplicate_object then null; end $$;
 
 -- =============================================================================
 -- Realtime : diffusion live du SOS (E2) et réactivité des alertes. La RLS

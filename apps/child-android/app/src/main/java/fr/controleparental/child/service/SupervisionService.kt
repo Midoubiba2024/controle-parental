@@ -85,16 +85,30 @@ class SupervisionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Type de service de premier plan calculé À L'EXÉCUTION : dataSync toujours
-        // (observation L1), + location UNIQUEMENT si la permission de localisation
-        // est accordée. Android 14 exige en effet la permission au démarrage pour
-        // le type `location` : l'inclure sans permission ferait planter le service
-        // (qui doit vivre pour L1/L2 même sans localisation). Après l'octroi de la
-        // permission, l'app relance le service pour activer le type `location`.
+        // (observation L1), + location UNIQUEMENT si la permission est accordée ET
+        // qu'on ne démarre PAS depuis le boot. Deux garde-fous Android 14/15 :
+        //   * le type `location` exige la permission au démarrage (sinon crash) ;
+        //   * depuis un BOOT_COMPLETED, démarrer un FGS `location` (et `dataSync`
+        //     sous Android 15) est restreint → on n'y ajoute jamais `location`,
+        //     et on entoure startForeground d'un try/catch (repli gracieux : le
+        //     service always-on ne doit JAMAIS tomber à cause de la localisation).
+        // Après l'octroi de la permission, l'app relance le service (foreground)
+        // pour « upgrader » au type `location`.
+        val fromBoot = intent?.getBooleanExtra(EXTRA_FROM_BOOT, false) == true
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        if (LocationClient(this).hasAnyLocationPermission()) {
+        if (!fromBoot && LocationClient(this).hasAnyLocationPermission()) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
-        ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), type)
+        try {
+            ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), type)
+        } catch (e: Exception) {
+            // ForegroundServiceStartNotAllowedException (API 31+) / SecurityException :
+            // démarrage FGS refusé dans cet état (ex. dataSync depuis le boot sur
+            // Android 15). On s'arrête proprement ; le service repartira à la
+            // prochaine ouverture de l'app (point d'entrée foreground).
+            stopSelf()
+            return START_NOT_STICKY
+        }
         MetricsWorker.schedule(this)
         if (!loopStarted) { loopStarted = true; scope.launch { loop() } }
         return START_STICKY
@@ -215,13 +229,19 @@ class SupervisionService : Service() {
         private const val TICK_MS = 3_000L
         private const val COMMANDS_EVERY = 5L     // ~15 s
         private const val SYNC_EVERY = 100L       // ~5 min
+        const val EXTRA_FROM_BOOT = "from_boot"
 
-        fun start(context: Context) {
+        fun start(context: Context, fromBoot: Boolean = false) {
             val intent = Intent(context, SupervisionService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+                .putExtra(EXTRA_FROM_BOOT, fromBoot)
+            // Le démarrage lui-même peut être refusé depuis certains états (boot
+            // Android 15) → runCatching pour ne pas faire tomber l'appelant.
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
             }
         }
     }

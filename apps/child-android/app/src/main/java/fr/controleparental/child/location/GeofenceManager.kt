@@ -49,19 +49,30 @@ class GeofenceManager(private val context: Context) {
      * la permission de localisation FINE (et arrière-plan pour un déclenchement
      * app fermée). Sans permission, on ne fait rien (échec silencieux, visible via
      * l'écran « mes données »).
+     *
+     * [force] = true : ré-enregistrement COMPLET (après reboot). Sinon, on ne
+     * re-registre QUE si l'ensemble des zones a changé (comparaison de signature) —
+     * évite de retirer/ré-ajouter les geofences à chaque cycle de synchro (~5 min),
+     * ce qui userait la batterie et provoquerait des pertes de transitions.
      */
     @SuppressLint("MissingPermission")
-    suspend fun sync(hasFine: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun sync(hasFine: Boolean, force: Boolean = false) = withContext(Dispatchers.IO) {
         if (!hasFine) return@withContext
         val zones = runCatching { repo.geofences() }.getOrDefault(emptyList())
+
+        val signature = zones.sortedBy { it.id }
+            .joinToString("|") { "${it.id}:${it.lat},${it.lng},${it.radiusM},${it.notifyEnter},${it.notifyExit}" }
+        if (!force && signature == names.getString(KEY_SIG, null)) return@withContext
 
         // On repart d'un état propre (retrait par PendingIntent) puis on ré-ajoute.
         runCatching { Tasks.await(client.removeGeofences(pendingIntent())) }
 
         // Met à jour le cache local id→nom (instantané d'événement côté receiver,
-        // sans appel réseau). On repart propre pour oublier les zones supprimées.
+        // sans appel réseau) + la signature. On repart propre pour oublier les
+        // zones supprimées.
         val editor = names.edit().clear()
         zones.forEach { editor.putString(it.id, it.name) }
+        editor.putString(KEY_SIG, signature)
         editor.apply()
 
         if (zones.isEmpty()) return@withContext
@@ -90,5 +101,6 @@ class GeofenceManager(private val context: Context) {
 
     private companion object {
         const val PREFS = "geofence_names"
+        const val KEY_SIG = "_signature"
     }
 }

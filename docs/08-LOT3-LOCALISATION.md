@@ -107,11 +107,20 @@ Package `fr.controleparental.child.location` :
   (relevé périodique au plus tôt toutes les `periodic_interval_sec`, poll SOS ~15 s,
   diffusion SOS ~12 s). Repli hors service via le socle existant.
 
-### Flags de compilation
+### Variantes de compilation (product flavors)
 
-| Propriété Gradle | Effet | Défaut |
-|---|---|---|
-| `-PfeatureBackgroundLocation=false` | ne demande jamais la localisation en arrière-plan (variante « sans background » si refus Play) | `true` |
+La localisation en arrière-plan est pilotée par un **product flavor** (dimension
+`backgroundLocation`), pas seulement par `BuildConfig` — pour **retirer réellement**
+la permission du manifeste fusionné :
+
+| Flavor | `ACCESS_BACKGROUND_LOCATION` | `FEATURE_BACKGROUND_LOCATION` | Build |
+|---|---|---|---|
+| `withBgLocation` (défaut) | présente | `true` | `assembleWithBgLocationDebug` |
+| `noBgLocation` | **retirée** (overlay `tools:node="remove"`) | `false` | `assembleNoBgLocationDebug` |
+
+> `READ_CALL_LOG` (L1, fonction d'appels) relève du même piège Play ; son retrait
+> par flavor est **reporté en L8** (éviter une 2ᵉ dimension = 4 variantes). Il reste
+> gaté au runtime par `FEATURE_CALL_LOG` (off par défaut).
 
 ## 4. Console parent (React, identité prototype)
 
@@ -138,8 +147,9 @@ Package `fr.controleparental.child.location` :
 - **Divulgation bien visible** (prominent disclosure) dans l'app **avant** toute
   collecte en arrière-plan (déjà couverte par « mes données » + onboarding L0).
 - `isMonitoringTool = child_monitoring` dans la Play Console.
-- **Plan B refus** : publier la variante `-PfeatureBackgroundLocation=false`
-  (check-in à la demande + SOS fonctionnels ; suivi périodique app ouverte).
+- **Plan B refus** : publier la variante **`noBgLocation`** (flavor) — la permission
+  `ACCESS_BACKGROUND_LOCATION` est alors absente du manifeste fusionné ; check-in à
+  la demande + SOS restent fonctionnels, suivi périodique app ouverte seulement.
 - Fiche **Data safety** : ajouter « localisation précise », finalité sécurité,
   partagée uniquement avec le parent du foyer, non vendue, rétention bornée.
 

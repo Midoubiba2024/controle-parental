@@ -11,13 +11,18 @@ import "leaflet/dist/leaflet.css";
    d'icône PNG à bundler (évite le bug classique des marqueurs Leaflet cassés
    sous Vite). L'identité des marqueurs ne repose jamais sur la couleur seule
    (popup + libellé). Les tuiles reçoivent un filtre en thème sombre.
+
+   CADRAGE : le recadrage automatique est DÉCOUPLÉ du redraw. On ne recadre que
+   lorsque l'ensemble des points change réellement (signature), et plus du tout
+   dès que l'utilisateur a déplacé/zoomé la carte — sinon le suivi SOS live et la
+   navigation manuelle seraient cassés à chaque rendu React.
    ============================================================================= */
 
 export interface MapMarker {
   id: string;
   lat: number;
   lng: number;
-  color: string;        // couleur résolue (ex. "#2a78d6")
+  color: string;        // token CSS ("var(--series-1)") ou couleur littérale
   label: string;        // texte du popup
   kind?: "dot" | "position" | "sos";
   radiusPx?: number;
@@ -62,6 +67,13 @@ export function MapCanvas({
   const onClickRef = useRef(onClick);
   onClickRef.current = onClick;
 
+  // Suivi du cadrage : interaction utilisateur + mouvement programmatique + dernière
+  // signature de points cadrée.
+  const userInteractedRef = useRef(false);
+  const programmaticRef = useRef(false);
+  const lastFitSigRef = useRef<string | null>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Création unique de la carte.
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
@@ -79,22 +91,35 @@ export function MapCanvas({
     map.on("click", (e: L.LeafletMouseEvent) => {
       onClickRef.current?.(e.latlng.lat, e.latlng.lng);
     });
+    // Dès que l'utilisateur déplace/zoome LUI-MÊME (pas un recadrage programmatique),
+    // on cesse tout recadrage automatique.
+    map.on("movestart zoomstart", () => {
+      if (!programmaticRef.current) userInteractedRef.current = true;
+    });
     mapRef.current = map;
     // La taille réelle du conteneur n'est parfois connue qu'après le layout.
-    setTimeout(() => map.invalidateSize(), 0);
-    return () => { map.remove(); mapRef.current = null; };
+    resizeTimerRef.current = setTimeout(() => map.invalidateSize(), 0);
+    return () => {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+    };
   }, []);
 
-  // Redessine les couches à chaque changement de données.
+  // Redessine les couches à chaque changement de données (SANS recadrer ici).
   useEffect(() => {
     const map = mapRef.current;
     const group = layerRef.current;
     if (!map || !group) return;
     group.clearLayers();
 
+    // Points qui définissent le cadre (incluent le RAYON des cercles via getBounds()).
+    const pts: L.LatLng[] = [];
+
     for (const c of circles) {
       const col = resolveColor(c.color);
-      L.circle([c.lat, c.lng], {
+      const circle = L.circle([c.lat, c.lng], {
         radius: c.radiusM,
         color: col,
         weight: 2,
@@ -102,7 +127,10 @@ export function MapCanvas({
         fillColor: col,
         fillOpacity: 0.12,
         dashArray: c.dashed ? "6 6" : undefined,
-      }).addTo(group).bindPopup(c.label ?? "");
+      }).addTo(group);
+      if (c.label) circle.bindPopup(c.label);
+      const b = circle.getBounds();
+      pts.push(b.getSouthWest(), b.getNorthEast());
     }
 
     if (path && path.length > 1) {
@@ -110,33 +138,41 @@ export function MapCanvas({
         color: resolveColor("var(--primary)"), weight: 3, opacity: 0.6,
       }).addTo(group);
     }
+    for (const p of path ?? []) pts.push(L.latLng(p.lat, p.lng));
 
     for (const m of markers) {
       const r = m.radiusPx ?? (m.kind === "position" ? 9 : m.kind === "sos" ? 11 : 5);
-      const marker = L.circleMarker([m.lat, m.lng], {
+      L.circleMarker([m.lat, m.lng], {
         radius: r,
         color: "#ffffff",
-        weight: 2,
+        weight: m.kind === "sos" ? 3 : 2,
         fillColor: resolveColor(m.color),
         fillOpacity: m.kind === "dot" ? 0.7 : 1,
       }).addTo(group).bindPopup(m.label);
-      if (m.kind === "sos") {
-        // Halo pulsant autour du point SOS pour le repérer immédiatement.
-        marker.setStyle({ weight: 3 });
-      }
+      pts.push(L.latLng(m.lat, m.lng));
     }
 
-    // Cadre automatique sur l'ensemble des éléments.
-    const pts: [number, number][] = [
-      ...markers.map((m) => [m.lat, m.lng] as [number, number]),
-      ...circles.map((c) => [c.lat, c.lng] as [number, number]),
-      ...(path ?? []).map((p) => [p.lat, p.lng] as [number, number]),
-    ];
-    if (pts.length === 1) {
-      map.setView(pts[0], 16);
-    } else if (pts.length > 1) {
+    // Recadrage DÉCOUPLÉ : seulement si l'utilisateur n'a pas pris la main ET si
+    // l'ensemble des positions a changé (signature = centres, hors rayon pour ne
+    // pas recadrer à chaque ajustement de rayon dans l'éditeur de zone).
+    if (userInteractedRef.current || pts.length === 0) return;
+    const sig = JSON.stringify({
+      m: markers.map((m) => [round(m.lat), round(m.lng)]),
+      c: circles.map((c) => [round(c.lat), round(c.lng)]),
+      p: (path ?? []).map((p) => [round(p.lat), round(p.lng)]),
+    });
+    if (sig === lastFitSigRef.current) return;
+    lastFitSigRef.current = sig;
+
+    programmaticRef.current = true;
+    const onlyOnePoint = markers.length + (path?.length ?? 0) === 1 && circles.length === 0;
+    if (onlyOnePoint) {
+      map.setView([markers[0]?.lat ?? path![0].lat, markers[0]?.lng ?? path![0].lng], 16);
+    } else {
       map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 17 });
     }
+    // Rend la main après que les événements de mouvement programmatiques soient passés.
+    setTimeout(() => { programmaticRef.current = false; }, 0);
   }, [markers, circles, path]);
 
   return (
@@ -147,3 +183,5 @@ export function MapCanvas({
     />
   );
 }
+
+function round(v: number): number { return Math.round(v * 1e5) / 1e5; }

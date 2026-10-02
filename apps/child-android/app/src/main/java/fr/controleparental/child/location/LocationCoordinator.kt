@@ -35,15 +35,16 @@ class LocationCoordinator(context: Context) {
     private var sosId: String? = null
     private var sosStartedMs = 0L
 
-    /** Rafraîchit le réglage de partage + ré-enregistre les geofences (~5 min). */
+    /** Rafraîchit le réglage de partage + ré-enregistre les geofences si besoin. */
     suspend fun onSync() {
         settings = runCatching { repo.settings() }.getOrDefault(LocationRepository.Settings.DEFAULT)
-        runCatching { geofences.sync(client.hasFine()) }
+        runCatching { geofences.sync(client.hasFine()) }   // re-register seulement si les zones ont changé
     }
 
-    /** Ré-enregistrement des geofences après reboot (appelé par BootReceiver). */
+    /** Ré-enregistrement COMPLET des geofences après reboot (les geofences OS ne
+     *  survivent pas au redémarrage). Appelé par BootReceiver (borné). */
     suspend fun registerGeofencesAfterBoot() {
-        runCatching { geofences.sync(client.hasFine()) }
+        runCatching { geofences.sync(client.hasFine(), force = true) }
     }
 
     /** Appelé à chaque tick de la boucle (~3 s). Gère SOS live + relevé périodique. */
@@ -90,15 +91,24 @@ class LocationCoordinator(context: Context) {
     /** Check-in ponctuel (commande 'locate', D2). Retourne true si une position
      *  a été remontée. */
     suspend fun checkInOnDemand(): Boolean {
-        // Une demande EXPLICITE du parent (commande 'locate') est honorée même si
-        // le mode périodique est coupé : elle est tracée (location_fix on_demand)
-        // et visible de l'enfant → transparent, non occulte.
-        val loc = client.currentFix(highAccuracy = settings.highAccuracy) ?: return false
+        // On RECHARGE le réglage (il a pu changer) et on RESPECTE le choix du
+        // parent : si le partage est désactivé (off / !enabled), on ne remonte
+        // AUCUNE position — cohérent avec l'écran « mes données » qui dit alors
+        // « partage désactivé ». Le SOS enfant (child-initiated) reste, lui,
+        // toujours autorisé par un autre chemin.
+        val s = runCatching { repo.settings() }.getOrDefault(settings)
+        settings = s
+        if (!s.enabled || s.mode == "off") return false
+        val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return false
         return repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
     }
 
-    /** Batterie faible (D7) : remonte la dernière position + une alerte. */
+    /** Batterie faible (D7) : remonte la dernière position + une alerte. Respecte
+     *  le réglage de partage (pas de position si désactivé). */
     suspend fun onBatteryLow() {
+        val s = runCatching { repo.settings() }.getOrDefault(settings)
+        settings = s
+        if (!s.enabled || s.mode == "off") return
         val battery = batteryLevel()
         val loc = client.lastKnown() ?: client.currentFix(highAccuracy = false)
         if (loc != null) repo.insertFix(loc, source = "periodic", batteryLevel = battery)

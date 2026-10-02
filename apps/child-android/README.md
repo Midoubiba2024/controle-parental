@@ -48,18 +48,22 @@ toujours affichée + écran « mes données »). Détails : [`../../docs/08-LOT3
 |---|---|---|
 | `-PfeatureCallLog=true` | active le journal d'appels (métadonnées) | `false` |
 | `-PcommHashPepper=…` | poivre de hachage des numéros (à définir en release) | `dev-pepper-change-me` |
-| `-PfeatureBackgroundLocation=false` | ne demande jamais la localisation en arrière-plan (variante « sans background » si refus Play) | `true` |
+
+**Localisation en arrière-plan** — pilotée par un **product flavor** (dimension `backgroundLocation`),
+pas un `-P` : le flavor `noBgLocation` **retire** `ACCESS_BACKGROUND_LOCATION` du manifeste fusionné
+(overlay `tools:node="remove"`), `withBgLocation` (défaut) la conserve. Voir
+[`../../docs/08-LOT3-LOCALISATION.md`](../../docs/08-LOT3-LOCALISATION.md).
 
 ### Déclaration Play (à fournir à la publication)
 - `PACKAGE_USAGE_STATS` : usage « core » de supervision parentale transparente (temps d'écran).
 - `READ_CALL_LOG` (si `FEATURE_CALL_LOG`) : métadonnées d'appels pour la supervision
   parentale, **sans contenu**. Si risque de refus Play, laisser la fonction **désactivée**
   (flag off) — l'observation du temps d'écran et de l'inventaire ne dépend pas de ce flag.
-- `ACCESS_BACKGROUND_LOCATION` (si `FEATURE_BACKGROUND_LOCATION`) : permission **sensible**
+- `ACCESS_BACKGROUND_LOCATION` (flavor `withBgLocation`) : permission **sensible**
   → formulaire Play + **vidéo de démo** « child_monitoring » (montrer notification de
   supervision, écran « mes données », consentement). En cas de refus : publier la
-  variante `-PfeatureBackgroundLocation=false` (check-in à la demande + SOS restent
-  fonctionnels). Détails : [`../../docs/08-LOT3-LOCALISATION.md`](../../docs/08-LOT3-LOCALISATION.md) §5.
+  variante **`noBgLocation`** (permission absente du manifeste ; check-in à la demande
+  + SOS restent fonctionnels). Détails : [`../../docs/08-LOT3-LOCALISATION.md`](../../docs/08-LOT3-LOCALISATION.md) §5.
 - `isMonitoringTool = child_monitoring` à cocher dans la Play Console.
 
 ## Construire
@@ -67,11 +71,13 @@ toujours affichée + écran « mes données »). Détails : [`../../docs/08-LOT3
 cd apps/child-android
 # Android Studio génère le wrapper et le dossier gradle/ ; sinon :
 gradle wrapper --gradle-version 8.9
-./gradlew :app:assembleDebug
+# Un flavor de localisation doit être choisi (LOT 3) :
+./gradlew :app:assembleWithBgLocationDebug   # avec localisation en arrière-plan (défaut)
+./gradlew :app:assembleNoBgLocationDebug      # variante sans arrière-plan (repli Play)
 ```
 URL/clé Supabase par défaut déjà dans `app/build.gradle.kts` ; surchargeables :
 ```bash
-./gradlew :app:assembleDebug -PsupabaseUrl=... -PsupabaseAnonKey=...
+./gradlew :app:assembleWithBgLocationDebug -PsupabaseUrl=... -PsupabaseAnonKey=...
 ```
 
 ## À venir (lots suivants)

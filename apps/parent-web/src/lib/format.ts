@@ -48,6 +48,18 @@ export function fmtAgo(iso: string): string {
   return `il y a ${d} j`;
 }
 
+/**
+ * Clé de jour (YYYY-MM-DD) d'un horodatage ISO, dans le fuseau du NAVIGATEUR
+ * parent. Utilisée pour regrouper les trajets par jour côté console. NB : c'est
+ * une approximation côté parent (l'appareil enfant peut être dans un autre
+ * fuseau) ; acceptable pour un regroupement d'affichage, à ne pas confondre avec
+ * `anchorDay` (jour de référence des agrégats, lui dérivé du fuseau de l'appareil).
+ */
+export function localDayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function fmtDayLabel(day: string): string {
   // day = YYYY-MM-DD → « lun. 30 »
   const d = new Date(day + "T00:00:00");

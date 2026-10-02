@@ -79,11 +79,21 @@ function SosBanner({ sos, loc, run }: {
   const liveFixes = loc.fixes
     .filter((f) => f.source === "sos" && f.captured_at >= sos.started_at)
     .slice().sort((a, b) => a.captured_at.localeCompare(b.captured_at));
-  const head = liveFixes[liveFixes.length - 1] ?? loc.fixes[0] ?? null;
+  // Vraie position SOS si disponible ; sinon on affiche, EN NEUTRE, la dernière
+  // position connue AVANT le SOS (ne jamais la faire passer pour une position SOS).
+  const liveHead = liveFixes[liveFixes.length - 1] ?? null;
+  const head = liveHead ?? loc.fixes[0] ?? null;
+  const isLive = liveHead != null;
 
   const markers: MapMarker[] = head
-    ? [{ id: `sos-${head.id}`, lat: head.latitude, lng: head.longitude, color: "var(--danger)",
-        kind: "sos", label: `SOS · ${fmtDateTime(head.captured_at)}` }]
+    ? [{
+        id: `sos-${head.id}`, lat: head.latitude, lng: head.longitude,
+        color: isLive ? "var(--danger)" : "var(--muted)",
+        kind: isLive ? "sos" : "position",
+        label: isLive
+          ? `Position SOS · ${fmtDateTime(head.captured_at)}`
+          : `Dernière position connue avant le SOS · ${fmtDateTime(head.captured_at)}`,
+      }]
     : [];
   const path = liveFixes.map((f) => ({ lat: f.latitude, lng: f.longitude }));
 
@@ -107,8 +117,9 @@ function SosBanner({ sos, loc, run }: {
         <div style={{ marginTop: 12 }}>
           <MapCanvas markers={markers} path={path} height={300} />
           <p className="muted small" style={{ marginBottom: 0 }}>
-            Dernière position SOS {fmtAgo(head.captured_at)} · ±{Math.round(head.accuracy_m ?? 0)} m
-            {loc.live && " · diffusion en direct"}
+            {isLive
+              ? `Dernière position SOS ${fmtAgo(head.captured_at)} · ±${Math.round(head.accuracy_m ?? 0)} m${loc.live ? " · diffusion en direct" : ""}`
+              : `Pas encore de position SOS — dernière position connue ${fmtAgo(head.captured_at)} · ±${Math.round(head.accuracy_m ?? 0)} m`}
           </p>
         </div>
       ) : (

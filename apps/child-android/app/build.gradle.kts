@@ -46,16 +46,13 @@ android {
             (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
         buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")
 
-        // --- LOT 3 — Localisation & Sécurité ----------------------------------
-        // Localisation EN ARRIÈRE-PLAN (ACCESS_BACKGROUND_LOCATION) : permission
-        // SENSIBLE Play (formulaire + vidéo de démo « child_monitoring »). On la
-        // met derrière un flag Gradle pour pouvoir publier une variante SANS
-        // arrière-plan si Google refuse la justification (le suivi périodique
-        // fonctionne alors uniquement app ouverte / service au premier plan).
-        // Le check-in à la demande (D2) et le SOS restent possibles sans ce flag.
-        val featureBackgroundLocation: Boolean =
-            (project.findProperty("featureBackgroundLocation") as String?)?.toBoolean() ?: true
-        buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", featureBackgroundLocation.toString())
+        // --- LOT 3 — Localisation EN ARRIÈRE-PLAN -----------------------------
+        // ACCESS_BACKGROUND_LOCATION = permission SENSIBLE Play. Pilotée par un
+        // PRODUCT FLAVOR (ci-dessous), PAS seulement par BuildConfig : la variante
+        // « noBgLocation » RETIRE réellement la permission du manifeste fusionné
+        // (overlay tools:node="remove"), pour une soumission Play sans arrière-plan
+        // si Google refuse la justification. BuildConfig.FEATURE_BACKGROUND_LOCATION
+        // (défini par flavor) gate en plus la demande au runtime.
 
         // Déclaration anti-stalkerware : l'app est un outil de surveillance PARENTALE.
         // (Le flag Play Console child_monitoring se règle à la publication ; voir docs.)
@@ -65,6 +62,26 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    // --- LOT 3 — Variantes de localisation en arrière-plan --------------------
+    // withBgLocation (défaut) : conserve ACCESS_BACKGROUND_LOCATION (manifeste
+    //   principal) ; FEATURE_BACKGROUND_LOCATION=true.
+    // noBgLocation : l'overlay src/noBgLocation/AndroidManifest.xml RETIRE la
+    //   permission du manifeste fusionné (tools:node="remove") ;
+    //   FEATURE_BACKGROUND_LOCATION=false. Variante de repli pour Play.
+    // Build : ./gradlew :app:assembleWithBgLocationDebug (ou assembleNoBgLocationDebug).
+    flavorDimensions += "backgroundLocation"
+    productFlavors {
+        create("withBgLocation") {
+            dimension = "backgroundLocation"
+            isDefault = true
+            buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", "true")
+        }
+        create("noBgLocation") {
+            dimension = "backgroundLocation"
+            buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", "false")
         }
     }
 
