@@ -76,8 +76,9 @@ anti‑altération d'audit / IaC). Le propriétaire les exécute lui‑même dan
 **Supabase → SQL Editor** (ou via `supabase db push` depuis le dépôt). Tout est
 **idempotent** et ré‑exécutable sans risque.
 
-Déjà en live (appliqué automatiquement) : la fonction d'export `export_child_data`
-et les **index couvrants de clés étrangères** (migration 0023, partie index).
+Déjà en live (appliqué automatiquement, non destructif) : la fonction d'export
+`export_child_data`, les **index couvrants de clés étrangères** (migration 0023,
+partie index) et les **colonnes `perm_*`** de `device_status` (migration 0024).
 Il reste à appliquer, dans l'ordre :
 
 ### A. Nettoyage des résidus L0/L1 (migration 0010) — **à faire en premier**
@@ -180,3 +181,47 @@ select cron.schedule(
   suppression (après double confirmation) retire bien l'enfant.
 - `pg_policies` : `commands_insert` et `child_schedules_insert` ne contiennent plus
   de `x = x`.
+
+---
+
+## 5. Robustesse au redémarrage & signalement de révocation (tranche 2)
+
+### Reprise au boot / après mise à jour (report L8a)
+
+- `BootReceiver` écoute désormais **`BOOT_COMPLETED` ET `MY_PACKAGE_REPLACED`** :
+  après un redémarrage **ou une mise à jour de l'app**, il relance la supervision
+  (FGS `dataSync`, jamais `location` depuis le boot — contrainte Android 14/15,
+  try/catch L3 conservé), ré-enregistre les geofences, et **relance le filtrage**.
+- **Relance du VpnService de filtrage** : l'état « filtrage voulu » est persisté
+  (`SupervisionStore.filterDesired`, mis à `true` quand le tunnel s'établit, `false`
+  sur arrêt explicite / révocation). Au boot, `LocalDnsVpnService.restartIfDesired()`
+  redémarre le tunnel **best-effort** si le consentement VPN persiste
+  (`VpnService.prepare == null`) — tout est `runCatching`, aucun risque de plantage.
+- **Chemin FIABLE (recommandé)** : le **VPN « always-on » système**, qu'Android
+  relance lui-même au boot (hors contrainte FGS-depuis-boot).
+  - **Mode Renforcé (device owner)** : automatique — à l'activation du filtrage,
+    l'app s'enregistre via `DevicePolicyManager.setAlwaysOnVpnPackage(... lockdown=false)`.
+    `lockdown=false` est impératif : on ne bloque JAMAIS le trafic quand le VPN est
+    absent (fail-open, DNS-only ; 112 et connectivité jamais entravés).
+  - **Mode Standard** : à activer **manuellement une fois** côté appareil —
+    Réglages → Réseau/VPN → (roue) → **VPN permanent** sur « Contrôle parental »,
+    **sans** « Bloquer les connexions sans VPN ». Le filtrage repart alors seul à
+    chaque redémarrage. À défaut, la relance best-effort ci-dessus s'applique, et si
+    elle échoue l'état « inactif » remonte au parent (transparence, ci-dessous).
+
+### Signalement transparent du retrait d'une autorisation
+
+Quand l'enfant révoque une protection, le parent le voit — jamais de contenu, juste
+un état :
+
+- **Accès à l'usage, superposition, notifications, localisation** : chaque relevé
+  `device_status` porte l'état de ces permissions (colonnes `perm_*`, migration 0024,
+  déjà en live). La console affiche une bannière **« ⚠️ Une protection est
+  désactivée »** dès qu'une d'elles est `false`.
+- **VPN de filtrage** : déjà couvert par `filter_status.vpn_active` /
+  `last_revoked_at` (onglet Filtrage) — `onRevoke()` le signale immédiatement.
+- **Accès aux notifications (analyse ado L6)** : déjà couvert par
+  `safety_status.analysis_active` / `last_revoked_at` (onglet Sécurité ado).
+
+Aucune de ces remontées ne contient de contenu : seulement des booléens d'état et des
+horodatages (lignes rouges respectées).

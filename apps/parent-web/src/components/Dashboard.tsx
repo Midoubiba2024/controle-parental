@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 import { useObservation } from "../lib/observation";
 import { fmtBytes } from "../lib/format";
-import type { Child, Family } from "../lib/types";
+import type { Child, DeviceStatus, Family } from "../lib/types";
 import { OverviewView } from "./views/OverviewView";
 import { ScreenTimeView } from "./views/ScreenTimeView";
 import { ApplicationsView } from "./views/ApplicationsView";
@@ -154,6 +154,7 @@ export function Dashboard({ session }: { session: Session }) {
 
         {error && <p className="msg error">{error}</p>}
         {obs.error && <p className="msg error">{obs.error}</p>}
+        <ProtectionBanner status={obs.status} />
 
         {view === "family" ? (
           <FamilyView familyId={familyId!} onChildrenChanged={loadChildren} />
@@ -183,6 +184,37 @@ export function Dashboard({ session }: { session: Session }) {
           : view === "apps" ? <ApplicationsView obs={obs} />
           : <CallsView obs={obs} />}
       </main>
+    </div>
+  );
+}
+
+// LOT 8b — bannière TRANSPARENTE : signale au parent qu'une protection a été
+// désactivée sur l'appareil (permission révoquée par l'enfant). Jamais de contenu,
+// seulement l'état. Calculé sur le dernier relevé device_status de chaque appareil.
+const PROTECTION_LABEL: Record<string, string> = {
+  perm_usage_access: "Accès au temps d'écran",
+  perm_overlay: "Écran de pause (superposition)",
+  perm_notifications: "Notifications",
+  perm_location: "Localisation",
+};
+
+function ProtectionBanner({ status }: { status: DeviceStatus[] }) {
+  const off = new Set<string>();
+  for (const s of status) {
+    for (const key of Object.keys(PROTECTION_LABEL)) {
+      if (s[key as keyof DeviceStatus] === false) off.add(key);
+    }
+  }
+  if (off.size === 0) return null;
+  const labels = [...off].map((k) => PROTECTION_LABEL[k]).join(" · ");
+  return (
+    <div className="card" style={{ borderColor: "var(--danger)", marginBottom: 14 }}>
+      <strong style={{ color: "var(--danger)" }}>⚠️ Une protection est désactivée</strong>
+      <p className="muted small" style={{ margin: "6px 0 0" }}>
+        Sur l'appareil : <b>{labels}</b>. Une autorisation nécessaire a été retirée.
+        Demandez à l'enfant de la réactiver depuis son écran « Mes données » (rien
+        n'est caché — l'app reste visible et transparente).
+      </p>
     </div>
   );
 }

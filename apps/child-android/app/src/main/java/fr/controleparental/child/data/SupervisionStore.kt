@@ -86,6 +86,16 @@ class SupervisionStore(context: Context) {
         get() = prefs.getString(KEY_MSG_WM, null)
         set(value) { prefs.edit().putString(KEY_MSG_WM, value).apply() }
 
+    /**
+     * L'enfant/parent a-t-il ACTIVÉ le filtrage web (VpnService) ? Persisté pour
+     * pouvoir RELANCER le filtrage après un redémarrage ou une mise à jour de l'app
+     * (report L8a). Mis à true quand le tunnel s'établit, false sur arrêt explicite
+     * ou révocation (on ne relance jamais un filtrage que l'utilisateur a coupé).
+     */
+    var filterDesired: Boolean
+        get() = prefs.getBoolean(KEY_FILTER_DESIRED, false)
+        set(value) { prefs.edit().putBoolean(KEY_FILTER_DESIRED, value).apply() }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
@@ -98,5 +108,6 @@ class SupervisionStore(context: Context) {
         const val KEY_CALL_WM = "call_log_watermark"
         const val KEY_STATUS_TS = "pending_status_captured_at"
         const val KEY_MSG_WM = "message_watermark"
+        const val KEY_FILTER_DESIRED = "filter_desired"
     }
 }
