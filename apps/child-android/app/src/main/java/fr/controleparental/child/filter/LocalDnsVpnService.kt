@@ -15,6 +15,7 @@ import androidx.core.app.ServiceCompat
 import fr.controleparental.child.Config
 import fr.controleparental.child.MainActivity
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.enforce.ReinforcedEnforcer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,6 +78,9 @@ class LocalDnsVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            // Arrêt EXPLICITE : on ne veut plus relancer le filtrage au boot.
+            store.filterDesired = false
+            runCatching { ReinforcedEnforcer(this).setAlwaysOnVpn(false) }
             stopVpn(reportInactive = true)
             return START_NOT_STICKY
         }
@@ -106,6 +110,10 @@ class LocalDnsVpnService : VpnService() {
         }
         vpn = pfd
         isRunning = true
+        // Mémorise que le filtrage est voulu (relance au boot/MAJ — report L8a) et,
+        // en device owner, délègue la persistance au VPN always-on système (fiable).
+        store.filterDesired = true
+        runCatching { ReinforcedEnforcer(this).setAlwaysOnVpn(true) }
         scope.launch { readLoop(pfd) }
         scope.launch { syncLoop() }
     }
@@ -247,6 +255,8 @@ class LocalDnsVpnService : VpnService() {
     override fun onRevoke() {
         // L'utilisateur (ou un autre VPN) a désactivé notre VPN. ANTI-CONTOURNEMENT
         // TRANSPARENT (C9) : on le signale au parent et à l'enfant, jamais en secret.
+        // On ne relancera pas au boot un filtrage que l'utilisateur a coupé.
+        store.filterDesired = false
         scope.launch { runCatching { filterClient.reportStatus(vpnActive = false) } }
         notifyDisabled()
         stopVpn(reportInactive = false)
@@ -345,6 +355,24 @@ class LocalDnsVpnService : VpnService() {
             runCatching {
                 context.startService(Intent(context, LocalDnsVpnService::class.java).setAction(ACTION_STOP))
             }
+        }
+
+        /**
+         * Relance le filtrage après un redémarrage / une mise à jour de l'app, SI
+         * l'utilisateur l'avait activé (report L8a). En device owner, le VPN always-on
+         * système a déjà relancé le tunnel — cet appel est un filet best-effort pour
+         * le mode Standard. Ne démarre QUE si le consentement VpnService persiste
+         * (prepare == null) ; sinon on s'abstient (pas d'UI depuis un receiver) :
+         * l'absence de heartbeat filter_status (last_active_at cesse d'avancer)
+         * reflète alors l'inactivité côté parent (transparence).
+         * Tout est best-effort : ne doit jamais faire planter l'appelant.
+         */
+        fun restartIfDesired(context: Context) {
+            val store = SupervisionStore(context)
+            if (!store.isEnrolled || !store.filterDesired) return
+            val needsConsent = runCatching { VpnService.prepare(context) }.getOrNull() != null
+            if (needsConsent) return
+            start(context)
         }
     }
 }
