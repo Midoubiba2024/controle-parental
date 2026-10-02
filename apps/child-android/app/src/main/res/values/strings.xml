@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Supervision familiale</string>
+    <string name="supervision_channel">Supervision active</string>
+</resources>

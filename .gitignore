@@ -1,0 +1,42 @@
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+*.key
+*.p8
+google-services.json
+service-account*.json
+
+# --- Node / web ---
+node_modules/
+dist/
+build/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# --- Supabase ---
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# --- Android / Kotlin ---
+apps/child-android/.gradle/
+apps/child-android/build/
+apps/child-android/app/build/
+apps/child-android/local.properties
+apps/child-android/.idea/
+apps/child-android/captures/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# --- OS / éditeurs ---
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

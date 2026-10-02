@@ -1,0 +1,22 @@
+# Configuration Supabase (dev local + documentation de l'intention côté hébergé).
+project_id = "controle-parental"
+
+[auth]
+enable_signup = true
+# MFA (TOTP) obligatoire pour les comptes parents — voir SETUP.md.
+
+# Hook de claims : enrichit le JWT avec app_metadata.families + child_id.
+# (À activer aussi dans le dashboard du projet hébergé : Authentication > Hooks.)
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+# verify_jwt par fonction (doit refléter le déploiement hébergé).
+[functions.create-family]
+verify_jwt = true
+
+[functions.pairing-start]
+verify_jwt = true
+
+[functions.pairing-complete]
+verify_jwt = false
