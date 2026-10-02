@@ -66,6 +66,33 @@ pas un `-P` : le flavor `noBgLocation` **retire** `ACCESS_BACKGROUND_LOCATION` d
   + SOS restent fonctionnels). Détails : [`../../docs/08-LOT3-LOCALISATION.md`](../../docs/08-LOT3-LOCALISATION.md) §5.
 - `isMonitoringTool = child_monitoring` à cocher dans la Play Console.
 
+## Filtrage réseau & contenu (LOT 4)
+Filtrage par **nom de domaine (DNS)** via un **`VpnService` LOCAL** (sinkhole). Détails :
+[`../../docs/09-LOT4-FILTRAGE.md`](../../docs/09-LOT4-FILTRAGE.md).
+- **LIGNE ROUGE** : VPN **strictement local**. On n'intercepte que le **DNS** (port 53)
+  vers un résolveur virtuel, on décide allow/block/réécriture par **nom de domaine**, puis
+  on transfère les requêtes autorisées à un résolveur public (Quad9 par défaut).
+  **Aucun MITM, aucun déchiffrement TLS, aucune inspection de contenu, aucun proxy distant.**
+- **Transparence** : le VPN est **visible** (icône clé Android + notification de supervision
+  dédiée) ; l'écran « mes données » annonce le filtrage DNS et le **journal de domaines**
+  (métadonnées : domaine + catégorie + action + heure, **jamais** d'URL ni de contenu).
+- **Essentiels & urgences jamais entravés** : seule l'adresse du résolveur virtuel est
+  routée dans le tunnel (tout le reste du trafic est inchangé) ; `DnsFilterEngine` tient
+  une **liste blanche système/essentielle** inviolable. Le 112 passe par le réseau
+  téléphonique, hors DNS.
+- **Graduation par âge** : jeune enfant → **liste blanche stricte** ; (pré)ado →
+  **catégories + Ask-to-Browse** (C6). Presets dans la console parent.
+- **Anti-contournement transparent (C9)** : `onRevoke()` signale toute coupure au parent
+  (`filter_status`) **et** à l'enfant (notification) — jamais en cachette.
+- Cœur **pur et testable** : `DnsFilterEngine` + `DnsPacket`/`IpUdp` (décision et
+  encodage DNS/IPv4-UDP), indépendants d'Android.
+
+Permissions ajoutées : `FOREGROUND_SERVICE_SPECIAL_USE` (le service de filtrage est de
+type `specialUse` — il n'existe pas de type `vpn` dédié) ; le `VpnService` est protégé par
+`BIND_VPN_SERVICE` et exige le **consentement runtime** `VpnService.prepare` (toujours
+visible). Flag `FEATURE_NETWORK_FILTER` (ON par défaut, `-PfeatureNetworkFilter=false`
+pour une soumission Play sans VPN).
+
 ## Construire
 ```bash
 cd apps/child-android
@@ -74,6 +101,9 @@ gradle wrapper --gradle-version 8.9
 # Un flavor de localisation doit être choisi (LOT 3) :
 ./gradlew :app:assembleWithBgLocationDebug   # avec localisation en arrière-plan (défaut)
 ./gradlew :app:assembleNoBgLocationDebug      # variante sans arrière-plan (repli Play)
+# Filtrage réseau activé par défaut ; pour le retirer d'une soumission Play :
+./gradlew :app:assembleWithBgLocationDebug -PfeatureNetworkFilter=false
+# Résolveur amont surchargeable : -PdnsUpstream=1.1.1.1
 ```
 URL/clé Supabase par défaut déjà dans `app/build.gradle.kts` ; surchargeables :
 ```bash
@@ -81,8 +111,9 @@ URL/clé Supabase par défaut déjà dans `app/build.gradle.kts` ; surchargeable
 ```
 
 ## À venir (lots suivants)
-Blocage/filtrage, localisation + géofencing, SOS, verrouillage à distance — chacun affiché
-dans « mes données » avant activation. Voir `../../docs/04-LOTS.md`.
+Verrouillage/messagerie à distance (L5), bien-être & détection on-device ado (L6),
+durcissement & publication (L8) — chacun affiché dans « mes données » avant activation.
+Voir `../../docs/04-LOTS.md`.
 
 > Le binaire `gradle/wrapper/gradle-wrapper.jar` n'est pas commité (généré par
 > `gradle wrapper` ou Android Studio à la première ouverture).

@@ -53,6 +53,13 @@ export function RequestsView({ familyId, children }: { familyId: string; childre
             target_value: String(req.payload.package_name), action: "allow", daily_limit_minutes: null },
           { onConflict: "child_id,target_type,target_value" });
         if (rErr) { setErr(rErr.message); setBusy(false); return; }
+      } else if (req.kind === "browse" && req.payload?.domain) {
+        // Ask-to-Browse (C6, LOT 4) : autorise le domaine demandé (liste blanche).
+        const { error: rErr } = await supabase.from("filter_rules").upsert(
+          { family_id: familyId, child_id: req.child_id,
+            domain: String(req.payload.domain), action: "allow", note: "ask_to_browse" },
+          { onConflict: "child_id,domain" });
+        if (rErr) { setErr(rErr.message); setBusy(false); return; }
       }
     }
 
@@ -155,6 +162,7 @@ function describe(req: AccessRequest): string {
   if (req.kind === "extra_time") return `+${m ?? "?"} min${req.payload?.scope === "app" && pkg ? ` sur ${pkg}` : " (global)"}`;
   if (req.kind === "reward") return `+${m ?? "?"} min de récompense`;
   if (req.kind === "unblock_app") return `Débloquer ${pkg ?? "une app"}`;
+  if (req.kind === "browse") return `Accès au site ${req.payload?.domain ?? "demandé"}`;
   return "";
 }
 
