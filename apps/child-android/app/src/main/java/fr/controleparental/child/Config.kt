@@ -27,6 +27,19 @@ object Config {
     val featureNetworkFilter: Boolean = BuildConfig.FEATURE_NETWORK_FILTER
 
     /**
+     * LOT 6 — Détection de bien-être/sécurité ON-DEVICE (profil ado).
+     *
+     * Quand true, l'app peut proposer l'analyse LOCALE du texte des notifications
+     * (NotificationListenerService) pour en déduire des SIGNAUX de risque
+     * (catégorie/gravité) remontés en MÉTADONNÉES. 🔴 LIGNE ROUGE : le contenu
+     * analysé ne quitte JAMAIS l'appareil (docs/11-LOT6-BIEN-ETRE.md). L'analyse
+     * reste gardée au runtime par : le profil (preteen/teen uniquement — jamais
+     * young_child), le consentement (`safety_settings.analysis_enabled`, OFF par
+     * défaut) et l'accès aux notifications accordé par l'ado dans les Réglages.
+     */
+    val featureSafetySignals: Boolean = BuildConfig.FEATURE_SAFETY_SIGNALS
+
+    /**
      * Journal d'appels (métadonnées) : fonction SENSIBLE, OFF par défaut.
      *
      * NE PAS activer en release tant que le hachage des numéros n'est pas déplacé

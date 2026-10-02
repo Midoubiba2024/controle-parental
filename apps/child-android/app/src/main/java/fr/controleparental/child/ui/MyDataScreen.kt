@@ -31,6 +31,9 @@ import fr.controleparental.child.filter.FilterClient
 import fr.controleparental.child.filter.LocalDnsVpnService
 import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.location.LocationRepository
+import fr.controleparental.child.safety.SafetyCache
+import fr.controleparental.child.safety.SafetyClient
+import fr.controleparental.child.safety.SafetyNotificationListener
 import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -140,6 +143,35 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         else { LocalDnsVpnService.start(context); filterOn = true }
     }
 
+    // --- LOT 6 — Analyse de bien-être/sécurité ON-DEVICE (profil ado) --------
+    // Transparence (K2) : l'ado voit que le texte de ses notifications est analysé
+    // SUR L'APPAREIL, que seule une ALERTE de catégorie remonte (jamais le texte),
+    // et il peut désactiver (retirer l'accès) ou mettre une PAUSE (K8). Rien pour
+    // young_child (gradation par âge) : la section n'apparaît pas.
+    val safetyCache = remember { SafetyCache(context) }
+    val safetyClient = remember { SafetyClient(store) }
+    var listenerEnabled by remember { mutableStateOf(SafetyNotificationListener.isEnabled(context)) }
+    var teenProfile by remember { mutableStateOf(safetyCache.teenProfile) }
+    var analysisEnabled by remember { mutableStateOf(safetyCache.analysisEnabled) }
+    var pauseActive by remember { mutableStateOf(safetyCache.pauseActive) }
+    var safetyBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (Config.featureSafetySignals) {
+            safetyClient.syncSettings(safetyCache)
+            teenProfile = safetyCache.teenProfile
+            analysisEnabled = safetyCache.analysisEnabled
+            pauseActive = safetyCache.pauseActive
+        }
+    }
+    val listenerSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        listenerEnabled = SafetyNotificationListener.isEnabled(context)
+        // Rendre l'état visible au parent immédiatement (transparence).
+        scope.launch { safetyClient.reportStatus(listenerEnabled && analysisEnabled && !pauseActive) }
+    }
+    val showSafety = Config.featureSafetySignals && teenProfile
+
     var sosBusy by remember { mutableStateOf(false) }
     var sosMsg by remember { mutableStateOf<String?>(null) }
 
@@ -230,15 +262,23 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     "enregistré — pas seulement les sites bloqués. Tes parents ont activé " +
                     "ce réglage ; tu peux leur demander de le désactiver."
             else null,
+            if (showSafety && analysisEnabled)
+                "Le texte de tes notifications est analysé SUR CET APPAREIL pour repérer des " +
+                    "situations de danger (harcèlement, mal-être, contact suspect…). Tes parents " +
+                    "reçoivent seulement une ALERTE de catégorie (ex. « harcèlement ») — JAMAIS " +
+                    "tes messages, jamais le texte. Tu peux l'arrêter ou mettre une pause."
+            else null,
         ).filterNotNull().forEach {
             Text("•  $it", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Jamais partagé : le contenu de tes messages et appels, les pages web que tu " +
-                "consultes, tes mots de passe, ni l'image de ton écran, de ta caméra ou de ton micro. " +
-                "Le filtrage regarde seulement le nom du site (DNS), jamais ce qu'il y a dedans.",
+            "Jamais partagé : le contenu de tes messages et appels, le texte de tes notifications, " +
+                "les pages web que tu consultes, tes mots de passe, ni l'image de ton écran, de ta " +
+                "caméra ou de ton micro. Le filtrage regarde seulement le nom du site (DNS), jamais " +
+                "ce qu'il y a dedans ; l'analyse de bien-être reste sur l'appareil et n'en fait sortir " +
+                "qu'une alerte de catégorie.",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
@@ -369,6 +409,76 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 actionLabel = if (callLogGranted) "Activé" else "Autoriser",
                 onAction = { callLogPermission.launch(Manifest.permission.READ_CALL_LOG) },
             )
+        }
+
+        if (showSafety) {
+            Spacer(Modifier.height(12.dp))
+            // Analyse de bien-être : carte DÉDIÉE (pas la PermissionCard réutilisable,
+            // car son bouton se désactive une fois accordé) → l'ado peut TOUJOURS
+            // ouvrir les réglages pour ACCORDER *ou RETIRER* l'accès (contrôle réel).
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(
+                            "Analyse de bien-être (sur l'appareil)",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            label = {
+                                Text(
+                                    when {
+                                        !analysisEnabled -> "non activée par tes parents"
+                                        pauseActive -> "en pause"
+                                        listenerEnabled -> "✓ active"
+                                        else -> "accès à accorder"
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Le texte de tes notifications est analysé SUR CET APPAREIL pour repérer " +
+                            "des situations de danger. Tes parents ne reçoivent qu'une alerte de " +
+                            "catégorie — jamais le texte. C'est toi qui gardes la main : tu peux " +
+                            "retirer l'accès aux notifications à tout moment.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = {
+                        listenerSettings.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    }) { Text(if (listenerEnabled) "Gérer l'accès aux notifications" else "Activer dans les réglages") }
+
+                    if (analysisEnabled) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            if (pauseActive)
+                                "Pause active : l'analyse est suspendue. Tes parents voient " +
+                                    "qu'une pause est en cours (pas son contenu)."
+                            else
+                                "Besoin d'une bulle ? Mets l'analyse en pause. Tes parents verront " +
+                                    "qu'une pause est active, jamais ce qu'elle masque.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            enabled = !safetyBusy,
+                            onClick = {
+                                scope.launch {
+                                    safetyBusy = true
+                                    val ok = if (pauseActive) safetyClient.endPause(safetyCache)
+                                             else safetyClient.startPause(safetyCache)
+                                    if (ok) pauseActive = safetyCache.pauseActive
+                                    safetyBusy = false
+                                }
+                            },
+                        ) { Text(if (pauseActive) "Reprendre l'analyse" else "Mettre en pause") }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(20.dp))

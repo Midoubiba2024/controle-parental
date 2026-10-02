@@ -100,6 +100,28 @@
                 android:value="Filtrage de contenu par contrôle parental : résolveur DNS local (sinkhole), sans MITM ni proxy distant." />
         </service>
 
+        <!-- LOT 6 — Analyse de bien-être/sécurité ON-DEVICE (profil ado).
+             NotificationListenerService : capte le texte des notifications pour
+             l'analyser SUR L'APPAREIL (moteur pur) et n'émettre que des SIGNAUX de
+             métadonnées (catégorie/gravité/app) — JAMAIS le contenu (ligne rouge,
+             docs/11-LOT6-BIEN-ETRE.md). Le service est LIÉ PAR LE SYSTÈME quand
+             l'ado accorde l'accès aux notifications (Réglages → Accès aux
+             notifications) ; on ne le force jamais. Protégé par
+             BIND_NOTIFICATION_LISTENER_SERVICE (le système est le seul autorisé à
+             le lier). Pas de foregroundServiceType (service lié, pas un FGS).
+             PIÈGE Android 13+ « paramètres restreints » : pour une app SIDELOADÉE
+             (hors store), l'accès aux notifications est bloqué tant que l'ado n'a
+             pas fait « Autoriser les paramètres restreints » depuis Infos de
+             l'application (voir docs/10-INSTALLATION.md). -->
+        <service
+            android:name=".safety.SafetyNotificationListener"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- LOT 3 — Réception des transitions de geofence (ENTER/EXIT/DWELL).
              Déclenché par les services Google Play ; non exporté aux autres apps. -->
         <receiver
