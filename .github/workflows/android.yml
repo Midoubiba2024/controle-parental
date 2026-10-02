@@ -29,7 +29,7 @@ jobs:
       # Absents (ex. PR depuis un fork) → APK debug uniquement.
       HAS_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
       # versionCode croissant → la mise à jour s'installe par-dessus.
-      GRADLE_ARGS: -PversionCode=${{ github.run_number }} --stacktrace
+      GRADLE_ARGS: -PversionCode=${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 

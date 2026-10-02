@@ -5,7 +5,7 @@ une notification de supervision persistante indique en permanence que l'accompag
 parental est actif (garde-fou anti-stalkerware, cf. `../../docs/02-CONFORMITE.md`).
 
 ## Stack
-Kotlin + Jetpack Compose (Material3), OkHttp, EncryptedSharedPreferences. AGP 8.5 / Kotlin 2.0.
+Kotlin + Jetpack Compose (Material3), OkHttp, EncryptedSharedPreferences. AGP 8.7 / Kotlin 2.0.
 
 ## Ce que fait le squelette (LOT 0)
 - **Écran d'appairage** : saisie du code à 8 chiffres → appelle l'Edge Function

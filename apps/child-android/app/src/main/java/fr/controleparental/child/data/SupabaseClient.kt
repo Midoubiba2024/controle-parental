@@ -39,9 +39,8 @@ class SupabaseClient(private val store: SupervisionStore) {
     suspend fun get(table: String, query: String): GetResult = withContext(Dispatchers.IO) {
         val enrollment = store.load() ?: return@withContext GetResult.Error("not_enrolled")
         var token = enrollment.accessToken
-        var attempt = 0
-        while (true) {
-            attempt++
+        // 2 tentatives max : la 2e (après rafraîchissement sur 401) retourne toujours.
+        for (attempt in 1..2) {
             val (code, body) = getRequest(table, query, token)
             when {
                 code == 401 && attempt == 1 -> {
@@ -54,6 +53,7 @@ class SupabaseClient(private val store: SupervisionStore) {
                 else -> return@withContext GetResult.Error("http_$code")
             }
         }
+        GetResult.Error("http_401")
     }
 
     private fun getRequest(table: String, query: String, accessToken: String): Pair<Int, String> {
@@ -87,9 +87,8 @@ class SupabaseClient(private val store: SupervisionStore) {
         val enrollment = store.load() ?: return@withContext Result.Error("not_enrolled")
 
         var token = enrollment.accessToken
-        var attempt = 0
-        while (true) {
-            attempt++
+        // 2 tentatives max : la 2e (après rafraîchissement sur 401) retourne toujours.
+        for (attempt in 1..2) {
             val resp = post(table, rows, onConflict, ignoreDuplicates, token)
             when {
                 resp == 401 && attempt == 1 -> {
@@ -102,6 +101,7 @@ class SupabaseClient(private val store: SupervisionStore) {
                 else -> return@withContext Result.Error("http_$resp")
             }
         }
+        Result.Error("http_401")
     }
 
     /**
@@ -118,9 +118,8 @@ class SupabaseClient(private val store: SupervisionStore) {
         val enrollment = store.load() ?: return@withContext Result.Error("not_enrolled")
 
         var token = enrollment.accessToken
-        var attempt = 0
-        while (true) {
-            attempt++
+        // 2 tentatives max : la 2e (après rafraîchissement sur 401) retourne toujours.
+        for (attempt in 1..2) {
             val resp = patchRequest(table, query, patch, token)
             when {
                 resp == 401 && attempt == 1 -> {
@@ -133,6 +132,7 @@ class SupabaseClient(private val store: SupervisionStore) {
                 else -> return@withContext Result.Error("http_$resp")
             }
         }
+        Result.Error("http_401")
     }
 
     private fun patchRequest(
