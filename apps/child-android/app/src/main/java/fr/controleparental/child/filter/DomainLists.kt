@@ -24,8 +24,11 @@ object DomainLists {
      * par le DNS — ils ne sont de toute façon jamais concernés par ce filtrage.
      */
     val ESSENTIAL: Set<String> = setOf(
-        // Connectivité / captive portal / heure
-        "android.com", "google.com", "gstatic.com", "googleapis.com",
+        // Connectivité / captive portal / heure. NB : google.com et googleapis.com
+        // sont volontairement ABSENTS — non vitaux, et leur présence court-circuiterait
+        // la réécriture SafeSearch/YouTube (on ne garde ici que les sondes de
+        // connectivité et l'heure, listées explicitement).
+        "android.com", "gstatic.com",
         "connectivitycheck.gstatic.com", "clients3.google.com",
         "pool.ntp.org", "time.android.com", "time.google.com",
         // Mises à jour système & store (ne pas bloquer)

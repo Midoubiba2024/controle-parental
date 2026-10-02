@@ -10,10 +10,13 @@ package fr.controleparental.child.filter
  * jamais entravées.
  *
  * Ordre de décision :
- *   1. hôte essentiel/système      → Allow (jamais casser la connectivité vitale)
- *   2. filtrage désactivé          → Allow (passe-plat)
- *   3. liste noire explicite (C2)  → Block
- *   4. réécriture SafeSearch/YouTube (C3/C4) si activée → Rewrite
+ *   1. filtrage désactivé          → Allow (passe-plat : on ne touche à rien)
+ *   2. liste noire explicite (C2)  → Block (le choix explicite du parent prime)
+ *   3. réécriture SafeSearch/YouTube (C3/C4) si activée → Rewrite
+ *        (AVANT la liste blanche essentielle : google.com/youtube.com doivent être
+ *         réécrits, pas court-circuités en Allow)
+ *   4. hôte essentiel/système      → Allow (jamais casser la connectivité vitale ;
+ *        inclut les cibles de réécriture forcesafesearch/restrict.youtube.com)
  *   5. liste blanche explicite (C2)→ Allow (surclasse le blocage de catégorie)
  *   6. liste blanche stricte (C5)  → Block si hors liste blanche
  *   7. catégorie bloquée (C1/C7)   → Block(catégorie)
@@ -38,23 +41,24 @@ class DnsFilterEngine(initial: FilterConfig) {
         val host = normalize(rawHost)
         if (host.isEmpty()) return Decision.Allow
 
-        // 1. Essentiels / système : toujours résolus.
-        if (DomainLists.matches(host, DomainLists.ESSENTIAL)) return Decision.Allow
-
         val p = config.policy
-        // 2. Filtrage désactivé : passe-plat.
+        // 1. Filtrage désactivé : passe-plat (aucune réécriture ni blocage).
         if (!p.enabled) return Decision.Allow
 
-        // 3. Liste noire explicite.
+        // 2. Liste noire explicite : le blocage explicite du parent prime.
         if (DomainLists.matches(host, config.block)) return Decision.Block(null)
 
-        // 4. Réécriture SafeSearch / YouTube restreint.
+        // 3. Réécriture SafeSearch / YouTube restreint — AVANT la liste blanche
+        //    essentielle (sinon google.com/youtube.com seraient Allow sans réécriture).
         if (p.safeSearch) {
             DomainLists.SAFE_SEARCH_REWRITE[host]?.let { return Decision.Rewrite(it) }
         }
         if (DomainLists.matches(host, DomainLists.YOUTUBE_HOSTS)) {
             DomainLists.youtubeTarget(p.youtubeRestriction)?.let { return Decision.Rewrite(it) }
         }
+
+        // 4. Essentiels / système : toujours résolus (inclut les cibles de réécriture).
+        if (DomainLists.matches(host, DomainLists.ESSENTIAL)) return Decision.Allow
 
         // 5. Liste blanche explicite : surclasse les blocages de catégorie.
         if (DomainLists.matches(host, config.allow)) return Decision.Allow

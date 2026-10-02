@@ -168,9 +168,13 @@ Package `fr.controleparental.child.filter` :
   non pilotables au seul niveau DNS → à instruire tranche 2.
 - **Listes de domaines maintenues** : remplacer les graines embarquées par un flux de
   listes catégorisées synchronisé périodiquement (toujours filtrage DNS, aucun MITM).
-- **IPv6 / DNS-over-HTTPS / DNS-over-TLS** : le sinkhole couvre IPv4/UDP:53. Le DoH/DoT
-  (navigateur) et l'IPv6 peuvent contourner le filtrage DNS classique → à traiter
-  tranche 2 (blocage des résolveurs DoH connus par domaine, désactivation du DNS privé en
-  device owner). En l'état : **fail-open** (jamais de coupure), documenté.
+- **IPv6 / DNS-over-HTTPS / DNS-over-TLS / TCP:53 côté client** : le sinkhole couvre
+  IPv4/UDP:53. Pour éviter qu'une réponse UDP **tronquée** (TC=1) n'induise un repli
+  TCP du client vers notre résolveur virtuel (non servi), le relais **rejoue la requête
+  en DNS-over-TCP vers l'upstream** et renvoie la réponse complète en UDP (best-effort).
+  Le DoH/DoT (navigateur), l'IPv6 et un TCP:53 ouvert **directement** par le client ne
+  sont pas interceptés (ils empruntent un autre chemin que la route /32 du résolveur
+  virtuel) → **fail-open** (jamais de coupure). Durcissement tranche 2 : blocage des
+  résolveurs DoH connus par domaine, désactivation du DNS privé en device owner.
 - **`dispatch-push`** : accélération push best-effort (infra-flaggée, L5) — non présente ;
   **polling + cache** restent le socle.

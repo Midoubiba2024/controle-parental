@@ -118,8 +118,10 @@ export const FILTER_PRESETS: Record<AgeProfile, FilterPreset> = {
   },
   preteen: {
     label: "Pré-ado (~12 ans)",
+    // 'dating' bloqué par défaut (paramètre protecteur K5 ; le parent peut rouvrir).
+    // 'social' laissé ouvert par défaut (médiation plutôt que blocage) — ajustable.
     blocked_categories: [
-      "adult", "violence", "gambling", "drugs", "weapons", "hate", "piracy", "malware",
+      "adult", "violence", "gambling", "drugs", "weapons", "hate", "dating", "piracy", "malware",
     ],
     safe_search: true,
     youtube_restriction: "moderate",

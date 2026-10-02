@@ -98,7 +98,7 @@ create table if not exists public.filter_policy (
   created_at          timestamptz not null default now()
 );
 create index if not exists idx_filter_policy_family on public.filter_policy (family_id);
-create trigger trg_filter_policy_touch before update on public.filter_policy
+create or replace trigger trg_filter_policy_touch before update on public.filter_policy
   for each row execute function app.touch_updated_at();
 
 -- =============================================================================
@@ -125,7 +125,7 @@ create table if not exists public.filter_rules (
 );
 create index if not exists idx_filter_rules_child  on public.filter_rules (child_id);
 create index if not exists idx_filter_rules_family on public.filter_rules (family_id);
-create trigger trg_filter_rules_touch before update on public.filter_rules
+create or replace trigger trg_filter_rules_touch before update on public.filter_rules
   for each row execute function app.touch_updated_at();
 
 -- =============================================================================
@@ -169,7 +169,7 @@ create table if not exists public.filter_status (
   created_at     timestamptz not null default now()
 );
 create index if not exists idx_filter_status_child on public.filter_status (child_id);
-create trigger trg_filter_status_touch before update on public.filter_status
+create or replace trigger trg_filter_status_touch before update on public.filter_status
   for each row execute function app.touch_updated_at();
 
 -- =============================================================================
@@ -177,10 +177,10 @@ create trigger trg_filter_status_touch before update on public.filter_status
 -- journalisé (trigger existant app.log_rule_change, tables à family_id+child_id).
 -- Pas d'audit sur domain_events (journal volumineux) ni filter_status (heartbeat).
 -- =============================================================================
-create trigger trg_filter_policy_audit
+create or replace trigger trg_filter_policy_audit
   after insert or update or delete on public.filter_policy
   for each row execute function app.log_rule_change();
-create trigger trg_filter_rules_audit
+create or replace trigger trg_filter_rules_audit
   after insert or update or delete on public.filter_rules
   for each row execute function app.log_rule_change();
 
@@ -258,6 +258,11 @@ create policy filter_status_insert on public.filter_status
 create policy filter_status_update on public.filter_status
   for update to authenticated
   using (child_id = app.current_child_id() or app.is_parent_of(family_id))
+  -- La branche ENFANT impose family_id ↔ child_id (comme l'INSERT) : un compte
+  -- enfant ne peut pas re-parenter sa ligne d'état (anti-usurpation inter-familles
+  -- + ne peut masquer la désactivation du VPN à son parent — ligne rouge C9).
+  -- Colonne qualifiée par filter_status (piège de portée, leçon L3).
   with check ((child_id = app.current_child_id()
-               and app.device_belongs_to_current_child(device_id))
+               and app.device_belongs_to_current_child(device_id)
+               and family_id = (select c.family_id from public.children c where c.id = filter_status.child_id))
               or app.is_parent_of(family_id));

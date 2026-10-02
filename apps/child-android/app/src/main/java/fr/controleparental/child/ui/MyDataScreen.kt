@@ -206,6 +206,11 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     "nom de domaine (ex. « exemple.com »), sa catégorie et l'heure — " +
                     "jamais les pages que tu consultes ni leur contenu."
             else null,
+            if (Config.featureNetworkFilter && filterConfig?.policy?.logAllowed == true)
+                "En ce moment, le nom (pas le contenu) de CHAQUE site que tu visites est " +
+                    "enregistré — pas seulement les sites bloqués. Tes parents ont activé " +
+                    "ce réglage ; tu peux leur demander de le désactiver."
+            else null,
         ).filterNotNull().forEach {
             Text("•  $it", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))

@@ -144,17 +144,58 @@ class LocalDnsVpnService : VpnService() {
         }
     }
 
-    /** Transfère une requête DNS autorisée au résolveur public (socket protégé). */
-    private fun forward(query: ByteArray): ByteArray? = runCatching {
-        DatagramSocket().use { sock ->
-            protect(sock)                          // le socket sort du tunnel (pas de boucle)
+    /**
+     * Transfère une requête DNS autorisée au résolveur public (socket protégé).
+     * Si la réponse UDP est TRONQUÉE (TC=1, p. ex. gros TXT/DNSSEC), on rejoue la
+     * requête en DNS-over-TCP vers l'upstream pour éviter d'induire chez le client
+     * un repli TCP vers notre résolveur virtuel (non servi) → un site autorisé
+     * resterait injoignable. (Cf. docs/09 : TCP/53 côté client, DoT/DoH et IPv6
+     * ne sont pas interceptés — fail-open.)
+     */
+    private fun forward(query: ByteArray): ByteArray? {
+        val udp = runCatching {
+            DatagramSocket().use { sock ->
+                protect(sock)                      // le socket sort du tunnel (pas de boucle)
+                sock.soTimeout = UPSTREAM_TIMEOUT_MS
+                val addr = InetSocketAddress(InetAddress.getByName(Config.dnsUpstream), 53)
+                sock.send(DatagramPacket(query, query.size, addr))
+                val resp = ByteArray(MTU)
+                val dp = DatagramPacket(resp, resp.size)
+                sock.receive(dp)
+                resp.copyOf(dp.length)
+            }
+        }.getOrNull() ?: return null
+        // Bit TC (troncature) = octet 2, masque 0x02.
+        if (udp.size >= 3 && (udp[2].toInt() and 0x02) != 0) {
+            forwardTcp(query)?.let { return it }   // réponse complète via TCP, sinon on garde l'UDP
+        }
+        return udp
+    }
+
+    /** Rejoue une requête en DNS-over-TCP (préfixe de longueur 2 octets) via un socket protégé. */
+    private fun forwardTcp(query: ByteArray): ByteArray? = runCatching {
+        java.net.Socket().use { sock ->
+            // Défense en profondeur : l'upstream (hors route /32 du résolveur virtuel)
+            // sort déjà du tunnel ; un échec de protect ne doit pas annuler le relais.
+            runCatching { protect(sock) }
             sock.soTimeout = UPSTREAM_TIMEOUT_MS
-            val addr = InetSocketAddress(InetAddress.getByName(Config.dnsUpstream), 53)
-            sock.send(DatagramPacket(query, query.size, addr))
-            val resp = ByteArray(MTU)
-            val dp = DatagramPacket(resp, resp.size)
-            sock.receive(dp)
-            resp.copyOf(dp.length)
+            sock.connect(InetSocketAddress(InetAddress.getByName(Config.dnsUpstream), 53), UPSTREAM_TIMEOUT_MS)
+            val out = sock.getOutputStream()
+            out.write((query.size ushr 8) and 0xFF); out.write(query.size and 0xFF)
+            out.write(query); out.flush()
+            val ins = sock.getInputStream()
+            val hi = ins.read(); val lo = ins.read()
+            if (hi < 0 || lo < 0) return@use null
+            val len = (hi shl 8) or lo
+            if (len <= 0 || len > MTU) return@use null
+            val resp = ByteArray(len)
+            var read = 0
+            while (read < len) {
+                val n = ins.read(resp, read, len - read)
+                if (n < 0) break
+                read += n
+            }
+            if (read == len) resp else null
         }
     }.getOrNull()
 

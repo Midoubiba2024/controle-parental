@@ -4,7 +4,7 @@ import {
   DOMAIN_ACTION_LABEL, FILTER_CATEGORIES, FILTER_PRESETS, YOUTUBE_MODE_LABEL,
   categoryLabel, filterCategoryColor, normalizeDomain, toPolicyUpsert, useFilter,
 } from "../../lib/filter";
-import { fmtDateTime } from "../../lib/format";
+import { fmtAgo, fmtDateTime } from "../../lib/format";
 import { EmptyState } from "../Ui";
 import type {
   AccessRequest, AgeProfile, Child, FilterCategory, FilterPolicy,
@@ -19,6 +19,10 @@ import type {
    journal de DOMAINES (métadonnées, F4-F6) + l'état du VPN (anti-contournement
    transparent C9). Transparence : tout est aussi visible côté enfant.
    ============================================================================= */
+
+// Au-delà de ce délai sans heartbeat, l'état « actif » devient « incertain »
+// (la synchro/heartbeat de l'appareil tourne ~toutes les 2 min).
+const STALE_MS = 5 * 60_000;
 
 export function FilteringView({ familyId, child }: { familyId: string; child: Child }) {
   const childId = child.id;
@@ -102,26 +106,37 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
         </p>
       ) : (
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {f.status.map((s) => (
-            <li key={s.id} className="row" style={{ gap: 8, padding: "6px 0", justifyContent: "space-between" }}>
-              <span className="small">Appareil</span>
-              <span>
-                {s.vpn_active
-                  ? <span className="badge" style={{ color: "var(--good)" }}>🛡️ actif</span>
-                  : <span className="badge" style={{ color: "var(--danger)" }}>⚠️ désactivé</span>}
-                <span className="muted small" style={{ marginLeft: 8 }}>
-                  {s.vpn_active
-                    ? (s.last_active_at ? `depuis ${fmtDateTime(s.last_active_at)}` : "")
-                    : (s.last_revoked_at ? `coupé le ${fmtDateTime(s.last_revoked_at)}` : "")}
+          {f.status.map((s) => {
+            // Un heartbeat périmé ne doit PAS afficher « actif » (masquerait une app
+            // tuée → défait la visibilité C9). On calcule la fraîcheur depuis updated_at.
+            const stale = Date.now() - new Date(s.updated_at).getTime() > STALE_MS;
+            return (
+              <li key={s.id} className="row" style={{ gap: 8, padding: "6px 0", justifyContent: "space-between" }}>
+                <span className="small">Appareil</span>
+                <span>
+                  {!s.vpn_active ? (
+                    <span className="badge" style={{ color: "var(--danger)" }}>⚠️ désactivé</span>
+                  ) : stale ? (
+                    <span className="badge" style={{ color: "var(--warning)" }}>⚠️ état incertain</span>
+                  ) : (
+                    <span className="badge" style={{ color: "var(--good)" }}>🛡️ actif</span>
+                  )}
+                  <span className="muted small" style={{ marginLeft: 8 }}>
+                    {!s.vpn_active
+                      ? (s.last_revoked_at ? `coupé ${fmtAgo(s.last_revoked_at)}` : "")
+                      : stale
+                        ? `silencieux depuis ${fmtAgo(s.updated_at)}`
+                        : `dernière nouvelle ${fmtDateTime(s.updated_at)}`}
+                  </span>
                 </span>
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       <p className="muted small" style={{ marginTop: 6 }}>
-        Anti-contournement <b>transparent</b> (C9) : si le filtrage est désactivé, c'est signalé ici
-        et à l'enfant — jamais en cachette.
+        Anti-contournement <b>transparent</b> (C9) : si le filtrage est désactivé (ou silencieux
+        trop longtemps), c'est signalé ici et à l'enfant — jamais en cachette.
       </p>
 
       <h3 style={{ marginTop: 18 }}>Préréglages par âge</h3>
@@ -289,15 +304,18 @@ function ListsCard({ f, familyId, childId, busy, run }: {
   const allow = f.rules.filter((r) => r.action === "allow");
   const block = f.rules.filter((r) => r.action === "block");
 
-  async function add() {
+  function submit() {
+    // Valide AVANT d'appeler run (un domaine invalide ne doit pas déclencher de reload).
     const d = normalizeDomain(domain);
-    if (!d) { setInputErr("Domaine invalide (ex. exemple.com)."); return { error: null }; }
+    if (!d) { setInputErr("Domaine invalide (ex. exemple.com)."); return; }
     setInputErr(null);
-    const { error } = await supabase.from("filter_rules").upsert(
-      { family_id: familyId, child_id: childId, domain: d, action },
-      { onConflict: "child_id,domain" });
-    if (!error) setDomain("");
-    return { error: error?.message ?? null };
+    run(async () => {
+      const { error } = await supabase.from("filter_rules").upsert(
+        { family_id: familyId, child_id: childId, domain: d, action },
+        { onConflict: "child_id,domain" });
+      if (!error) setDomain("");
+      return { error: error?.message ?? null };
+    });
   }
   async function remove(id: string) {
     const { error } = await supabase.from("filter_rules").delete().eq("id", id);
@@ -311,7 +329,7 @@ function ListsCard({ f, familyId, childId, busy, run }: {
         Une règle s'applique au domaine <b>et à ses sous-domaines</b>. « Autoriser » surclasse un
         blocage de catégorie ; « Bloquer » interdit un domaine précis.
       </p>
-      <form className="inline" onSubmit={(e) => { e.preventDefault(); run(add); }} style={{ marginBottom: 6 }}>
+      <form className="inline" onSubmit={(e) => { e.preventDefault(); submit(); }} style={{ marginBottom: 6 }}>
         <input placeholder="exemple.com" value={domain} onChange={(e) => setDomain(e.target.value)}
           style={{ flex: 1, minWidth: 200 }} />
         <select value={action} onChange={(e) => setAction(e.target.value as FilterRuleAction)}>
