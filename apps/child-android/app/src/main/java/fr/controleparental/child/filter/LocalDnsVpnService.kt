@@ -362,8 +362,9 @@ class LocalDnsVpnService : VpnService() {
          * l'utilisateur l'avait activé (report L8a). En device owner, le VPN always-on
          * système a déjà relancé le tunnel — cet appel est un filet best-effort pour
          * le mode Standard. Ne démarre QUE si le consentement VpnService persiste
-         * (prepare == null) ; sinon on s'abstient (pas d'UI depuis un receiver) et
-         * l'état « inactif » remontera au parent au prochain cycle (transparence).
+         * (prepare == null) ; sinon on s'abstient (pas d'UI depuis un receiver) :
+         * l'absence de heartbeat filter_status (last_active_at cesse d'avancer)
+         * reflète alors l'inactivité côté parent (transparence).
          * Tout est best-effort : ne doit jamais faire planter l'appelant.
          */
         fun restartIfDesired(context: Context) {

@@ -27,7 +27,13 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
             intent.action != Intent.ACTION_MY_PACKAGE_REPLACED
         ) return
-        if (!SupervisionStore(context).isEnrolled) return
+        // Fail-safe : la construction de SupervisionStore (EncryptedSharedPreferences)
+        // peut lever si le keyset est corrompu (changement de credential, migration
+        // OEM, restauration). Dans un BroadcastReceiver lancé au boot / à chaque MAJ,
+        // une exception non gardée ferait PLANTER le process (ligne rouge). On la
+        // capture → on ne démarre rien plutôt que de tomber.
+        val enrolled = runCatching { SupervisionStore(context).isEnrolled }.getOrDefault(false)
+        if (!enrolled) return
 
         SupervisionService.start(context, fromBoot = true)
 

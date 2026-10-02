@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 import { useObservation } from "../lib/observation";
 import { fmtBytes } from "../lib/format";
-import type { Child, DeviceStatus, Family } from "../lib/types";
+import type { Child, Device, DeviceStatus, Family } from "../lib/types";
 import { OverviewView } from "./views/OverviewView";
 import { ScreenTimeView } from "./views/ScreenTimeView";
 import { ApplicationsView } from "./views/ApplicationsView";
@@ -154,7 +154,7 @@ export function Dashboard({ session }: { session: Session }) {
 
         {error && <p className="msg error">{error}</p>}
         {obs.error && <p className="msg error">{obs.error}</p>}
-        <ProtectionBanner status={obs.status} />
+        <ProtectionBanner childId={childId} status={obs.status} devices={obs.devices} />
 
         {view === "family" ? (
           <FamilyView familyId={familyId!} onChildrenChanged={loadChildren} />
@@ -188,9 +188,18 @@ export function Dashboard({ session }: { session: Session }) {
   );
 }
 
-// LOT 8b — bannière TRANSPARENTE : signale au parent qu'une protection a été
-// désactivée sur l'appareil (permission révoquée par l'enfant). Jamais de contenu,
-// seulement l'état. Calculé sur le dernier relevé device_status de chaque appareil.
+// LOT 8b — bannière TRANSPARENTE : signale au parent qu'une protection ATTENDUE a
+// été désactivée sur l'appareil. Jamais de contenu, seulement l'état.
+//
+// Les booléens device_status.perm_* reflètent l'état OS COURANT (accordée/non), pas
+// une transition. Pour éviter la fausse alerte permanente (fatigue d'alerte → le
+// parent ignore la bannière et rate une vraie révocation), on ne signale une
+// permission que si la fonction associée est RÉELLEMENT attendue pour cet enfant :
+//   - usage / notifications : supervision cœur + transparence → toujours attendues ;
+//   - localisation : seulement si le partage est activé (location_settings) ;
+//   - superposition (overlay) : seulement en mode Standard (en Renforcé le blocage
+//     passe par Device Policy Manager, l'overlay est légitimement absent).
+// On ignore aussi les appareils RÉVOQUÉS (cohérent avec les autres vues).
 const PROTECTION_LABEL: Record<string, string> = {
   perm_usage_access: "Accès au temps d'écran",
   perm_overlay: "Écran de pause (superposition)",
@@ -198,12 +207,36 @@ const PROTECTION_LABEL: Record<string, string> = {
   perm_location: "Localisation",
 };
 
-function ProtectionBanner({ status }: { status: DeviceStatus[] }) {
+function ProtectionBanner({ childId, status, devices }: {
+  childId: string | null;
+  status: DeviceStatus[];
+  devices: Device[];
+}) {
+  // La localisation n'est « attendue » que si le partage est activé pour l'enfant.
+  const [locationExpected, setLocationExpected] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!childId) { setLocationExpected(false); return; }
+    void (async () => {
+      const { data } = await supabase.from("location_settings")
+        .select("enabled,mode").eq("child_id", childId).maybeSingle();
+      if (active) setLocationExpected(!!data && data.enabled === true && data.mode !== "off");
+    })();
+    return () => { active = false; };
+  }, [childId]);
+
+  // Appareils ACTIFS (non révoqués) uniquement — un appareil retiré ne doit pas
+  // maintenir la bannière rouge jusqu'à la purge de rétention.
+  const liveDevices = new Map(devices.filter((d) => !d.revoked_at).map((d) => [d.id, d]));
+
   const off = new Set<string>();
   for (const s of status) {
-    for (const key of Object.keys(PROTECTION_LABEL)) {
-      if (s[key as keyof DeviceStatus] === false) off.add(key);
-    }
+    const dev = liveDevices.get(s.device_id);
+    if (!dev) continue;                       // appareil révoqué / inconnu → ignoré
+    if (s.perm_usage_access === false) off.add("perm_usage_access");
+    if (s.perm_notifications === false) off.add("perm_notifications");
+    if (s.perm_location === false && locationExpected) off.add("perm_location");
+    if (s.perm_overlay === false && dev.mode === "standard") off.add("perm_overlay");
   }
   if (off.size === 0) return null;
   const labels = [...off].map((k) => PROTECTION_LABEL[k]).join(" · ");
