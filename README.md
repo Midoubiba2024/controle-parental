@@ -39,6 +39,7 @@ SETUP.md              Étapes de mise en route (hook auth, secrets, variables)
 | Lot | État |
 |-----|------|
 | Cadrage (docs) | ✅ (PR #1) |
-| **L0 — Socle & Conformité** | en cours : backend (migrations + RLS + Edge Functions) ✅, console parent 🏗️, app enfant Android ⏭️ |
+| **L0 — Socle & Conformité** | ✅ (PR #2) : backend (migrations + RLS + Edge Functions), console parent web, app enfant Android (appairage + notification de supervision + « mes données ») |
+| L1 → L9 | à venir — **une session dédiée par lot** |
 
 Détail et suite : [`docs/04-LOTS.md`](docs/04-LOTS.md).

@@ -1,0 +1,4 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Thème Material3 ; l'UI est en Compose, ce thème sert d'hôte. -->
+    <style name="Theme.ControleParental" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
