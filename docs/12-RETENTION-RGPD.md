@@ -31,7 +31,7 @@ révoqué à `public`/`anon`. Source : [`../supabase/migrations/0021_l8_retentio
 | `messages` | **365 j** | Messagerie interne parent↔enfant. |
 | `sos_events` | **365 j** | Épisodes de sécurité — conservés un an. |
 | `privacy_pauses` | **90 j après clôture** | Métadonnées de durée (K8). |
-| `audit_log` | **730 j** | **Conservé le plus longtemps** : traçabilité (K3), responsabilité RGPD. Purgé hors de la fonction (table sensible — voir §3‑F). |
+| `audit_log` | **730 j** | **Conservé le plus longtemps** : traçabilité (K3), responsabilité RGPD. Purgé hors de la fonction (table sensible — voir §3‑E). |
 
 **Observabilité** : `app.run_data_retention()` renvoie un JSON
 `{table: lignes_supprimées}` ; l'historique des exécutions planifiées est visible
@@ -61,10 +61,13 @@ d'un contrôle explicite d'autorité parentale). Source :
 - **Effacement famille** — `rgpd_delete_family(family)` : supprime toute la famille
   (réservé à l'`owner`). **Double confirmation** (saisie du nom du foyer).
 
-> L'effacement repose sur les cascades FK. Il **échoue tant que le trigger résiduel
-> `trg_audit_no_delete` est présent** (il bloque la cascade vers `audit_log`). Son
-> retrait fait partie du bloc **§3‑A** ci‑dessous — à appliquer avant toute
-> suppression.
+> L'effacement repose sur les cascades FK. **DEUX prérequis** (bloc **§3‑A**
+> ci‑dessous) conditionnent son fonctionnement, à appliquer avant toute suppression :
+> **(1)** retirer le trigger résiduel `trg_audit_no_delete` (il bloque la cascade
+> `ON DELETE CASCADE` vers `audit_log`) ; **(2)** remplacer la fonction
+> `app.audit_log_immutable` (migration 0025) car la FK `subject_child_id … ON DELETE
+> SET NULL` déclenche un UPDATE interne d'`audit_log` refusé par `trg_audit_no_update`.
+> Sans ces deux étapes, l'effacement RGPD avorte systématiquement.
 
 ---
 
@@ -80,24 +83,48 @@ Déjà en live (appliqué automatiquement) : la fonction d'export `export_child_
 et les **index couvrants de clés étrangères** (migration 0023, partie index).
 Il reste à appliquer, dans l'ordre :
 
-### A. Nettoyage des résidus L0/L1 (migration 0010) — **à faire en premier**
+### A. Nettoyage des résidus L0/L1 + déblocage de l'audit — **à faire en premier**
 
 Retire la table sonde sans RLS (seul finding de sécurité restant), la colonne de
-nom de contact en clair (minimisation), et le trigger qui bloque l'effacement.
+nom de contact en clair (minimisation), le trigger qui bloque la cascade DELETE, et
+remplace la fonction d'immuabilité pour tolérer la seule action `ON DELETE SET NULL`.
 
 ```sql
 -- 1) Sonde d'écriture L1 (table sans RLS — finding get_advisors(security)).
 drop table if exists public._l1_write_probe;
 -- 2) Colonne de nom de contact (toujours NULL depuis le durcissement L1).
 alter table public.comm_events drop column if exists counterparty_label;
--- 3) Trigger anti-DELETE résiduel sur audit_log (débloque purge K9 + effacement K10).
+-- 3) Trigger anti-DELETE résiduel sur audit_log (débloque la cascade K9/K10).
 --    L'immutabilité du CONTENU reste assurée par trg_audit_no_update (BEFORE UPDATE)
 --    et la RLS (aucune policy DELETE pour 'authenticated').
 drop trigger if exists trg_audit_no_delete on public.audit_log;
+
+-- 4) (migration 0025) Fonction d'immuabilité tolérant la SEULE action référentielle
+--    ON DELETE SET NULL sur subject_child_id (sinon l'UPDATE interne déclenché par
+--    l'effacement d'un enfant est refusé par trg_audit_no_update → l'effacement RGPD
+--    avorte). Tout autre UPDATE reste interdit (append-only du CONTENU préservé).
+create or replace function app.audit_log_immutable()
+returns trigger
+language plpgsql
+set search_path = ''
+as $func$
+begin
+  if tg_op = 'UPDATE'
+     and old.subject_child_id is not null
+     and new.subject_child_id is null
+     and (to_jsonb(new) - 'subject_child_id') = (to_jsonb(old) - 'subject_child_id')
+  then
+    return new;
+  end if;
+  raise exception 'audit_log est append-only : % interdit', tg_op;
+end;
+$func$;
 ```
 
 Effet : `get_advisors(security)` ne remonte **plus aucun finding** ; l'effacement
-RGPD et la purge d'`audit_log` deviennent possibles.
+RGPD (K10) et la purge d'`audit_log` (§3‑E) deviennent réellement possibles (les deux
+triggers d'audit sont désormais compatibles avec les actions de suppression légitimes,
+tout en gardant le journal append-only pour le contenu).
 
 ### B. Corrections RLS additives (migration 0023, partie policies)
 
@@ -177,6 +204,8 @@ select cron.schedule(
 - `select app.run_data_retention();` → renvoie un JSON de compteurs (pas d'erreur).
 - `select jobname, active from cron.job;` → `data-retention-daily` actif.
 - Console → onglet **Confidentialité** : l'export télécharge un JSON ; la
-  suppression (après double confirmation) retire bien l'enfant.
+  suppression (après double confirmation) retire bien l'enfant **sans erreur**
+  (valide que le déblocage §3‑A — trigger DELETE retiré + fonction 0025 — est en place ;
+  avant, l'effacement avortait sur `audit_log est append-only`).
 - `pg_policies` : `commands_insert` et `child_schedules_insert` ne contiennent plus
   de `x = x`.

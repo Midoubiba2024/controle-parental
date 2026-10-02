@@ -34,12 +34,17 @@ export function PrivacyView({ family, child, onChanged }: {
   child: Child;
   onChanged: () => void;
 }) {
+  // `key` sur la cible : force le REMONTAGE des cartes (donc la réinitialisation de
+  // leur état local step/confirmText) dès que l'enfant ou la famille change via le
+  // sélecteur. Sans ça, une confirmation ouverte+pré-remplie pour l'enfant A resterait
+  // active après bascule sur l'enfant B et supprimerait la MAUVAISE cible (prénoms non
+  // uniques) — footgun irréversible.
   return (
     <div className="grid" style={{ gap: 18 }}>
-      <ExportCard child={child} />
+      <ExportCard key={`exp-${child.id}`} child={child} />
       <RetentionCard />
-      <DeleteChildCard child={child} onChanged={onChanged} />
-      <DeleteFamilyCard family={family} onChanged={onChanged} />
+      <DeleteChildCard key={`del-${child.id}`} child={child} onChanged={onChanged} />
+      <DeleteFamilyCard key={`delfam-${family.id}`} family={family} onChanged={onChanged} />
     </div>
   );
 }
