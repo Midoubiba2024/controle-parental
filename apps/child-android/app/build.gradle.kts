@@ -46,6 +46,22 @@ android {
             (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
         buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")
 
+        // --- LOT 4 — Filtrage réseau (sinkhole DNS local) ---------------------
+        // Résolveur public amont pour les requêtes AUTORISÉES. Quad9 (9.9.9.9) par
+        // défaut : respectueux de la vie privée et bloque lui-même les domaines
+        // malveillants (défense en profondeur). Aucun MITM : on ne transfère que la
+        // requête DNS, jamais le trafic applicatif. Surchargeable -PdnsUpstream=.
+        val dnsUpstream: String = (project.findProperty("dnsUpstream") as String?) ?: "9.9.9.9"
+        buildConfigField("String", "DNS_UPSTREAM", "\"$dnsUpstream\"")
+
+        // Filtrage réseau (VpnService local). ON par défaut ; désactivable via
+        // -PfeatureNetworkFilter=false pour une variante/soumission Play sans VPN
+        // (voir docs/09-LOT4-FILTRAGE.md §déclaration Play). Le VpnService exige en
+        // plus le consentement runtime (VpnService.prepare), toujours visible.
+        val featureNetworkFilter: Boolean =
+            (project.findProperty("featureNetworkFilter") as String?)?.toBoolean() ?: true
+        buildConfigField("boolean", "FEATURE_NETWORK_FILTER", featureNetworkFilter.toString())
+
         // --- LOT 3 — Localisation EN ARRIÈRE-PLAN -----------------------------
         // ACCESS_BACKGROUND_LOCATION = permission SENSIBLE Play. Pilotée par un
         // PRODUCT FLAVOR (ci-dessous), PAS seulement par BuildConfig : la variante

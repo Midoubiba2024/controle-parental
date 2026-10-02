@@ -14,8 +14,9 @@ import { RulesView } from "./views/RulesView";
 import { RequestsView } from "./views/RequestsView";
 import { LocationView } from "./views/LocationView";
 import { SecurityView } from "./views/SecurityView";
+import { FilteringView } from "./views/FilteringView";
 
-type View = "overview" | "screen" | "apps" | "calls" | "rules" | "location" | "security" | "requests" | "family";
+type View = "overview" | "screen" | "apps" | "calls" | "rules" | "filter" | "location" | "security" | "requests" | "family";
 
 const NAV: { key: View; label: string; icon: string }[] = [
   { key: "overview", label: "Vue d'ensemble", icon: "◎" },
@@ -23,6 +24,7 @@ const NAV: { key: View; label: string; icon: string }[] = [
   { key: "apps", label: "Applications", icon: "▦" },
   { key: "calls", label: "Appels", icon: "☏" },
   { key: "rules", label: "Règles d'accès", icon: "⛬" },
+  { key: "filter", label: "Filtrage", icon: "🛡" },
   { key: "location", label: "Localisation", icon: "📍" },
   { key: "security", label: "Sécurité / SOS", icon: "🆘" },
   { key: "requests", label: "Demandes", icon: "✉" },
@@ -31,8 +33,9 @@ const NAV: { key: View; label: string; icon: string }[] = [
 
 const VIEW_TITLE: Record<View, string> = {
   overview: "Vue d'ensemble", screen: "Temps d'écran", apps: "Applications",
-  calls: "Appels", rules: "Règles d'accès", location: "Localisation",
-  security: "Sécurité & SOS", requests: "Demandes", family: "Famille & appareils",
+  calls: "Appels", rules: "Règles d'accès", filter: "Filtrage web & contenu",
+  location: "Localisation", security: "Sécurité & SOS", requests: "Demandes",
+  family: "Famille & appareils",
 };
 
 export function Dashboard({ session }: { session: Session }) {
@@ -150,6 +153,8 @@ export function Dashboard({ session }: { session: Session }) {
           <div className="card"><p className="empty">Ajoutez un enfant dans l'onglet <b>Famille</b> pour voir ses données.</p></div>
         ) : view === "rules" ? (
           <RulesView familyId={familyId!} child={currentChild} obs={obs} />
+        ) : view === "filter" ? (
+          <FilteringView familyId={familyId!} child={currentChild} />
         ) : view === "location" ? (
           <LocationView familyId={familyId!} child={currentChild} />
         ) : view === "security" ? (

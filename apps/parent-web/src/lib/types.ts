@@ -174,7 +174,7 @@ export interface Command {
   created_at: string;
 }
 
-export type RequestKind = "extra_time" | "unblock_app" | "reward";
+export type RequestKind = "extra_time" | "unblock_app" | "reward" | "browse";
 export type RequestStatus = "pending" | "approved" | "denied" | "cancelled";
 
 export interface AccessRequest {
@@ -183,7 +183,7 @@ export interface AccessRequest {
   child_id: string;
   device_id: string | null;
   kind: RequestKind;
-  payload: { minutes?: number; package_name?: string; scope?: "app" | "global"; [k: string]: unknown };
+  payload: { minutes?: number; package_name?: string; scope?: "app" | "global"; domain?: string; [k: string]: unknown };
   status: RequestStatus;
   child_note: string | null;
   parent_note: string | null;
@@ -286,6 +286,62 @@ export interface SafetyAlert {
   acknowledged_at: string | null;
   acknowledged_by: string | null;
   created_at: string;
+}
+
+/* --- LOT 4 — Filtrage réseau & contenu ---------------------------------- */
+
+export type FilterCategory =
+  | "adult" | "violence" | "gambling" | "drugs" | "weapons" | "hate"
+  | "dating" | "social" | "piracy" | "malware" | "ads_trackers";
+export type FilterRuleAction = "allow" | "block";
+export type YoutubeMode = "off" | "moderate" | "strict";
+export type DomainEventAction = "blocked" | "allowed" | "rewritten";
+
+export interface FilterPolicy {
+  id: string;
+  family_id: string;
+  child_id: string;
+  enabled: boolean;
+  age_preset: AgeProfile;
+  blocked_categories: FilterCategory[];
+  safe_search: boolean;
+  youtube_restriction: YoutubeMode;
+  whitelist_only: boolean;
+  ask_to_browse: boolean;
+  log_allowed: boolean;
+  retention_days: number;
+}
+
+export interface FilterRule {
+  id: string;
+  family_id: string;
+  child_id: string;
+  domain: string;
+  action: FilterRuleAction;
+  note: string | null;
+  created_at: string;
+}
+
+export interface DomainEvent {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  domain: string;
+  category: FilterCategory | null;
+  action: DomainEventAction;
+  occurred_at: string;
+}
+
+export interface FilterStatus {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  vpn_active: boolean;
+  last_active_at: string | null;
+  last_revoked_at: string | null;
+  updated_at: string;
 }
 
 // Déduit un profil d'âge par défaut à partir de la date de naissance.

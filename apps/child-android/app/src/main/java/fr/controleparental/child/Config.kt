@@ -16,6 +16,17 @@ object Config {
     fun restUrl(table: String): String = "$supabaseUrl/rest/v1/$table"
 
     /**
+     * LOT 4 — Filtrage réseau (sinkhole DNS local).
+     *
+     * [dnsUpstream] : résolveur public amont pour les requêtes AUTORISÉES
+     * (défaut Quad9). On ne lui transfère QUE la requête DNS — jamais le trafic
+     * applicatif, aucun MITM. [featureNetworkFilter] gate l'exposition de la
+     * fonction (le VpnService exige en plus le consentement runtime, visible).
+     */
+    val dnsUpstream: String = BuildConfig.DNS_UPSTREAM
+    val featureNetworkFilter: Boolean = BuildConfig.FEATURE_NETWORK_FILTER
+
+    /**
      * Journal d'appels (métadonnées) : fonction SENSIBLE, OFF par défaut.
      *
      * NE PAS activer en release tant que le hachage des numéros n'est pas déplacé

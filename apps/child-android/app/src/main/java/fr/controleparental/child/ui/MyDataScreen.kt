@@ -1,8 +1,10 @@
 package fr.controleparental.child.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.VpnService
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +26,9 @@ import fr.controleparental.child.enforce.BlockOverlay
 import fr.controleparental.child.enforce.PolicyCache
 import fr.controleparental.child.enforce.PolicyClient
 import fr.controleparental.child.enforce.RuleSet
+import fr.controleparental.child.filter.FilterCache
+import fr.controleparental.child.filter.FilterClient
+import fr.controleparental.child.filter.LocalDnsVpnService
 import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.location.LocationRepository
 import fr.controleparental.child.service.SupervisionService
@@ -95,6 +100,25 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
     var locMode by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         locMode = runCatching { locationRepo.settings().mode }.getOrNull()
+    }
+
+    // --- LOT 4 — Filtrage du web (VpnService local) --------------------------
+    val filterCache = remember { FilterCache(context) }
+    val filterConfig = remember { FilterClient(store).fromCache(filterCache) }
+    var filterOn by remember { mutableStateOf(false) }
+    val vpnConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            LocalDnsVpnService.start(context); filterOn = true
+        }
+    }
+    fun enableFilter() {
+        // VpnService.prepare : demande le consentement (toujours visible) ou null
+        // si déjà accordé. Gère proprement l'absence de permission (pas de crash).
+        val intent = runCatching { VpnService.prepare(context) }.getOrNull()
+        if (intent != null) vpnConsent.launch(intent)
+        else { LocalDnsVpnService.start(context); filterOn = true }
     }
 
     var sosBusy by remember { mutableStateOf(false) }
@@ -177,14 +201,20 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 "Le journal des appels en métadonnées : qui (sans le numéro en clair), " +
                     "quand et combien de temps — jamais ce qui a été dit."
             else null,
+            if (Config.featureNetworkFilter)
+                "Le filtrage du web bloque certains sites. Le journal retient seulement le " +
+                    "nom de domaine (ex. « exemple.com »), sa catégorie et l'heure — " +
+                    "jamais les pages que tu consultes ni leur contenu."
+            else null,
         ).filterNotNull().forEach {
             Text("•  $it", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Jamais partagé : le contenu de tes messages et appels, tes mots de passe, " +
-                "ni l'image de ton écran, de ta caméra ou de ton micro.",
+            "Jamais partagé : le contenu de tes messages et appels, les pages web que tu " +
+                "consultes, tes mots de passe, ni l'image de ton écran, de ta caméra ou de ton micro. " +
+                "Le filtrage regarde seulement le nom du site (DNS), jamais ce qu'il y a dedans.",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
@@ -264,6 +294,28 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                         bgPermission.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                     }
                 },
+            )
+        }
+
+        if (Config.featureNetworkFilter) {
+            Spacer(Modifier.height(12.dp))
+            val filterHint = buildString {
+                append("Bloque les sites inappropriés en filtrant les noms de domaine (DNS), ")
+                append("sur l'appareil. Aucun site n'est espionné : on ne regarde jamais le ")
+                append("contenu des pages.")
+                filterConfig?.policy?.let { p ->
+                    if (p.whitelistOnly) append(" Mode liste blanche : seuls les sites autorisés s'ouvrent.")
+                    else if (p.blockedCategories.isNotEmpty())
+                        append(" ${p.blockedCategories.size} catégorie(s) bloquée(s).")
+                    if (p.safeSearch) append(" Recherche sécurisée activée.")
+                }
+            }
+            PermissionCard(
+                title = "Filtrage du web",
+                granted = filterOn,
+                explanation = filterHint,
+                actionLabel = if (filterOn) "Activé" else "Activer le filtrage",
+                onAction = { enableFilter() },
             )
         }
 

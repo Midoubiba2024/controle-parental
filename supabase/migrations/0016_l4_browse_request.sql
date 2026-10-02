@@ -1,0 +1,17 @@
+-- =============================================================================
+-- LOT 4 — Ask-to-Browse (C6) : l'enfant demande l'accès à un domaine bloqué.
+--
+-- Réutilise le modèle de requêtes L2 (table public.requests, co-régulation
+-- TRANSPARENTE enfant → parent). On ajoute une valeur à l'enum app.request_kind :
+--   browse : demande d'accès à un domaine filtré. payload = { "domain": "ex.com" }.
+-- L'approbation parent crée une règle filter_rules action='allow' (console) ;
+-- le refus laisse le domaine bloqué. Toutes les demandes/décisions restent
+-- visibles des deux côtés (RLS requests inchangée).
+--
+-- ADDITIF : ALTER TYPE ... ADD VALUE est autorisé hors contexte destructif.
+-- IF NOT EXISTS rend la migration ré-exécutable. La valeur n'est PAS référencée
+-- dans cette migration (contrainte PostgreSQL : une nouvelle valeur d'enum n'est
+-- pas utilisable dans la transaction qui l'ajoute) — elle ne sert qu'au runtime
+-- (insert d'une demande 'browse' par l'app enfant, lecture par la console).
+-- =============================================================================
+alter type app.request_kind add value if not exists 'browse';
