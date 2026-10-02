@@ -31,6 +31,9 @@ import fr.controleparental.child.filter.FilterClient
 import fr.controleparental.child.filter.LocalDnsVpnService
 import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.location.LocationRepository
+import fr.controleparental.child.safety.SafetyCache
+import fr.controleparental.child.safety.SafetyClient
+import fr.controleparental.child.safety.SafetyNotificationListener
 import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -140,6 +143,42 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         else { LocalDnsVpnService.start(context); filterOn = true }
     }
 
+    // --- LOT 6 — Analyse de bien-être/sécurité ON-DEVICE (profil ado) --------
+    // Transparence (K2) : l'ado voit que le texte de ses notifications est analysé
+    // SUR L'APPAREIL, que seule une ALERTE de catégorie remonte (jamais le texte),
+    // et il peut désactiver (retirer l'accès) ou mettre une PAUSE (K8). Rien pour
+    // young_child (gradation par âge) : la section n'apparaît pas.
+    val safetyCache = remember { SafetyCache(context) }
+    val safetyClient = remember { SafetyClient(store) }
+    var listenerEnabled by remember { mutableStateOf(SafetyNotificationListener.isEnabled(context)) }
+    var teenProfile by remember { mutableStateOf(safetyCache.teenProfile) }
+    var analysisEnabled by remember { mutableStateOf(safetyCache.analysisEnabled) }
+    var mutualVisibility by remember { mutableStateOf(safetyCache.mutualVisibility) }
+    var pauseActive by remember { mutableStateOf(safetyCache.pauseActive) }
+    var mySignals by remember { mutableStateOf<List<SafetyClient.MySignal>>(emptyList()) }
+    var safetyBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (Config.featureSafetySignals) {
+            safetyClient.syncSettings(safetyCache)
+            teenProfile = safetyCache.teenProfile
+            analysisEnabled = safetyCache.analysisEnabled
+            mutualVisibility = safetyCache.mutualVisibility
+            pauseActive = safetyCache.pauseActive
+            // Visibilité mutuelle (K6) : l'ado voit SES propres signaux (métadonnées).
+            if (safetyCache.teenProfile && safetyCache.mutualVisibility) {
+                mySignals = safetyClient.fetchMySignals()
+            }
+        }
+    }
+    val listenerSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        listenerEnabled = SafetyNotificationListener.isEnabled(context)
+        // Rendre l'état visible au parent immédiatement (transparence).
+        scope.launch { safetyClient.reportStatus(listenerEnabled && analysisEnabled && !pauseActive) }
+    }
+    val showSafety = Config.featureSafetySignals && teenProfile
+
     var sosBusy by remember { mutableStateOf(false) }
     var sosMsg by remember { mutableStateOf<String?>(null) }
 
@@ -230,15 +269,28 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     "enregistré — pas seulement les sites bloqués. Tes parents ont activé " +
                     "ce réglage ; tu peux leur demander de le désactiver."
             else null,
+            if (showSafety && analysisEnabled && listenerEnabled && !pauseActive)
+                "Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer des " +
+                    "situations de danger (harcèlement, mal-être, contact suspect…). Tes parents " +
+                    "reçoivent seulement une ALERTE de catégorie (ex. « harcèlement ») — JAMAIS " +
+                    "tes messages, jamais le texte. Tu peux l'arrêter ou mettre une pause."
+            else if (showSafety && analysisEnabled)
+                "Le texte de tes notifications SERA analysé sur cet appareil (pour repérer un " +
+                    "danger) UNIQUEMENT quand tu auras accordé l'accès aux notifications et hors " +
+                    "pause. Même alors, tes parents ne reçoivent qu'une alerte de catégorie — " +
+                    "jamais tes messages."
+            else null,
         ).filterNotNull().forEach {
             Text("•  $it", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Jamais partagé : le contenu de tes messages et appels, les pages web que tu " +
-                "consultes, tes mots de passe, ni l'image de ton écran, de ta caméra ou de ton micro. " +
-                "Le filtrage regarde seulement le nom du site (DNS), jamais ce qu'il y a dedans.",
+            "Jamais partagé : le contenu de tes messages et appels, le texte de tes notifications, " +
+                "les pages web que tu consultes, tes mots de passe, ni l'image de ton écran, de ta " +
+                "caméra ou de ton micro. Le filtrage regarde seulement le nom du site (DNS), jamais " +
+                "ce qu'il y a dedans ; l'analyse de bien-être reste sur l'appareil et n'en fait sortir " +
+                "qu'une alerte de catégorie.",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
@@ -371,6 +423,104 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             )
         }
 
+        if (showSafety) {
+            Spacer(Modifier.height(12.dp))
+            // Analyse de bien-être : carte DÉDIÉE (pas la PermissionCard réutilisable,
+            // car son bouton se désactive une fois accordé) → l'ado peut TOUJOURS
+            // ouvrir les réglages pour ACCORDER *ou RETIRER* l'accès (contrôle réel).
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(
+                            "Analyse de bien-être (sur l'appareil)",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            label = {
+                                Text(
+                                    when {
+                                        !analysisEnabled -> "non activée par tes parents"
+                                        pauseActive -> "en pause"
+                                        listenerEnabled -> "✓ active"
+                                        else -> "accès à accorder"
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (analysisEnabled && listenerEnabled && !pauseActive)
+                            "Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer " +
+                                "des situations de danger. Tes parents ne reçoivent qu'une alerte de " +
+                                "catégorie — jamais le texte. C'est toi qui gardes la main : tu peux " +
+                                "retirer l'accès aux notifications à tout moment."
+                        else
+                            "Si tu l'actives, le texte de tes notifications SERA analysé SUR CET " +
+                                "APPAREIL pour repérer un danger — tes parents ne recevraient qu'une " +
+                                "alerte de catégorie, jamais le texte. Rien n'est analysé tant que " +
+                                "l'accès n'est pas accordé (et c'est en pause si tu le demandes).",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = {
+                        listenerSettings.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    }) { Text(if (listenerEnabled) "Gérer l'accès aux notifications" else "Activer dans les réglages") }
+
+                    if (analysisEnabled) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            if (pauseActive)
+                                "Pause active : l'analyse est suspendue. Tes parents voient " +
+                                    "qu'une pause est en cours (pas son contenu)."
+                            else
+                                "Besoin d'une bulle ? Mets l'analyse en pause. Tes parents verront " +
+                                    "qu'une pause est active, jamais ce qu'elle masque.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            enabled = !safetyBusy,
+                            onClick = {
+                                scope.launch {
+                                    safetyBusy = true
+                                    val ok = if (pauseActive) safetyClient.endPause(safetyCache)
+                                             else safetyClient.startPause(safetyCache)
+                                    if (ok) pauseActive = safetyCache.pauseActive
+                                    safetyBusy = false
+                                }
+                            },
+                        ) { Text(if (pauseActive) "Reprendre l'analyse" else "Mettre en pause") }
+                    }
+                }
+            }
+
+            // Visibilité mutuelle (K6) : l'ado voit SES propres signaux (métadonnées :
+            // catégorie + gravité + date). Jamais de contenu (il n'existe pas en base).
+            if (mutualVisibility && mySignals.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                InfoCard("Ce que tes parents voient de ton côté (visibilité mutuelle)") {
+                    Spacer(Modifier.height(4.dp))
+                    mySignals.take(20).forEach { s ->
+                        Text(
+                            "•  ${safetyCategoryLabelFr(s.category)} — ${safetySeverityLabelFr(s.severity)}" +
+                                (s.occurredAtIso.take(10).let { if (it.isNotBlank()) " · $it" else "" }),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Text(
+                        "Ce sont les mêmes alertes de catégorie que tes parents reçoivent — " +
+                            "jamais le texte de tes messages.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(20.dp))
         Text(
             "Tu peux à tout moment demander à tes parents de voir ce qui est enregistré, " +
@@ -378,6 +528,23 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+/** Libellé FR d'une catégorie de signal (wire enum app.safety_category). */
+private fun safetyCategoryLabelFr(wire: String): String = when (wire) {
+    "harassment" -> "Harcèlement"
+    "grooming" -> "Contact suspect"
+    "sexual_content" -> "Contenu sexuel"
+    "self_harm" -> "Mal-être"
+    "drugs" -> "Drogues"
+    else -> "Autre"
+}
+
+/** Libellé FR d'une gravité de signal (wire enum app.safety_severity). */
+private fun safetySeverityLabelFr(wire: String): String = when (wire) {
+    "high" -> "gravité élevée"
+    "medium" -> "gravité moyenne"
+    else -> "gravité faible"
 }
 
 /** Résume le jeu de règles en phrases claires et non culpabilisantes (K2). */

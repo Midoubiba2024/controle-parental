@@ -85,6 +85,19 @@ android {
             (project.findProperty("featureNetworkFilter") as String?)?.toBoolean() ?: true
         buildConfigField("boolean", "FEATURE_NETWORK_FILTER", featureNetworkFilter.toString())
 
+        // --- LOT 6 — Bien-être & sécurité ado (détection ON-DEVICE) -----------
+        // Analyse LOCALE du texte des notifications → seule une ALERTE de
+        // métadonnées remonte (catégorie/gravité/app), JAMAIS le contenu (ligne
+        // rouge, docs/11-LOT6-BIEN-ETRE.md). Interrupteur de build (kill switch
+        // pour une variante Play sans l'accès aux notifications). Même activée, la
+        // fonction est triplement gardée au RUNTIME : profil preteen/teen,
+        // consentement `safety_settings.analysis_enabled` (OFF par défaut), et
+        // l'accès aux notifications accordé par l'ado dans les Réglages système
+        // (NotificationListenerService lié par le système — jamais forcé).
+        val featureSafetySignals: Boolean =
+            (project.findProperty("featureSafetySignals") as String?)?.toBoolean() ?: true
+        buildConfigField("boolean", "FEATURE_SAFETY_SIGNALS", featureSafetySignals.toString())
+
         // --- LOT 3 — Localisation EN ARRIÈRE-PLAN -----------------------------
         // ACCESS_BACKGROUND_LOCATION = permission SENSIBLE Play. Pilotée par un
         // PRODUCT FLAVOR (ci-dessous), PAS seulement par BuildConfig : la variante

@@ -119,13 +119,16 @@ téléphone (navigateur), ou copiez-le par câble USB / Google Drive.
 Pour les apps installées **hors Play Store** depuis un navigateur ou un gestionnaire de
 fichiers, Android bloque par défaut certaines autorisations sensibles. Sur **Android 15**,
 la liste comprend notamment : **accès aux données d'usage**, **affichage par-dessus les
-autres apps**, **administrateur de l'appareil** (ainsi que l'accessibilité et l'accès aux
-notifications, que notre app **n'utilise pas**). Sur Android 13/14, la restriction vise
-surtout l'accessibilité et l'accès aux notifications, mais certains constructeurs
-l'étendent.
+autres apps**, **administrateur de l'appareil** et l'**accès aux notifications**. Sur
+Android 13/14, la restriction vise surtout l'**accessibilité** (que notre app n'utilise
+pas) et l'**accès aux notifications**, mais certains constructeurs l'étendent.
 
 Notre app a besoin de **l'accès à l'usage** (temps d'écran), de la **superposition**
-(écran de blocage) et, en option, de l'**administrateur d'appareil** (verrouillage).
+(écran de blocage), en option de l'**administrateur d'appareil** (verrouillage), et — **pour
+le profil ado uniquement** (LOT 6, `docs/11-LOT6-BIEN-ETRE.md`) — de l'**accès aux
+notifications** (analyse de bien-être **sur l'appareil** ; voir §5). Cet accès aux
+notifications est **précisément** l'un des paramètres restreints visés par Android 13+ :
+l'interrupteur apparaît grisé tant que l'étape ci-dessous n'a pas été faite.
 Symptôme : l'interrupteur est grisé, ou un message « Paramètre restreint — pour votre
 sécurité, ce paramètre n'est pas disponible » apparaît.
 
@@ -174,6 +177,7 @@ et le **VPN permanent** (à régler dans les Paramètres Android, voir le tablea
 | **Connexion VPN (filtrage)** | Filtrage des sites par **nom de domaine** (DNS), **en local** sur le téléphone : aucun trafic détourné vers un serveur, aucun déchiffrement, aucun contenu lu | Bouton → fenêtre Android « Demande de connexion » → **OK**. Une **icône clé** reste visible dans la barre d'état |
 | **VPN permanent** (recommandé) | Pour que le filtrage **redémarre tout seul** après un redémarrage du téléphone ou une mise à jour de l'app (sinon il faut rouvrir l'app) | **Paramètres → Réseau et Internet → VPN** → ⚙ à côté de *Supervision familiale* → activer **VPN permanent** (*Always-on VPN*). Ne cochez **pas** « Bloquer les connexions sans VPN » |
 | **Journal d'appels** | Uniquement si la fonction a été **activée à la compilation** (désactivée par défaut) : qui/quand/durée, numéro **haché**, jamais le contenu | Bouton visible seulement si la fonction est active → **Autoriser** |
+| **Accès aux notifications** (profil **ado** uniquement, optionnel) | Analyse de **bien-être / sécurité SUR L'APPAREIL** : repère des situations de danger (harcèlement, mal-être, contact suspect). Le parent ne reçoit qu'une **alerte de catégorie** — **jamais** le texte des notifications. Désactivé par défaut ; l'ado le voit et peut le couper/mettre en pause (K8). Rien pour le jeune enfant | Depuis « mes données » (section ado) → bouton → **Réglages → Accès aux notifications → Supervision familiale → activer** (voir §3 : **paramètre restreint** sur app sideloadée) |
 | **Administrateur de l'appareil** (optionnel) | Verrouiller l'écran à distance (« verrouiller maintenant ») | Paramètres → Sécurité → *Applis d'administration de l'appareil* → Supervision familiale → activer (voir §3) |
 
 Conseils :

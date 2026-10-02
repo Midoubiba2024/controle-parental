@@ -367,3 +367,58 @@ export function ageProfileFromBirth(birth: string | null): AgeProfile {
   if (years < 15) return "preteen";
   return "teen";
 }
+
+/* --- LOT 6 — Bien-être & sécurité ado (signaux ON-DEVICE) --------------- */
+// 🔴 LIGNE ROUGE : ces types ne portent QUE des métadonnées (catégorie, gravité,
+// compteur, app source). Aucun champ de contenu/texte/extrait — voir
+// docs/11-LOT6-BIEN-ETRE.md.
+
+export type SafetyCategory =
+  | "harassment" | "grooming" | "sexual_content" | "self_harm" | "drugs";
+export type SafetySeverity = "low" | "medium" | "high";
+
+export interface SafetySignal {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  category: SafetyCategory;
+  severity: SafetySeverity;
+  source_app: string | null;   // nom de paquet/libellé (métadonnée) — jamais le texte
+  occurrence_count: number;
+  occurred_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  created_at: string;
+}
+
+export interface SafetySettings {
+  id: string;
+  family_id: string;
+  child_id: string;
+  analysis_enabled: boolean;    // consentement (OFF par défaut, privacy by default)
+  mutual_visibility: boolean;   // mode ado (K6)
+  updated_at: string;
+}
+
+export interface SafetyStatus {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  analysis_active: boolean;     // l'analyse tourne (transparence on/off)
+  last_active_at: string | null;
+  last_revoked_at: string | null;
+  updated_at: string;
+}
+
+export interface PrivacyPause {
+  id: string;
+  family_id: string;
+  child_id: string;
+  device_id: string;
+  started_at: string;
+  expires_at: string | null;
+  ended_at: string | null;      // null = pause encore active (K8, non silencieuse)
+  created_at: string;
+}
