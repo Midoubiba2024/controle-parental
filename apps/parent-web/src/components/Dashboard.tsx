@@ -17,10 +17,11 @@ import { LocationView } from "./views/LocationView";
 import { SecurityView } from "./views/SecurityView";
 import { FilteringView } from "./views/FilteringView";
 import { SafetyView } from "./views/SafetyView";
+import { PrivacyView } from "./views/PrivacyView";
 
 type View =
   | "overview" | "screen" | "apps" | "calls" | "rules" | "filter"
-  | "location" | "security" | "wellbeing" | "requests" | "messages" | "family";
+  | "location" | "security" | "wellbeing" | "requests" | "messages" | "family" | "privacy";
 
 const NAV: { key: View; label: string; icon: string }[] = [
   { key: "overview", label: "Vue d'ensemble", icon: "◎" },
@@ -35,6 +36,7 @@ const NAV: { key: View; label: string; icon: string }[] = [
   { key: "requests", label: "Demandes", icon: "✉" },
   { key: "messages", label: "Messages", icon: "💬" },
   { key: "family", label: "Famille", icon: "⌂" },
+  { key: "privacy", label: "Confidentialité", icon: "🔒" },
 ];
 
 const VIEW_TITLE: Record<View, string> = {
@@ -42,6 +44,7 @@ const VIEW_TITLE: Record<View, string> = {
   calls: "Appels", rules: "Règles d'accès", filter: "Filtrage web & contenu",
   location: "Localisation", security: "Sécurité & SOS", wellbeing: "Sécurité ado — bien-être",
   requests: "Demandes", messages: "Messages", family: "Famille & appareils",
+  privacy: "Confidentialité & RGPD",
 };
 
 export function Dashboard({ session }: { session: Session }) {
@@ -104,6 +107,7 @@ export function Dashboard({ session }: { session: Session }) {
   const themeIcon = theme === "light" ? "☀" : theme === "dark" ? "☾" : "⌁";
   const themeTitle = theme === "light" ? "Thème clair" : theme === "dark" ? "Thème sombre" : "Thème système";
   const currentChild = children.find((c) => c.id === childId) ?? null;
+  const currentFamily = families.find((f) => f.id === familyId) ?? null;
 
   return (
     <div className="shell">
@@ -169,6 +173,9 @@ export function Dashboard({ session }: { session: Session }) {
           <SecurityView familyId={familyId!} child={currentChild} />
         ) : view === "wellbeing" ? (
           <SafetyView familyId={familyId!} child={currentChild} />
+        ) : view === "privacy" ? (
+          <PrivacyView family={currentFamily!} child={currentChild}
+            onChanged={() => { void loadFamilies(); void loadChildren(); }} />
         ) : obs.loading ? (
           <p className="muted">Chargement des données…</p>
         ) : view === "overview" ? <OverviewView obs={obs} />

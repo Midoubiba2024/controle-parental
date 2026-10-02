@@ -245,6 +245,14 @@ form.inline { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 
 
 .msg { font-size: .9rem; color: var(--text-secondary); }
 .msg.error { color: var(--danger); }
+
+/* --- Confidentialité / zone de danger (LOT 8b — RGPD) ------------------- */
+.card.danger-zone { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.card.danger-zone h2 { color: var(--danger); }
+button.btn-danger { background: var(--danger); color: #fff; }
+button.btn-danger:hover { background: color-mix(in srgb, var(--danger) 85%, #000); }
+.confirm-box { background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 10px; }
+.confirm-box input { width: 100%; max-width: 320px; }
 .empty { text-align: center; color: var(--muted); padding: 28px 10px; }
 .empty .big { font-size: 1.8rem; }
 
