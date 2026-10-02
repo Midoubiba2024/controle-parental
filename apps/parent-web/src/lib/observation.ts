@@ -22,7 +22,13 @@ export interface ObservationData {
   reload: () => void;
 }
 
-const USAGE_WINDOW_DAYS = 35;
+// Fenêtre de récupération du temps d'écran. Doit couvrir DEUX périodes de
+// comparaison consécutives pour que le delta « vs période précédente » soit
+// correct : la plus longue période affichée est 30 j, et la vue compare les
+// 30 derniers jours aux 30 jours d'avant → il faut au moins 60 jours de données
+// en base (on prend 65 pour une petite marge). Sinon prevTotal serait quasi vide
+// et le delta faux.
+const USAGE_WINDOW_DAYS = 65;
 
 export function useObservation(childId: string | null): ObservationData {
   const [usage, setUsage] = useState<UsageDaily[]>([]);

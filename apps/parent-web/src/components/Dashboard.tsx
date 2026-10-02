@@ -33,23 +33,30 @@ export function Dashboard({ session }: { session: Session }) {
   const [childId, setChildId] = useState<string | null>(null);
   const [view, setView] = useState<View>("overview");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [theme, cycleTheme] = useTheme();
 
   const loadFamilies = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("families").select("id,name,created_at").order("created_at");
+    // On ne retombe sur une liste vide (→ écran « Créer une famille ») QUE sur un
+    // succès. Une erreur (réseau/RLS) ne doit pas masquer les familles existantes.
+    const { data, error } = await supabase.from("families").select("id,name,created_at").order("created_at");
+    if (error) { setError(error.message); setLoading(false); return; }
     const list = (data ?? []) as Family[];
     setFamilies(list);
     setFamilyId((cur) => cur ?? list[0]?.id ?? null);
+    setError(null);
     setLoading(false);
   }, []);
 
   const loadChildren = useCallback(async () => {
     if (!familyId) { setChildren([]); return; }
-    const { data } = await supabase.from("children").select("*").eq("family_id", familyId).order("created_at");
+    const { data, error } = await supabase.from("children").select("*").eq("family_id", familyId).order("created_at");
+    if (error) { setError(error.message); return; }
     const list = (data ?? []) as Child[];
     setChildren(list);
     setChildId((cur) => (cur && list.some((c) => c.id === cur)) ? cur : list[0]?.id ?? null);
+    setError(null);
   }, [familyId]);
 
   useEffect(() => { void loadFamilies(); }, [loadFamilies]);
@@ -59,6 +66,19 @@ export function Dashboard({ session }: { session: Session }) {
   const st = obs.status[0];
 
   if (loading) return <div className="center muted">Chargement…</div>;
+  // En cas d'erreur de chargement sans aucune famille connue, afficher l'erreur
+  // (et proposer de réessayer) plutôt que l'écran « Créer une famille » à tort.
+  if (error && families.length === 0) {
+    return (
+      <div className="center">
+        <div className="card" style={{ width: 360 }}>
+          <h2>Chargement impossible</h2>
+          <p className="msg error">{error}</p>
+          <button onClick={() => { setError(null); void loadFamilies(); }}>Réessayer</button>
+        </div>
+      </div>
+    );
+  }
   if (families.length === 0) {
     return <div className="center"><CreateFamily onCreated={loadFamilies} /></div>;
   }
@@ -110,6 +130,7 @@ export function Dashboard({ session }: { session: Session }) {
           <button className="link" onClick={() => supabase.auth.signOut()}>Déconnexion</button>
         </div>
 
+        {error && <p className="msg error">{error}</p>}
         {obs.error && <p className="msg error">{obs.error}</p>}
 
         {view === "family" ? (
