@@ -10,6 +10,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- LOT 2 — Application des règles en mode Standard : overlay de blocage
+         VISIBLE au-dessus de l'app au premier plan (SYSTEM_ALERT_WINDOW).
+         Accordée explicitement par l'utilisateur (Réglages → Affichage par-dessus
+         les autres apps). L'overlay informe et propose « demander + de temps » et
+         l'appel d'urgence (112) ; il n'emprisonne pas l'enfant. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Faire sonner l'appareil même en silencieux (commande « sonner », V15). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Temps d'écran : accès aux statistiques d'usage (permission SPÉCIALE,
          accordée par l'enfant/parent via Réglages → Accès aux données d'usage).
          Elle n'est pas demandée via le runtime : on redirige vers les Réglages. -->
@@ -62,6 +71,22 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- LOT 2 — Administrateur d'appareil : verrouillage instantané visible
+             (lockNow). En device owner, ajoute la suspension d'apps et le verrou
+             des réglages système. Activation explicite par l'utilisateur ;
+             supervision toujours visible (aucun usage furtif). -->
+        <receiver
+            android:name=".service.AdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
     </application>

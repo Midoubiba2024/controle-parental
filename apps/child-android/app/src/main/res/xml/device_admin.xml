@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Politiques d'administration d'appareil utilisées par la supervision (LOT 2) :
+     verrouillage instantané visible. Device owner (optionnel) ajoute la
+     suspension d'apps et les restrictions système. Aucun usage furtif. -->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <force-lock />
+    </uses-policies>
+</device-admin>

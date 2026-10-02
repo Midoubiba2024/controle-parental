@@ -26,18 +26,33 @@ class MetricsWorker(
     override suspend fun doWork(): Result {
         if (!SupervisionStore(applicationContext).isEnrolled) return Result.success()
         val report = MetricsCollector(applicationContext).collectAndUpload()
-        // En cas d'erreur réseau transitoire, laisser WorkManager rejouer le cycle.
-        // Le rejeu est sûr : les remontées sont idempotentes (upsert on_conflict
-        // pour usage_daily/app_inventory/comm_events ; réconciliation d'inventaire
-        // qui ne re-marque pas une ligne déjà estampillée) et device_status n'est
-        // inséré qu'une fois le reste du cycle réussi (cf. MetricsCollector), donc
-        // un retry ne re-crée pas de doublon des uploads déjà aboutis.
-        return if (report.errors.isEmpty()) Result.success() else Result.retry()
+        // Les remontées sont idempotentes (upsert on_conflict pour usage_daily/
+        // app_inventory/comm_events/device_status), donc un rejeu ne crée pas de
+        // doublon. MAIS on ne rejoue que sur erreurs TRANSITOIRES (réseau, 5xx,
+        // 408/429) : une erreur PERMANENTE (4xx RLS, CHECK violé) ne se résoudra
+        // jamais d'elle-même → rejouer indéfiniment gaspillerait batterie/réseau.
+        return when {
+            report.errors.isEmpty() -> Result.success()
+            report.errors.any { isTransient(it) } -> Result.retry()
+            else -> Result.failure()   // erreurs permanentes : on arrête ce cycle
+        }
     }
 
     companion object {
         private const val PERIODIC = "metrics_periodic"
         private const val ONESHOT = "metrics_oneshot"
+
+        /**
+         * Une erreur de remontée est-elle TRANSITOIRE (donc rejouable) ?
+         * Codes du type "usage:http_503", "status:http_0" (réseau), "calls:refresh_…".
+         * http_0 = exception réseau ; 408/429/5xx = transitoire ; 4xx = permanent.
+         * Un code non reconnu (ni http_…) est traité comme transitoire par prudence.
+         */
+        fun isTransient(err: String): Boolean {
+            val m = Regex("http_(\\d+)").find(err) ?: return true
+            val code = m.groupValues[1].toIntOrNull() ?: return true
+            return code == 0 || code == 408 || code == 429 || code >= 500
+        }
 
         private val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)

@@ -67,13 +67,24 @@ class CallLogCollector(private val context: Context) {
                 val durationS = if (iDur >= 0) c.getLong(iDur) else 0
                 rows += CallRow(
                     direction = directionOf(type),
-                    counterpartyHash = number?.takeIf { it.isNotBlank() }?.let { hash(it) },
+                    // IDEMPOTENCE : jamais null. Un numéro absent/masqué donne un
+                    // hash SENTINELLE stable, pour que la contrainte d'unicité
+                    // (device_id, occurred_at, counterparty_hash, direction) matche
+                    // au rejeu (sinon NULLS DISTINCT ⇒ doublons). Le sentinel est une
+                    // constante : il n'expose aucun numéro.
+                    counterpartyHash = number?.takeIf { it.isNotBlank() }?.let { hash(it) }
+                        ?: hash(NO_NUMBER_SENTINEL),
                     durationMs = durationS * 1000,
                     occurredAt = date,
                 )
             }
         }
         return rows
+    }
+
+    private companion object {
+        // Marqueur stable pour « numéro absent/inconnu » (appels masqués, privés).
+        const val NO_NUMBER_SENTINEL = "__no_number__"
     }
 
     private fun directionOf(type: Int): String = when (type) {

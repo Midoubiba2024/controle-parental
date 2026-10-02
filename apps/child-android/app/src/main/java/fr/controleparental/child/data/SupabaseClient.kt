@@ -4,7 +4,6 @@ import fr.controleparental.child.Config
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -19,12 +18,58 @@ import org.json.JSONObject
  */
 class SupabaseClient(private val store: SupervisionStore) {
 
-    private val http = OkHttpClient()
+    private val http = Http.client
     private val jsonType = "application/json".toMediaType()
 
     sealed interface Result {
         data object Ok : Result
         data class Error(val code: String) : Result
+    }
+
+    sealed interface GetResult {
+        data class Ok(val body: String) : GetResult
+        data class Error(val code: String) : GetResult
+    }
+
+    /**
+     * SELECT (GET) PostgREST avec un filtre ([query], ex.
+     * "child_id=eq.…&select=*"). Rafraîchit la session et rejoue une fois sur 401.
+     * Utilisé pour récupérer les RÈGLES et les COMMANDES (LOT 2).
+     */
+    suspend fun get(table: String, query: String): GetResult = withContext(Dispatchers.IO) {
+        val enrollment = store.load() ?: return@withContext GetResult.Error("not_enrolled")
+        var token = enrollment.accessToken
+        var attempt = 0
+        while (true) {
+            attempt++
+            val (code, body) = getRequest(table, query, token)
+            when {
+                code == 401 && attempt == 1 -> {
+                    when (val r = refresh()) {
+                        is RefreshResult.Ok -> token = r.accessToken
+                        is RefreshResult.Error -> return@withContext GetResult.Error("refresh_${r.code}")
+                    }
+                }
+                code in 200..299 -> return@withContext GetResult.Ok(body)
+                else -> return@withContext GetResult.Error("http_$code")
+            }
+        }
+    }
+
+    private fun getRequest(table: String, query: String, accessToken: String): Pair<Int, String> {
+        val url = Config.restUrl(table) + "?" + query
+        val req = Request.Builder()
+            .url(url)
+            .addHeader("apikey", Config.supabaseAnonKey)
+            .addHeader("Authorization", "Bearer $accessToken")
+            .addHeader("Accept", "application/json")
+            .get()
+            .build()
+        return try {
+            http.newCall(req).execute().use { it.code to (it.body?.string().orEmpty()) }
+        } catch (_: Exception) {
+            0 to ""
+        }
     }
 
     /**

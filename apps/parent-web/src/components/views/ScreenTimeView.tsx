@@ -3,26 +3,27 @@ import {
   byApp, byCategory, dailyTotals, pctDelta, totalInRange, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, dayKey, fmtDayLabel, fmtDuration, fmtDurationShort,
+  appLabelOf, categoryColor, categoryLabel, fmtDayLabel, fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { Bars, Donut, HBars, Legend, type Slice } from "../charts/ChartKit";
 import { EmptyState, Tile } from "../Ui";
 
 export function ScreenTimeView({ obs }: { obs: ObservationData }) {
-  const { usage } = obs;
+  const { usage, anchorDay } = obs;
   const [period, setPeriod] = useState<7 | 30>(7);
 
-  const from = dayKey(period - 1);
-  const to = dayKey(0);
-  const prevFrom = dayKey(period * 2 - 1);
-  const prevTo = dayKey(period);
+  // Plages dérivées du jour de référence (données), pas du fuseau navigateur.
+  const to = anchorDay;
+  const from = shiftDay(anchorDay, -(period - 1));
+  const prevTo = shiftDay(anchorDay, -period);
+  const prevFrom = shiftDay(anchorDay, -(period * 2 - 1));
 
   const total = totalInRange(usage, from, to);
   const prevTotal = totalInRange(usage, prevFrom, prevTo);
   const delta = pctDelta(total, prevTotal);
   const avgPerDay = Math.round(total / period);
 
-  const days = Array.from({ length: period }, (_, i) => dayKey(period - 1 - i));
+  const days = Array.from({ length: period }, (_, i) => shiftDay(anchorDay, -(period - 1 - i)));
   const totals = dailyTotals(usage, days);
   const barData: Slice[] = days.map((d, i) => ({
     key: d, label: period <= 7 ? fmtDayLabel(d) : (i % 3 === 0 ? d.slice(8) : ""),

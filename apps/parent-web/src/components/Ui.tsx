@@ -7,7 +7,7 @@ export function Tile({
   value: ReactNode;
   icon?: string;
   iconBg?: string;
-  delta?: { pct: number | null; invert?: boolean };
+  delta?: { pct: number | null; invert?: boolean; label?: string };
 }) {
   return (
     <div className="card tile">
@@ -17,8 +17,9 @@ export function Tile({
       </div>
       <div className="value">{value}</div>
       {delta && delta.pct != null && (
-        <div className={`delta ${(delta.invert ? -delta.pct : delta.pct) >= 0 ? "up" : "down"}`}>
-          {delta.pct > 0 ? "▲" : delta.pct < 0 ? "▼" : "■"} {Math.abs(delta.pct)}% vs période précédente
+        // pct === 0 : état NEUTRE (ni hausse ni baisse) — pas de flèche rouge trompeuse.
+        <div className={`delta ${delta.pct === 0 ? "flat" : (delta.invert ? -delta.pct : delta.pct) > 0 ? "up" : "down"}`}>
+          {delta.pct > 0 ? "▲" : delta.pct < 0 ? "▼" : "■"} {Math.abs(delta.pct)}% {delta.label ?? "vs période précédente"}
         </div>
       )}
     </div>

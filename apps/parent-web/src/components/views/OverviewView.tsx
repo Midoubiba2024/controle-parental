@@ -1,21 +1,19 @@
 import {
-  byApp, byCategory, dailyTotals, pctDelta, totalForDay, type ObservationData,
+  byApp, byCategory, dailyTotals, totalForDay, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, dayKey, fmtBytes, fmtDayLabel,
-  fmtDuration, fmtDurationShort,
+  appLabelOf, categoryColor, categoryLabel, fmtBytes, fmtDayLabel,
+  fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { Bars, Donut, HBars, Legend, type Slice } from "../charts/ChartKit";
 import { EmptyState, Meter, Tile } from "../Ui";
 
 export function OverviewView({ obs }: { obs: ObservationData }) {
-  const { usage, inventory, status } = obs;
-  const today = dayKey(0);
-  const yesterday = dayKey(1);
+  const { usage, inventory, status, anchorDay } = obs;
+  const today = anchorDay;                 // jour de référence issu des données
   const todayMs = totalForDay(usage, today);
-  const dayPct = pctDelta(todayMs, totalForDay(usage, yesterday));
 
-  const days = Array.from({ length: 7 }, (_, i) => dayKey(6 - i));
+  const days = Array.from({ length: 7 }, (_, i) => shiftDay(anchorDay, -(6 - i)));
   const totals = dailyTotals(usage, days);
   const barData: Slice[] = days.map((d, i) => ({
     key: d, label: fmtDayLabel(d), value: totals[i], color: "var(--series-1)",
@@ -40,8 +38,7 @@ export function OverviewView({ obs }: { obs: ObservationData }) {
     <div className="grid" style={{ gap: 18 }}>
       <div className="grid cols-4">
         <Tile label="Temps d'écran aujourd'hui" value={fmtDuration(todayMs)} icon="⏱"
-          iconBg="color-mix(in srgb, var(--primary) 18%, transparent)"
-          delta={{ pct: dayPct }} />
+          iconBg="color-mix(in srgb, var(--primary) 18%, transparent)" />
         <Tile label="Applications installées" value={activeApps || "—"} icon="📱"
           iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)" />
         <Tile label="Batterie" value={st?.battery_level != null ? `${st.battery_level}%` : "—"}

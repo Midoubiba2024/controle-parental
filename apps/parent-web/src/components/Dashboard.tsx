@@ -10,20 +10,25 @@ import { ScreenTimeView } from "./views/ScreenTimeView";
 import { ApplicationsView } from "./views/ApplicationsView";
 import { CallsView } from "./views/CallsView";
 import { FamilyView } from "./views/FamilyView";
+import { RulesView } from "./views/RulesView";
+import { RequestsView } from "./views/RequestsView";
 
-type View = "overview" | "screen" | "apps" | "calls" | "family";
+type View = "overview" | "screen" | "apps" | "calls" | "rules" | "requests" | "family";
 
 const NAV: { key: View; label: string; icon: string }[] = [
   { key: "overview", label: "Vue d'ensemble", icon: "◎" },
   { key: "screen", label: "Temps d'écran", icon: "⏱" },
   { key: "apps", label: "Applications", icon: "▦" },
   { key: "calls", label: "Appels", icon: "☏" },
+  { key: "rules", label: "Règles d'accès", icon: "⛬" },
+  { key: "requests", label: "Demandes", icon: "✉" },
   { key: "family", label: "Famille", icon: "⌂" },
 ];
 
 const VIEW_TITLE: Record<View, string> = {
   overview: "Vue d'ensemble", screen: "Temps d'écran", apps: "Applications",
-  calls: "Appels", family: "Famille & appareils",
+  calls: "Appels", rules: "Règles d'accès", requests: "Demandes",
+  family: "Famille & appareils",
 };
 
 export function Dashboard({ session }: { session: Session }) {
@@ -116,7 +121,7 @@ export function Dashboard({ session }: { session: Session }) {
               {families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           )}
-          {children.length > 0 && view !== "family" && (
+          {children.length > 0 && view !== "family" && view !== "requests" && (
             <select value={childId ?? ""} onChange={(e) => setChildId(e.target.value)}>
               {children.map((c) => <option key={c.id} value={c.id}>{c.display_name}</option>)}
             </select>
@@ -135,8 +140,12 @@ export function Dashboard({ session }: { session: Session }) {
 
         {view === "family" ? (
           <FamilyView familyId={familyId!} onChildrenChanged={loadChildren} />
-        ) : !childId ? (
+        ) : view === "requests" ? (
+          <RequestsView familyId={familyId!} children={children} />
+        ) : !childId || !currentChild ? (
           <div className="card"><p className="empty">Ajoutez un enfant dans l'onglet <b>Famille</b> pour voir ses données.</p></div>
+        ) : view === "rules" ? (
+          <RulesView familyId={familyId!} child={currentChild} obs={obs} />
         ) : obs.loading ? (
           <p className="muted">Chargement des données…</p>
         ) : view === "overview" ? <OverviewView obs={obs} />
