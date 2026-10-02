@@ -24,6 +24,10 @@ import fr.controleparental.child.enforce.BlockOverlay
 import fr.controleparental.child.enforce.PolicyCache
 import fr.controleparental.child.enforce.PolicyClient
 import fr.controleparental.child.enforce.RuleSet
+import fr.controleparental.child.location.LocationClient
+import fr.controleparental.child.location.LocationRepository
+import fr.controleparental.child.service.SupervisionService
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
@@ -66,6 +70,36 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         ActivityResultContracts.RequestPermission(),
     ) { callLogGranted = it }
 
+    // --- LOT 3 — Localisation & SOS ------------------------------------------
+    val scope = rememberCoroutineScope()
+    val store = remember { SupervisionStore(context) }
+    val locationRepo = remember { LocationRepository(store) }
+    val locationClient = remember { LocationClient(context) }
+
+    var fineGranted by remember { mutableStateOf(locationClient.hasFine()) }
+    val finePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        fineGranted = locationClient.hasFine()
+        // Relance le service pour activer le type de premier plan `location`
+        // (nécessite la permission au démarrage sur Android 14).
+        if (fineGranted) SupervisionService.start(context)
+    }
+
+    var bgGranted by remember { mutableStateOf(locationClient.hasBackground()) }
+    val bgPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { bgGranted = locationClient.hasBackground() }
+
+    // Mode de partage actuel (affiché à l'enfant — transparence).
+    var locMode by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        locMode = runCatching { locationRepo.settings().mode }.getOrNull()
+    }
+
+    var sosBusy by remember { mutableStateOf(false) }
+    var sosMsg by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
     ) {
@@ -78,6 +112,45 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(20.dp))
+
+        // --- Bouton SOS (déclenché par l'enfant → transparent, E1/E2) --------
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Besoin d'aide ? SOS", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Envoie une alerte à tes parents avec ta position en direct. " +
+                        "C'est toi qui le déclenches. Les appels d'urgence (112) restent " +
+                        "toujours possibles, séparément.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    enabled = !sosBusy,
+                    onClick = {
+                        scope.launch {
+                            sosBusy = true; sosMsg = null
+                            val ok = locationRepo.startSos(null)
+                            if (ok) {
+                                val loc = locationClient.currentFix(highAccuracy = true)
+                                if (loc != null) locationRepo.insertFix(loc, source = "sos", batteryLevel = null)
+                            }
+                            sosBusy = false
+                            sosMsg = if (ok) {
+                                "SOS envoyé. Tes parents sont prévenus et voient ta position en direct."
+                            } else {
+                                "Impossible d'envoyer le SOS (pas de réseau ?). Réessaie ou appelle le 112."
+                            }
+                        }
+                    },
+                ) { Text(if (sosBusy) "Envoi…" else "🆘  Envoyer un SOS") }
+                sosMsg?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
 
         InfoCard("Niveau de supervision") {
             Text(
@@ -93,6 +166,13 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             "Le temps que tu passes sur chaque application (durées seulement).",
             "La liste des applications installées sur l'appareil.",
             "Le niveau de batterie et l'espace de stockage de l'appareil.",
+            when (locMode) {
+                "off" -> "Ta position : partage désactivé pour l'instant."
+                "periodic" -> "Ta position, de temps en temps et quand tes parents la demandent — " +
+                    "et en direct seulement si tu déclenches un SOS. Jamais en secret."
+                else -> "Ta position quand tes parents la demandent (check-in), " +
+                    "et en direct seulement si tu déclenches un SOS. Jamais en secret."
+            },
             if (Config.featureCallLog)
                 "Le journal des appels en métadonnées : qui (sans le numéro en clair), " +
                     "quand et combien de temps — jamais ce qui a été dit."
@@ -158,6 +238,34 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 overlaySettings.launch(intent)
             },
         )
+
+        Spacer(Modifier.height(12.dp))
+        PermissionCard(
+            title = "Localisation",
+            granted = fineGranted,
+            explanation = "Permet de partager ta position avec tes parents (check-in, " +
+                "zones « bien arrivé », et SOS). Tu la vois toujours dans cet écran — " +
+                "rien n'est caché.",
+            actionLabel = if (fineGranted) "Activé" else "Autoriser la position",
+            onAction = { finePermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+        )
+
+        if (Config.featureBackgroundLocation && fineGranted) {
+            Spacer(Modifier.height(12.dp))
+            PermissionCard(
+                title = "Position en arrière-plan",
+                granted = bgGranted,
+                explanation = "Pour que les zones de sécurité fonctionnent même quand l'app " +
+                    "est fermée. Choisis « Toujours autoriser » dans les réglages. " +
+                    "Tu peux refuser : le partage marchera quand l'app est ouverte.",
+                actionLabel = if (bgGranted) "Activé" else "Autoriser en arrière-plan",
+                onAction = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        bgPermission.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    }
+                },
+            )
+        }
 
         if (Config.featureCallLog) {
             Spacer(Modifier.height(12.dp))

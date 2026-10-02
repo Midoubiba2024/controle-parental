@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Variante « sans localisation en arrière-plan » (LOT 3) : retire la permission
+     sensible ACCESS_BACKGROUND_LOCATION du manifeste fusionné, pour une soumission
+     Play sans arrière-plan (plan B si la justification est refusée). Le check-in à
+     la demande (D2) et le SOS restent fonctionnels ; le suivi périodique ne marche
+     qu'app ouverte / service au premier plan. Voir docs/08-LOT3-LOCALISATION.md §5. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
+        tools:node="remove" />
+</manifest>

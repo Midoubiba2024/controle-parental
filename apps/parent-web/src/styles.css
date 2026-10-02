@@ -262,3 +262,40 @@ form.inline { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 
 }
 .tooltip .k { color: var(--text-secondary); }
 .tooltip .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* --- Carte Leaflet (LOT 3) --------------------------------------------- */
+/* Les tuiles OSM sont claires : en thème sombre on les atténue par filtre pour
+   rester cohérent avec l'identité (sans altérer les marqueurs SVG, dessinés
+   au-dessus et donc non filtrés). */
+.leaflet-container { background: var(--surface-2); font: inherit; }
+:root[data-theme="dark"] .leaflet-tile,
+.map-dark .leaflet-tile { filter: brightness(0.7) invert(1) contrast(0.9) hue-rotate(180deg) saturate(0.7); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .leaflet-tile {
+    filter: brightness(0.7) invert(1) contrast(0.9) hue-rotate(180deg) saturate(0.7);
+  }
+}
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: var(--surface-1); color: var(--text-primary); box-shadow: var(--shadow);
+}
+.leaflet-popup-content { font-size: .86rem; margin: 9px 12px; }
+.leaflet-bar a { background: var(--surface-1); color: var(--text-primary); border-color: var(--border); }
+.leaflet-bar a:hover { background: var(--surface-2); }
+.leaflet-control-attribution { background: color-mix(in srgb, var(--surface-1) 80%, transparent) !important; color: var(--muted); }
+.leaflet-control-attribution a { color: var(--text-secondary); }
+
+/* --- Bandeau SOS actif -------------------------------------------------- */
+.sos-banner {
+  border: 1px solid var(--danger);
+  border-left: 4px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-1));
+}
+.dot-pulse { display: inline-block; width: 9px; height: 9px; border-radius: 99px; background: var(--danger); margin-right: 7px; animation: pulse 1.2s ease-in-out infinite; }
+.dot-live { display: inline-block; width: 8px; height: 8px; border-radius: 99px; background: var(--good); margin-right: 6px; }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(1.5); } }
+
+/* Petite pastille de type de zone (identité ≠ couleur seule : icône + libellé). */
+.zone-tag { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 600; }
+.zone-sw { width: 11px; height: 11px; border-radius: 3px; }
+.list-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.list-row:last-child { border-bottom: 0; }

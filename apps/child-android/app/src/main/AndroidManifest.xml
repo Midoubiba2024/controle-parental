@@ -8,6 +8,19 @@
     <!-- Type de service de premier plan (Android 14+). dataSync : l'app
          synchronise des AGRÉGATS d'usage ; sert aussi d'indicateur permanent. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- LOT 3 — Localisation : service de premier plan de type `location`
+         (Android 14+) + permissions de position fine/approchée. La notification
+         de supervision persistante (K1) rend ce suivi TOUJOURS visible : aucune
+         géolocalisation occulte (docs/02-CONFORMITE.md). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Localisation en arrière-plan : permission SENSIBLE (formulaire Play +
+         vidéo de démo « child_monitoring »). Demandée au runtime UNIQUEMENT si
+         BuildConfig.FEATURE_BACKGROUND_LOCATION est actif (voir build.gradle.kts).
+         Pour publier une variante sans arrière-plan en cas de refus Play,
+         retirer aussi cette ligne (ou la placer dans un product flavor). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- LOT 2 — Application des règles en mode Standard : overlay de blocage
@@ -63,7 +76,13 @@
         <service
             android:name=".service.SupervisionService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|location" />
+
+        <!-- LOT 3 — Réception des transitions de geofence (ENTER/EXIT/DWELL).
+             Déclenché par les services Google Play ; non exporté aux autres apps. -->
+        <receiver
+            android:name=".location.GeofenceBroadcastReceiver"
+            android:exported="false" />
 
         <!-- Relance la supervision après redémarrage. -->
         <receiver

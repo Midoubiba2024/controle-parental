@@ -4,12 +4,18 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.MainActivity
 import fr.controleparental.child.R
 import fr.controleparental.child.data.AppInventoryCollector
@@ -21,6 +27,7 @@ import fr.controleparental.child.enforce.EnforcementManager
 import fr.controleparental.child.enforce.PolicyCache
 import fr.controleparental.child.enforce.PolicyClient
 import fr.controleparental.child.enforce.ReinforcedEnforcer
+import fr.controleparental.child.location.LocationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,6 +63,11 @@ class SupervisionService : Service() {
     private lateinit var reinforced: ReinforcedEnforcer
     private lateinit var executor: CommandExecutor
     private lateinit var policyClient: PolicyClient
+    private lateinit var location: LocationCoordinator
+
+    // Receiver dynamique batterie faible (ACTION_BATTERY_LOW ne peut pas être
+    // déclaré en manifeste pour un broadcast implicite depuis Android 8).
+    private var batteryReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -65,12 +77,38 @@ class SupervisionService : Service() {
         overlay = BlockOverlay(this)
         manager = EnforcementManager(this).apply { loadFromCache() }
         reinforced = ReinforcedEnforcer(this)
-        executor = CommandExecutor(this, PolicyCache(this), reinforced)
+        location = LocationCoordinator(this)
+        executor = CommandExecutor(this, PolicyCache(this), reinforced, location)
         policyClient = PolicyClient(SupervisionStore(this))
+        registerBatteryReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIF_ID, buildNotification())
+        // Type de service de premier plan calculé À L'EXÉCUTION : dataSync toujours
+        // (observation L1), + location UNIQUEMENT si la permission est accordée ET
+        // qu'on ne démarre PAS depuis le boot. Deux garde-fous Android 14/15 :
+        //   * le type `location` exige la permission au démarrage (sinon crash) ;
+        //   * depuis un BOOT_COMPLETED, démarrer un FGS `location` (et `dataSync`
+        //     sous Android 15) est restreint → on n'y ajoute jamais `location`,
+        //     et on entoure startForeground d'un try/catch (repli gracieux : le
+        //     service always-on ne doit JAMAIS tomber à cause de la localisation).
+        // Après l'octroi de la permission, l'app relance le service (foreground)
+        // pour « upgrader » au type `location`.
+        val fromBoot = intent?.getBooleanExtra(EXTRA_FROM_BOOT, false) == true
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        if (!fromBoot && LocationClient(this).hasAnyLocationPermission()) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        try {
+            ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), type)
+        } catch (e: Exception) {
+            // ForegroundServiceStartNotAllowedException (API 31+) / SecurityException :
+            // démarrage FGS refusé dans cet état (ex. dataSync depuis le boot sur
+            // Android 15). On s'arrête proprement ; le service repartira à la
+            // prochaine ouverture de l'app (point d'entrée foreground).
+            stopSelf()
+            return START_NOT_STICKY
+        }
         MetricsWorker.schedule(this)
         if (!loopStarted) { loopStarted = true; scope.launch { loop() } }
         return START_STICKY
@@ -79,7 +117,25 @@ class SupervisionService : Service() {
     override fun onDestroy() {
         scope.cancel()
         runCatching { overlay.hide() }
+        batteryReceiver?.let { runCatching { unregisterReceiver(it) } }
         super.onDestroy()
+    }
+
+    private fun registerBatteryReceiver() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_BATTERY_LOW) {
+                    scope.launch { runCatching { location.onBatteryLow() } }
+                }
+            }
+        }
+        // ACTION_BATTERY_LOW est un broadcast système protégé (exempté de
+        // l'obligation d'export sur Android 14) ; on passe NOT_EXPORTED par sûreté.
+        ContextCompat.registerReceiver(
+            this, receiver, IntentFilter(Intent.ACTION_BATTERY_LOW),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        batteryReceiver = receiver
     }
 
     private suspend fun loop() {
@@ -87,8 +143,15 @@ class SupervisionService : Service() {
         while (scope.isActive) {
             if (!SupervisionStore(this).isEnrolled) { withContext(Dispatchers.Main) { overlay.hide() }; delay(TICK_MS); continue }
 
-            if (tick % SYNC_EVERY == 0L) runCatching { syncRules() }
+            if (tick % SYNC_EVERY == 0L) {
+                runCatching { syncRules() }
+                runCatching { location.onSync() }   // réglages + ré-enregistrement geofences
+            }
             if (tick % COMMANDS_EVERY == 0L) runCatching { executor.processPending() }
+            // Localisation : relevé périodique (si activé) + diffusion SOS live.
+            // Le coordinateur borne lui-même ses cadences, l'appel à chaque tick
+            // est donc bon marché.
+            runCatching { location.onTick() }
 
             val res = runCatching { manager.evaluateForeground() }.getOrNull()
             withContext(Dispatchers.Main) { applyDecision(res) }
@@ -166,13 +229,19 @@ class SupervisionService : Service() {
         private const val TICK_MS = 3_000L
         private const val COMMANDS_EVERY = 5L     // ~15 s
         private const val SYNC_EVERY = 100L       // ~5 min
+        const val EXTRA_FROM_BOOT = "from_boot"
 
-        fun start(context: Context) {
+        fun start(context: Context, fromBoot: Boolean = false) {
             val intent = Intent(context, SupervisionService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+                .putExtra(EXTRA_FROM_BOOT, fromBoot)
+            // Le démarrage lui-même peut être refusé depuis certains états (boot
+            // Android 15) → runCatching pour ne pas faire tomber l'appelant.
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
             }
         }
     }

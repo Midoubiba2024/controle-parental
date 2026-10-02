@@ -46,6 +46,14 @@ android {
             (project.findProperty("commHashPepper") as String?) ?: "dev-pepper-change-me"
         buildConfigField("String", "COMM_HASH_PEPPER", "\"$commHashPepper\"")
 
+        // --- LOT 3 — Localisation EN ARRIÈRE-PLAN -----------------------------
+        // ACCESS_BACKGROUND_LOCATION = permission SENSIBLE Play. Pilotée par un
+        // PRODUCT FLAVOR (ci-dessous), PAS seulement par BuildConfig : la variante
+        // « noBgLocation » RETIRE réellement la permission du manifeste fusionné
+        // (overlay tools:node="remove"), pour une soumission Play sans arrière-plan
+        // si Google refuse la justification. BuildConfig.FEATURE_BACKGROUND_LOCATION
+        // (défini par flavor) gate en plus la demande au runtime.
+
         // Déclaration anti-stalkerware : l'app est un outil de surveillance PARENTALE.
         // (Le flag Play Console child_monitoring se règle à la publication ; voir docs.)
     }
@@ -54,6 +62,26 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    // --- LOT 3 — Variantes de localisation en arrière-plan --------------------
+    // withBgLocation (défaut) : conserve ACCESS_BACKGROUND_LOCATION (manifeste
+    //   principal) ; FEATURE_BACKGROUND_LOCATION=true.
+    // noBgLocation : l'overlay src/noBgLocation/AndroidManifest.xml RETIRE la
+    //   permission du manifeste fusionné (tools:node="remove") ;
+    //   FEATURE_BACKGROUND_LOCATION=false. Variante de repli pour Play.
+    // Build : ./gradlew :app:assembleWithBgLocationDebug (ou assembleNoBgLocationDebug).
+    flavorDimensions += "backgroundLocation"
+    productFlavors {
+        create("withBgLocation") {
+            dimension = "backgroundLocation"
+            isDefault = true
+            buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", "true")
+        }
+        create("noBgLocation") {
+            dimension = "backgroundLocation"
+            buildConfigField("boolean", "FEATURE_BACKGROUND_LOCATION", "false")
         }
     }
 
@@ -93,4 +121,7 @@ dependencies {
     // Planification de la collecte d'agrégats (repli fiable hors du service,
     // résistant à Doze : contrainte réseau + périodicité ~ toutes les heures).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // LOT 3 — Localisation : FusedLocationProviderClient + GeofencingClient.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }
