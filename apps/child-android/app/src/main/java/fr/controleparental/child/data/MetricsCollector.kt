@@ -136,10 +136,6 @@ class MetricsCollector(private val context: Context) {
                     putOpt("is_charging", status.isCharging)
                     putOpt("storage_total_bytes", status.storageTotalBytes)
                     putOpt("storage_free_bytes", status.storageFreeBytes)
-                    putOpt("perm_usage_access", status.permUsageAccess)
-                    putOpt("perm_overlay", status.permOverlay)
-                    putOpt("perm_notifications", status.permNotifications)
-                    putOpt("perm_location", status.permLocation)
                     put("captured_at", iso(capturedAt))
                 },
             )

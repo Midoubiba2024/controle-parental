@@ -76,11 +76,6 @@ export interface DeviceStatus {
   is_charging: boolean | null;
   storage_total_bytes: number | null;
   storage_free_bytes: number | null;
-  // LOT 8b — état des protections (null = non renseigné par un ancien client).
-  perm_usage_access: boolean | null;
-  perm_overlay: boolean | null;
-  perm_notifications: boolean | null;
-  perm_location: boolean | null;
   captured_at: string;
 }
 

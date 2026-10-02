@@ -50,21 +50,6 @@ class ReinforcedEnforcer(private val context: Context) {
         }
     }
 
-    /**
-     * Configure l'app comme VPN « always-on » du système (device owner uniquement).
-     * C'est le mécanisme FIABLE de relance du filtrage après redémarrage : Android
-     * redémarre lui-même un VPN always-on au boot (pas de contrainte FGS-depuis-boot).
-     * `lockdown = false` IMPÉRATIF : on ne bloque JAMAIS le trafic quand le VPN est
-     * absent (notre VPN est fail-open, DNS-only ; les urgences/112 et la connectivité
-     * ne doivent jamais être entravés — docs/02-CONFORMITE.md). No-op hors device owner.
-     */
-    fun setAlwaysOnVpn(enabled: Boolean) {
-        if (!isDeviceOwner()) return
-        runCatching {
-            dpm.setAlwaysOnVpnPackage(admin, if (enabled) context.packageName else null, false)
-        }
-    }
-
     /** Active/lève les restrictions système anti-contournement (device owner). */
     fun setSystemSettingsLock(enabled: Boolean) {
         if (!isDeviceOwner()) return

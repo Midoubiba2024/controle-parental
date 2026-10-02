@@ -1,21 +1,14 @@
 package fr.controleparental.child.data
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Environment
 import android.os.StatFs
-import android.provider.Settings
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 
 /**
- * État de l'appareil : batterie & stockage (veille v2 — V17) + état des PERMISSIONS
- * clés (LOT 8b : signalement transparent du retrait d'une autorisation). Métadonnées
- * uniquement — jamais de contenu.
+ * État de l'appareil : batterie & stockage (veille v2 — V17). Métadonnées.
  */
 class DeviceStatusCollector(private val context: Context) {
 
@@ -24,12 +17,6 @@ class DeviceStatusCollector(private val context: Context) {
         val isCharging: Boolean?,
         val storageTotalBytes: Long?,
         val storageFreeBytes: Long?,
-        // État des protections (true=accordée, false=révoquée). Remonté pour que le
-        // parent voie, en toute transparence, qu'une protection est désactivée.
-        val permUsageAccess: Boolean?,
-        val permOverlay: Boolean?,
-        val permNotifications: Boolean?,
-        val permLocation: Boolean?,
     )
 
     fun collect(): StatusRow {
@@ -53,26 +40,11 @@ class DeviceStatusCollector(private val context: Context) {
         val total = stat.blockCountLong * stat.blockSizeLong
         val free = stat.availableBlocksLong * stat.blockSizeLong
 
-        // État des permissions clés (best-effort — chaque lecture est protégée).
-        val permUsage = runCatching { UsageStatsCollector(context).hasUsageAccess() }.getOrNull()
-        val permOverlay = runCatching { Settings.canDrawOverlays(context) }.getOrNull()
-        val permNotif = runCatching { NotificationManagerCompat.from(context).areNotificationsEnabled() }.getOrNull()
-        val permLoc = runCatching {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-        }.getOrNull()
-
         return StatusRow(
             batteryLevel = pct,
             isCharging = charging,
             storageTotalBytes = total,
             storageFreeBytes = free,
-            permUsageAccess = permUsage,
-            permOverlay = permOverlay,
-            permNotifications = permNotif,
-            permLocation = permLoc,
         )
     }
 }

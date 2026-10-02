@@ -128,15 +128,12 @@
             android:name=".location.GeofenceBroadcastReceiver"
             android:exported="false" />
 
-        <!-- Relance la supervision + le filtrage après un redémarrage OU une mise à
-             jour de l'app (MY_PACKAGE_REPLACED, livré uniquement à l'app remplacée —
-             aucun filtre de données requis). -->
+        <!-- Relance la supervision après redémarrage. -->
         <receiver
             android:name=".service.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 
