@@ -275,14 +275,14 @@ do $$ begin
   create policy safety_settings_insert on public.safety_settings
     for insert to authenticated
     with check (app.is_parent_of(family_id)
-                and family_id = (select c.family_id from public.children c where c.id = child_id));
+                and family_id = (select c.family_id from public.children c where c.id = safety_settings.child_id));
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy safety_settings_update on public.safety_settings
     for update to authenticated
     using (app.is_parent_of(family_id))
     with check (app.is_parent_of(family_id)
-                and family_id = (select c.family_id from public.children c where c.id = child_id));
+                and family_id = (select c.family_id from public.children c where c.id = safety_settings.child_id));
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy safety_settings_delete on public.safety_settings
@@ -331,7 +331,8 @@ do $$ begin
     with check (child_id = app.current_child_id()
                 and app.device_belongs_to_current_child(device_id)
                 and family_id = (select c.family_id from public.children c where c.id = privacy_pauses.child_id)
-                and ended_at is null);
+                and ended_at is null
+                and (created_by is null or created_by = (select auth.uid())));
 exception when duplicate_object then null; end $$;
 -- UPDATE : l'ADO uniquement (clôture, bornée par le trigger). Le parent ne peut
 -- pas lever la pause (K8). Pas de DELETE via RLS (purge L8 service_role).

@@ -8,13 +8,14 @@ import org.json.JSONObject
 /**
  * LOT 6 — Couche d'accès Supabase pour le bien-être/sécurité ado (PostgREST, sous
  * la session de l'appareil enfant). Synchronise la CONFIG (consentement, profil,
- * pause), remonte les SIGNAUX de métadonnées, reporte l'ÉTAT de l'analyse, et gère
- * la pause de confidentialité (K8).
+ * pause), remonte les SIGNAUX de métadonnées, reporte l'ÉTAT de l'analyse, gère la
+ * pause de confidentialité (K8), et lit les propres signaux de l'ado (visibilité
+ * mutuelle K6).
  *
  * 🔴 LIGNE ROUGE (docs/11-LOT6-BIEN-ETRE.md) : les charges utiles ne contiennent
- * QUE des métadonnées — catégorie, gravité, compteur, nom de paquet, horodatage.
- * JAMAIS le texte analysé, un extrait, ou un contenu de correspondance. Aucune
- * méthode de ce client n'accepte ni ne transporte de texte de notification.
+ * QUE des métadonnées — catégorie, gravité, app source, compteur, heure. JAMAIS le
+ * texte analysé, un extrait, ou un contenu. Aucune méthode de ce client n'accepte
+ * ni ne transporte de texte de notification.
  */
 class SafetyClient(private val store: SupervisionStore) {
 
@@ -22,29 +23,65 @@ class SafetyClient(private val store: SupervisionStore) {
 
     /**
      * Synchronise la config d'analyse et la met en cache. Renvoie la [SafetyConfig]
-     * à jour, ou null en cas d'échec réseau (l'appelant conserve alors le cache).
-     * Lit : `safety_settings` (consentement, visibilité mutuelle), `children`
-     * (profil d'âge — gradation : young_child ⇒ jamais d'analyse), et l'éventuelle
-     * pause de confidentialité OUVERTE (`privacy_pauses`).
+     * à jour, ou null si TOUTES les requêtes échouent (réseau) — l'appelant conserve
+     * alors le cache.
+     *
+     * 🔒 Robustesse (retour de revue #1) : chaque champ du cache n'est mis à jour
+     * QUE si SA requête a réussi. En cas d'échec PARTIEL (ex. seule `privacy_pauses`
+     * échoue), on CONSERVE la valeur précédente de `pauseActive` — défaut protecteur
+     * K8 : ne jamais relancer l'analyse pendant une pause qu'on n'a pas pu confirmer
+     * close. `lastSyncAt` (qui lève `neverSynced`) n'avance que si les GARDES
+     * (consentement + profil) sont connues de façon fiable.
      */
     suspend fun syncSettings(cache: SafetyCache): SafetyConfig? {
         val e = store.load() ?: return null
         val cid = e.childId
 
-        val settings = firstRow(client.get("safety_settings", "child_id=eq.$cid&select=analysis_enabled,mutual_visibility"))
-        val childRow = firstRow(client.get("children", "id=eq.$cid&select=age_profile"))
-        val openPause = rows(client.get("privacy_pauses", "child_id=eq.$cid&ended_at=is.null&select=id&limit=1"))
-        // Si toutes les requêtes ont échoué (réseau), on ne touche pas au cache.
-        if (settings == null && childRow == null && openPause == null) return null
+        val settingsRes = client.get("safety_settings", "child_id=eq.$cid&select=analysis_enabled,mutual_visibility")
+        val childRes = client.get("children", "id=eq.$cid&select=age_profile")
+        val pauseRes = client.get("privacy_pauses", "child_id=eq.$cid&ended_at=is.null&select=id&limit=1")
 
-        val profile = childRow?.optString("age_profile", "young_child") ?: "young_child"
-        cache.teenProfile = profile == "preteen" || profile == "teen"
-        // Absence de ligne settings = jamais configuré ⇒ désactivé (privacy by default).
-        cache.analysisEnabled = settings?.optBoolean("analysis_enabled", false) ?: false
-        cache.mutualVisibility = settings?.optBoolean("mutual_visibility", true) ?: true
-        cache.pauseActive = (openPause?.length() ?: 0) > 0
-        cache.lastSyncAt = System.currentTimeMillis()
+        val settingsOk = settingsRes is SupabaseClient.GetResult.Ok
+        val childOk = childRes is SupabaseClient.GetResult.Ok
+        val pauseOk = pauseRes is SupabaseClient.GetResult.Ok
+        if (!settingsOk && !childOk && !pauseOk) return null
+
+        if (settingsRes is SupabaseClient.GetResult.Ok) {
+            // Absence de ligne = jamais configuré ⇒ défauts (analyse OFF — privacy by default).
+            val row = firstOf(settingsRes.body)
+            cache.analysisEnabled = row?.optBoolean("analysis_enabled", false) ?: false
+            cache.mutualVisibility = row?.optBoolean("mutual_visibility", true) ?: true
+        }
+        if (childRes is SupabaseClient.GetResult.Ok) {
+            val profile = firstOf(childRes.body)?.optString("age_profile", "young_child") ?: "young_child"
+            cache.teenProfile = profile == "preteen" || profile == "teen"
+        }
+        if (pauseRes is SupabaseClient.GetResult.Ok) {
+            cache.pauseActive = bodyArray(pauseRes.body).length() > 0
+        }
+        // "Synchronisé" (neverSynced=false) seulement si les gardes sont connues.
+        if (settingsOk && childOk) cache.lastSyncAt = System.currentTimeMillis()
         return cache.toConfig()
+    }
+
+    /**
+     * Visibilité mutuelle (K6) : les propres signaux de l'ado (métadonnées), pour
+     * affichage lecture seule dans « mes données ». Catégorie + gravité + heure —
+     * jamais de contenu (il n'existe pas en base).
+     */
+    suspend fun fetchMySignals(limit: Int = 20): List<MySignal> {
+        val e = store.load() ?: return emptyList()
+        val res = client.get(
+            "safety_signals",
+            "child_id=eq.${e.childId}&select=category,severity,occurred_at&order=occurred_at.desc&limit=$limit",
+        )
+        val arr = (res as? SupabaseClient.GetResult.Ok)?.let { bodyArray(it.body) } ?: return emptyList()
+        val out = ArrayList<MySignal>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out.add(MySignal(o.optString("category"), o.optString("severity"), o.optString("occurred_at")))
+        }
+        return out
     }
 
     /**
@@ -111,15 +148,15 @@ class SafetyClient(private val store: SupervisionStore) {
         return ok
     }
 
-    // --- Helpers (même forme que FilterClient) ------------------------------
-    private fun rows(res: SupabaseClient.GetResult): JSONArray? = when (res) {
-        is SupabaseClient.GetResult.Ok -> runCatching { JSONArray(res.body) }.getOrDefault(JSONArray())
-        is SupabaseClient.GetResult.Error -> null
-    }
+    /** Signal de l'ado (métadonnées seulement) pour la visibilité mutuelle. */
+    data class MySignal(val category: String, val severity: String, val occurredAtIso: String)
 
-    private fun firstRow(res: SupabaseClient.GetResult): JSONObject? {
-        val arr = rows(res) ?: return null
-        return if (arr.length() > 0) arr.optJSONObject(0) else null
+    // --- Helpers ------------------------------------------------------------
+    private fun bodyArray(body: String): JSONArray = runCatching { JSONArray(body) }.getOrDefault(JSONArray())
+
+    private fun firstOf(body: String): JSONObject? {
+        val a = bodyArray(body)
+        return if (a.length() > 0) a.optJSONObject(0) else null
     }
 
     private fun nowIso(): String = java.time.Instant.now().toString()

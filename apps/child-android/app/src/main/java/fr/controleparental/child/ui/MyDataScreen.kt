@@ -153,14 +153,21 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
     var listenerEnabled by remember { mutableStateOf(SafetyNotificationListener.isEnabled(context)) }
     var teenProfile by remember { mutableStateOf(safetyCache.teenProfile) }
     var analysisEnabled by remember { mutableStateOf(safetyCache.analysisEnabled) }
+    var mutualVisibility by remember { mutableStateOf(safetyCache.mutualVisibility) }
     var pauseActive by remember { mutableStateOf(safetyCache.pauseActive) }
+    var mySignals by remember { mutableStateOf<List<SafetyClient.MySignal>>(emptyList()) }
     var safetyBusy by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (Config.featureSafetySignals) {
             safetyClient.syncSettings(safetyCache)
             teenProfile = safetyCache.teenProfile
             analysisEnabled = safetyCache.analysisEnabled
+            mutualVisibility = safetyCache.mutualVisibility
             pauseActive = safetyCache.pauseActive
+            // Visibilité mutuelle (K6) : l'ado voit SES propres signaux (métadonnées).
+            if (safetyCache.teenProfile && safetyCache.mutualVisibility) {
+                mySignals = safetyClient.fetchMySignals()
+            }
         }
     }
     val listenerSettings = rememberLauncherForActivityResult(
@@ -262,11 +269,16 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     "enregistré — pas seulement les sites bloqués. Tes parents ont activé " +
                     "ce réglage ; tu peux leur demander de le désactiver."
             else null,
-            if (showSafety && analysisEnabled)
-                "Le texte de tes notifications est analysé SUR CET APPAREIL pour repérer des " +
+            if (showSafety && analysisEnabled && listenerEnabled && !pauseActive)
+                "Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer des " +
                     "situations de danger (harcèlement, mal-être, contact suspect…). Tes parents " +
                     "reçoivent seulement une ALERTE de catégorie (ex. « harcèlement ») — JAMAIS " +
                     "tes messages, jamais le texte. Tu peux l'arrêter ou mettre une pause."
+            else if (showSafety && analysisEnabled)
+                "Le texte de tes notifications SERA analysé sur cet appareil (pour repérer un " +
+                    "danger) UNIQUEMENT quand tu auras accordé l'accès aux notifications et hors " +
+                    "pause. Même alors, tes parents ne reçoivent qu'une alerte de catégorie — " +
+                    "jamais tes messages."
             else null,
         ).filterNotNull().forEach {
             Text("•  $it", style = MaterialTheme.typography.bodyMedium)
@@ -441,10 +453,16 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Le texte de tes notifications est analysé SUR CET APPAREIL pour repérer " +
-                            "des situations de danger. Tes parents ne reçoivent qu'une alerte de " +
-                            "catégorie — jamais le texte. C'est toi qui gardes la main : tu peux " +
-                            "retirer l'accès aux notifications à tout moment.",
+                        if (analysisEnabled && listenerEnabled && !pauseActive)
+                            "Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer " +
+                                "des situations de danger. Tes parents ne reçoivent qu'une alerte de " +
+                                "catégorie — jamais le texte. C'est toi qui gardes la main : tu peux " +
+                                "retirer l'accès aux notifications à tout moment."
+                        else
+                            "Si tu l'actives, le texte de tes notifications SERA analysé SUR CET " +
+                                "APPAREIL pour repérer un danger — tes parents ne recevraient qu'une " +
+                                "alerte de catégorie, jamais le texte. Rien n'est analysé tant que " +
+                                "l'accès n'est pas accordé (et c'est en pause si tu le demandes).",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -479,6 +497,28 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     }
                 }
             }
+
+            // Visibilité mutuelle (K6) : l'ado voit SES propres signaux (métadonnées :
+            // catégorie + gravité + date). Jamais de contenu (il n'existe pas en base).
+            if (mutualVisibility && mySignals.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                InfoCard("Ce que tes parents voient de ton côté (visibilité mutuelle)") {
+                    Spacer(Modifier.height(4.dp))
+                    mySignals.take(20).forEach { s ->
+                        Text(
+                            "•  ${safetyCategoryLabelFr(s.category)} — ${safetySeverityLabelFr(s.severity)}" +
+                                (s.occurredAtIso.take(10).let { if (it.isNotBlank()) " · $it" else "" }),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Text(
+                        "Ce sont les mêmes alertes de catégorie que tes parents reçoivent — " +
+                            "jamais le texte de tes messages.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -488,6 +528,23 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+/** Libellé FR d'une catégorie de signal (wire enum app.safety_category). */
+private fun safetyCategoryLabelFr(wire: String): String = when (wire) {
+    "harassment" -> "Harcèlement"
+    "grooming" -> "Contact suspect"
+    "sexual_content" -> "Contenu sexuel"
+    "self_harm" -> "Mal-être"
+    "drugs" -> "Drogues"
+    else -> "Autre"
+}
+
+/** Libellé FR d'une gravité de signal (wire enum app.safety_severity). */
+private fun safetySeverityLabelFr(wire: String): String = when (wire) {
+    "high" -> "gravité élevée"
+    "medium" -> "gravité moyenne"
+    else -> "gravité faible"
 }
 
 /** Résume le jeu de règles en phrases claires et non culpabilisantes (K2). */

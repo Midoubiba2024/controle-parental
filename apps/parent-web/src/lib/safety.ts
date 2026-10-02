@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase";
 import type {
   PrivacyPause, SafetyCategory, SafetySettings, SafetySignal, SafetySeverity, SafetyStatus,
@@ -33,10 +33,13 @@ export function useSafety(familyId: string | null, childId: string | null): Safe
   const [openPauses, setOpenPauses] = useState<PrivacyPause[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // #9 — ne montrer le loader plein écran qu'au PREMIER chargement ; un reload
+  // (acquittement, événement Realtime) ne doit pas faire clignoter toute la vue.
+  const loadedOnce = useRef(false);
 
   const load = useCallback(async () => {
     if (!familyId || !childId) { setLoading(false); return; }
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     setError(null);
 
     const [sg, se, st, pa] = await Promise.all([
@@ -53,10 +56,31 @@ export function useSafety(familyId: string | null, childId: string | null): Safe
     if (!st.error) setStatus(st.data as SafetyStatus[]);
     if (!pa.error) setOpenPauses(pa.data as PrivacyPause[]);
 
+    loadedOnce.current = true;
     setLoading(false);
   }, [familyId, childId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // #3 — Realtime : les alertes/pauses/état d'analyse arrivent en DIRECT. La RLS
+  // s'applique au flux ; on filtre par child_id. Toute mutation → rechargement
+  // (métadonnées seulement — aucun contenu ne transite, cf. ligne rouge).
+  useEffect(() => {
+    if (!childId) return;
+    const channel = supabase
+      .channel(`safety:${childId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "safety_signals", filter: `child_id=eq.${childId}` },
+        () => { void load(); })
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "safety_status", filter: `child_id=eq.${childId}` },
+        () => { void load(); })
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "privacy_pauses", filter: `child_id=eq.${childId}` },
+        () => { void load(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [childId, load]);
 
   return { signals, settings, status, openPauses, loading, error, reload: load };
 }
