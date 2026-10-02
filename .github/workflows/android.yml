@@ -44,8 +44,13 @@ jobs:
       - name: Tests unitaires JVM
         run: ./gradlew :app:testWithBgLocationDebugUnitTest $GRADLE_ARGS
 
-      - name: APK debug (withBgLocation)
-        run: ./gradlew :app:assembleWithBgLocationDebug $GRADLE_ARGS
+      # Android Lint : détecte notamment les API trop récentes non gardées pour
+      # minSdk 26 (NewApi), que la compilation Kotlin ne signale pas.
+      - name: Android Lint
+        run: ./gradlew :app:lintWithBgLocationDebug $GRADLE_ARGS
+
+      - name: APK debug (withBgLocation + noBgLocation)
+        run: ./gradlew :app:assembleWithBgLocationDebug :app:assembleNoBgLocationDebug $GRADLE_ARGS
 
       - name: Keystore release (depuis les secrets)
         if: env.HAS_SIGNING == 'true'
@@ -75,6 +80,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/apk"
           for f in $(find app/build/outputs/apk -name '*.apk'); do
             case "$f" in
+              # Variante noBgLocation : compilée pour vérification, non publiée.
+              *noBgLocation*) ;;
               *release*) cp "$f" "$RUNNER_TEMP/apk/controle-parental-enfant-release-v${{ github.run_number }}.apk" ;;
               *debug*)   cp "$f" "$RUNNER_TEMP/apk/controle-parental-enfant-DEBUG-v${{ github.run_number }}.apk" ;;
             esac
