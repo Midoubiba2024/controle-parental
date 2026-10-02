@@ -147,7 +147,10 @@ class SupervisionService : Service() {
                 runCatching { syncRules() }
                 runCatching { location.onSync() }   // réglages + ré-enregistrement geofences
             }
-            if (tick % COMMANDS_EVERY == 0L) runCatching { executor.processPending() }
+            if (tick % COMMANDS_EVERY == 0L) {
+                runCatching { executor.processPending() }
+                runCatching { executor.processMessages() }  // messages parent (LOT 5)
+            }
             // Localisation : relevé périodique (si activé) + diffusion SOS live.
             // Le coordinateur borne lui-même ses cadences, l'appel à chaque tick
             // est donc bon marché.

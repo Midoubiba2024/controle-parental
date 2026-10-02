@@ -102,6 +102,22 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         locMode = runCatching { locationRepo.settings().mode }.getOrNull()
     }
 
+    // --- LOT 5 — Messages des parents (repli consultable, cf. revue #2) -------
+    // Si les notifications sont coupées, le service ne notifie pas ; l'enfant
+    // retrouve ici les messages. L'ouverture de l'écran POSE l'accusé de lecture
+    // et avance le filigrane (seulement si le PATCH read_at réussit).
+    val messageClient = remember { PolicyClient(store) }
+    var parentMessages by remember { mutableStateOf<List<PolicyClient.MessageRow>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching {
+            val msgs = messageClient.newParentMessages(null)
+            parentMessages = msgs
+            if (msgs.isNotEmpty() && messageClient.markMessagesRead(msgs.map { it.id })) {
+                store.messageWatermark = msgs.last().createdAt
+            }
+        }
+    }
+
     // --- LOT 4 — Filtrage du web (VpnService local) --------------------------
     val filterCache = remember { FilterCache(context) }
     val filterConfig = remember { FilterClient(store).fromCache(filterCache) }
@@ -244,6 +260,18 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
+
+        if (parentMessages.isNotEmpty()) {
+            Text("Messages de mes parents", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            parentMessages.takeLast(20).forEach { m ->
+                Card(Modifier.fillMaxWidth()) {
+                    Text(m.body, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
 
         Text("Autorisations", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))

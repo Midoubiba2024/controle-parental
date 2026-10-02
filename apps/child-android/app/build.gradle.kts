@@ -140,4 +140,7 @@ dependencies {
 
     // LOT 3 — Localisation : FusedLocationProviderClient + GeofencingClient.
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // Tests unitaires JVM (moteur de règles PUR, sans dépendance Android).
+    testImplementation("junit:junit:4.13.2")
 }
