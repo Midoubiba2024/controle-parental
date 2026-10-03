@@ -1,0 +1,13 @@
+-- =============================================================================
+-- CORRECTIF (production) : le rôle `authenticated` n'avait pas USAGE sur le schéma
+-- `app`, ce qui empêchait l'évaluation de TOUTES les policies RLS (elles appellent
+-- app.is_parent_of / app.is_owner_of / app.current_child_id / ...) →
+-- « permission denied for schema app » dès la première requête d'un parent
+-- réellement connecté (jamais déclenché avant car aucun login réel n'avait eu lieu).
+--
+-- Les droits EXECUTE sur les fonctions helper étaient déjà accordés à `authenticated` ;
+-- seul le USAGE du schéma manquait. Additif et idempotent. Les fonctions sensibles
+-- (run_data_retention, guards, log_rule_change) gardent leur EXECUTE restreint, donc
+-- accorder USAGE du schéma n'élargit pas la surface au-delà des helpers déjà exposés.
+-- =============================================================================
+grant usage on schema app to authenticated;
