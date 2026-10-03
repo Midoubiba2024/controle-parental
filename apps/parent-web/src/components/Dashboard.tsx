@@ -260,7 +260,9 @@ function CreateFamily({ onCreated }: { onCreated: () => void }) {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr(null);
-    const { error } = await supabase.functions.invoke("create-family", { body: { name } });
+    // RPC SECURITY DEFINER (migration 0027) : remplace l'Edge Function create-family,
+    // qui échouait faute de clé service_role fiable côté Edge Functions.
+    const { error } = await supabase.rpc("create_family", { p_name: name });
     setBusy(false);
     if (error) { setErr(error.message); return; }
     setName("");
