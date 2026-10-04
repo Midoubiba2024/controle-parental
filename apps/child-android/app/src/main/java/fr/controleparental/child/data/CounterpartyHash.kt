@@ -38,8 +38,8 @@ object CounterpartyHash {
     fun of(number: String?, presentation: Int, pepper: String): String? =
         if (isAnonymous(number, presentation)) null else sha256("$pepper:${number!!.trim()}")
 
-    /** Hash d'une valeur brute (même format que [of], pour un marqueur constant). */
-    fun raw(value: String, pepper: String): String = sha256("$pepper:$value")
+    /** Hash d'une valeur brute, au même format que [of]. */
+    internal fun raw(value: String, pepper: String): String = sha256("$pepper:$value")
 
     private fun sha256(input: String): String =
         MessageDigest.getInstance("SHA-256").digest(input.toByteArray())

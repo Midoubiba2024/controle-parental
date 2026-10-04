@@ -69,25 +69,18 @@ class CallLogCollector(private val context: Context) {
                 val durationS = if (iDur >= 0) c.getLong(iDur) else 0
                 rows += CallRow(
                     direction = directionOf(type),
-                    // Appel anonyme (absent, vide, privé, masqué) : CounterpartyHash.of
-                    // renvoie null. IDEMPOTENCE (provisoire) : tant que la contrainte
-                    // unique (device_id, occurred_at, counterparty_hash, direction) est
-                    // NULLS DISTINCT, null créerait des doublons au rejeu ; on garde
-                    // donc le hash SENTINELLE stable, en attendant la migration
-                    // NULLS NOT DISTINCT (LOT 10b). Le sentinel n'expose aucun numéro.
-                    counterpartyHash = CounterpartyHash.of(number, presentation, Config.commHashPepper)
-                        ?: CounterpartyHash.raw(NO_NUMBER_SENTINEL, Config.commHashPepper),
+                    // Appel anonyme (absent, vide, privé, masqué) → null : la console
+                    // affiche « Numéro masqué », sans faux correspondant commun.
+                    // IDEMPOTENCE : la contrainte comm_events_dedup_key est NULLS NOT
+                    // DISTINCT (migration 0029), donc le rejeu d'un appel anonyme ne
+                    // crée pas de doublon.
+                    counterpartyHash = CounterpartyHash.of(number, presentation, Config.commHashPepper),
                     durationMs = durationS * 1000,
                     occurredAt = date,
                 )
             }
         }
         return rows
-    }
-
-    private companion object {
-        // Marqueur stable pour « numéro absent/inconnu » (appels masqués, privés).
-        const val NO_NUMBER_SENTINEL = "__no_number__"
     }
 
     private fun directionOf(type: Int): String = when (type) {

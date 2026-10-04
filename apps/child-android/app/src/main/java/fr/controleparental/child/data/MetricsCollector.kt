@@ -102,7 +102,9 @@ class MetricsCollector(private val context: Context) {
                     base(e).apply {
                         put("kind", "call")
                         put("direction", r.direction)
-                        putOpt("counterparty_hash", r.counterpartyHash)
+                        // null EXPLICITE (appel anonyme) : PostgREST exige les mêmes clés
+                        // dans tous les objets d'un envoi groupé (sinon PGRST102).
+                        put("counterparty_hash", r.counterpartyHash ?: JSONObject.NULL)
                         put("duration_ms", r.durationMs)
                         put("occurred_at", iso(r.occurredAt))
                     },
