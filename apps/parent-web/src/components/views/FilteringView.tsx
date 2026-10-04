@@ -4,7 +4,7 @@ import {
   DOMAIN_ACTION_LABEL, FILTER_CATEGORIES, FILTER_PRESETS, YOUTUBE_MODE_LABEL,
   categoryLabel, filterCategoryColor, normalizeDomain, toPolicyUpsert, useFilter,
 } from "../../lib/filter";
-import { fmtAgo, fmtDateTime } from "../../lib/format";
+import { fmtAgo, fmtAt, fmtDateTime } from "../../lib/format";
 import type { CSSProperties } from "react";
 import { Ban, CircleCheck, FolderOpen, Hand, Plus, ShieldCheck, ShieldOff, TriangleAlert, X } from "lucide-react";
 import { EmptyState, ViewSkeleton, useShowMore } from "../Ui";
@@ -134,7 +134,7 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
                       ? (s.last_revoked_at ? t("views.filtering.status.cutAgo", { ago: fmtAgo(s.last_revoked_at) }) : "")
                       : stale
                         ? t("views.filtering.status.silentSince", { ago: fmtAgo(s.updated_at) })
-                        : t("views.filtering.status.lastSeen", { when: fmtDateTime(s.updated_at) })}
+                        : t("views.filtering.status.lastSeen", { when: fmtAt(s.updated_at) })}
                   </span>
                 </span>
               </li>
@@ -368,7 +368,7 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
   busy: boolean; onRemove: (id: string) => void; empty: string;
 }) {
   const { t } = useI18n();
-  const { visible, button, truncated } = useShowMore(rules, 8);
+  const { visible, button, truncated } = useShowMore(rules);
   return (
     <div>
       <h3 className="row" style={{ gap: 8 }}>{icon} {title} <span className="muted small">{t("views.filtering.lists.count", { count: rules.length })}</span></h3>
@@ -399,7 +399,7 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
 /* ------------------------- Journal de domaines (F4-F6) ------------------- */
 function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
   const { t } = useI18n();
-  const { visible, button, truncated } = useShowMore(f.events, 15);
+  const { visible, button, truncated } = useShowMore(f.events);
   const cell = (k: "colCategory" | "colAction" | "colWhen") => t("common.cellLabel", { label: t(`views.filtering.journal.${k}`) });
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
@@ -413,7 +413,7 @@ function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
           hint={t("views.filtering.journal.emptyHint")} />
       ) : (
         <>
-        <div className={`tbl-wrap${truncated ? " truncated" : ""}`}><table className="tbl">
+        <div className={`tbl-wrap${truncated ? " truncated" : ""}`}><table className="tbl compact">
           <thead><tr>
             <th>{t("views.filtering.journal.colDomain")}</th><th>{t("views.filtering.journal.colCategory")}</th>
             <th>{t("views.filtering.journal.colAction")}</th><th>{t("views.filtering.journal.colWhen")}</th>
@@ -427,7 +427,7 @@ function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
                     <span className="sw" style={{ background: filterCategoryColor(ev.category) }} />{categoryLabel(ev.category)}
                   </span>
                 </td>
-                <td className="small" data-label={cell("colAction")}>{DOMAIN_ACTION_LABEL[ev.action]}</td>
+                <td className="small t-badge" data-label={cell("colAction")}>{DOMAIN_ACTION_LABEL[ev.action]}</td>
                 <td className="muted small" data-label={cell("colWhen")}>{fmtDateTime(ev.occurred_at)}</td>
               </tr>
             ))}

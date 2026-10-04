@@ -167,6 +167,33 @@ async function shot(page, name) {
   console.log(`  ✓ ${name}`);
 }
 
+/**
+ * Contrôle T3 : l'habillage Cocon de Leaflet l'emporte bien sur leaflet.css
+ * (chargé après, plus .leaflet-touch). En sombre, l'attribution doit prendre
+ * --c-ink-2 sur --c-surface — pas le blanc/noir de Leaflet.
+ */
+const failures = [];
+async function checkLeafletTheme(page, name) {
+  const r = await page.evaluate(() => {
+    const el = document.querySelector(".map-frame .leaflet-control-attribution");
+    if (!el) return null;
+    // Couleur attendue : résolue par le navigateur via un élément témoin.
+    const probe = document.createElement("span");
+    probe.style.color = "var(--c-ink-2)";
+    probe.style.backgroundColor = "var(--c-surface)";
+    document.body.appendChild(probe);
+    const want = getComputedStyle(probe);
+    const got = getComputedStyle(el);
+    const out = { color: got.color, bg: got.backgroundColor, wantColor: want.color, wantBg: want.backgroundColor };
+    probe.remove();
+    return out;
+  });
+  if (!r) { failures.push(`${name} : attribution Leaflet introuvable`); return; }
+  if (r.color !== r.wantColor || r.bg !== r.wantBg) {
+    failures.push(`${name} : attribution ${r.color} sur ${r.bg} (attendu ${r.wantColor} sur ${r.wantBg})`);
+  } else console.log(`  ✓ ${name} : attribution Leaflet aux couleurs Cocon`);
+}
+
 /** Contrôle : aucun défilement horizontal de la page. */
 async function checkOverflow(page, name) {
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -206,14 +233,15 @@ try {
         await page.waitForSelector(".shell h1", { timeout: 20_000 });
         await settle(page);
         if (view === "family") {
-          await page.getByRole("button", { name: /Générer un code d'appairage/ }).first().click();
+          await page.getByRole("button", { name: /Générer un code d.appairage/ }).first().click();
           await page.waitForSelector(".ticket");
           await page.waitForTimeout(200);
         }
         await checkOverflow(page, `${view}-${vpName}-${theme}`);
+        if (theme === "dark" && (view === "location" || view === "security")) await checkLeafletTheme(page, `${view}-${vpName}-${theme}`);
         await shot(page, `${view}-${vpName}-${theme}`);
         if (vpName !== "desktop" && view === "overview") {
-          await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+          await page.getByRole("button", { name: /^Ouvrir le menu/ }).click();
           await page.waitForTimeout(300);
           await page.screenshot({ path: join(OUT, `drawer-${vpName}-${theme}.png`), animations: "disabled" });
           shots.push(join(OUT, `drawer-${vpName}-${theme}.png`));
@@ -231,3 +259,7 @@ try {
 }
 
 console.log(`\n${shots.length} captures dans ${OUT}`);
+if (failures.length) {
+  console.error(`\n${failures.length} contrôle(s) en échec :\n  - ${failures.join("\n  - ")}`);
+  process.exitCode = 1;
+}

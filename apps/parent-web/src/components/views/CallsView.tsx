@@ -57,7 +57,7 @@ export function CallsView({ obs }: { obs: ObservationData }) {
           <div className="card">
             <h2><Trans k="views.calls.logTitle" params={{ total: counts.total }}
               tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
-            <div className="tbl-wrap"><table className="tbl">
+            <div className="tbl-wrap"><table className="tbl compact">
               <thead>
                 <tr>
                   <th>{t("views.calls.columns.counterparty")}</th>
@@ -70,9 +70,10 @@ export function CallsView({ obs }: { obs: ObservationData }) {
                 {comms.map((c) => (
                   <tr key={c.id}>
                     <td>{counterparty(c)}</td>
-                    <td data-label={t("common.cellLabel", { label: t("views.calls.columns.direction") })}>
+                    <td className="t-badge" data-label={t("common.cellLabel", { label: t("views.calls.columns.direction") })}>
                       <span className={`pill ${c.direction}`}>{DIR_LABEL[c.direction]}</span></td>
-                    <td data-label={t("common.cellLabel", { label: t("views.calls.columns.duration") })}>
+                    <td className={connected(c) ? undefined : "t-none"}
+                      data-label={t("common.cellLabel", { label: t("views.calls.columns.duration") })}>
                       {connected(c) ? fmtDuration(c.duration_ms ?? 0) : t("common.none")}</td>
                     <td className="muted" data-label={t("common.cellLabel", { label: t("views.calls.columns.date") })}>
                       {fmtDateTime(c.occurred_at)}</td>

@@ -22,7 +22,11 @@ export interface ObservationData {
   // dans usage_daily), écrit dans le fuseau de l'APPAREIL enfant. On ne recalcule
   // pas « aujourd'hui » dans le fuseau du navigateur parent (familles multi-fuseaux).
   anchorDay: string;            // YYYY-MM-DD
+  // `loading` : PREMIER chargement d'un enfant (squelette). `refreshing` :
+  // relecture en arrière-plan (minute, retour au premier plan) — l'affichage
+  // reste en place, aucune vue n'est démontée.
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   reload: () => void;
 }
@@ -43,6 +47,7 @@ export function useObservation(childId: string | null): ObservationData {
   const [devices, setDevices] = useState<Device[]>([]);
   const [anchorDay, setAnchorDay] = useState<string>(dayKey(0));
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -57,12 +62,13 @@ export function useObservation(childId: string | null): ObservationData {
     // Changement d'enfant : on VIDE d'abord les données de l'enfant précédent
     // (jamais affichées sous le prénom du nouvel enfant pendant le chargement).
     // Un simple rechargement du même enfant garde l'affichage en place.
-    if (childId !== loadedFor.current) {
+    const firstLoad = childId !== loadedFor.current;
+    if (firstLoad) {
       setUsage([]); setInventory([]); setStatus([]); setComms([]); setDevices([]);
       loadedFor.current = childId;
     }
-    if (!childId) { setLoading(false); return; }
-    setLoading(true);
+    if (!childId) { setLoading(false); setRefreshing(false); return; }
+    if (firstLoad) setLoading(true); else setRefreshing(true);
     setError(null);
     const since = dayKey(USAGE_WINDOW_DAYS);
 
@@ -95,12 +101,13 @@ export function useObservation(childId: string | null): ObservationData {
       if (!cm.error) setComms(cm.data as CommEvent[]);
       if (!dv.error) setDevices(dv.data as Device[]);
       setLoading(false);
+      setRefreshing(false);
     })();
 
     return () => { active = false; };
   }, [childId, reloadToken]);
 
-  return { usage, inventory, status, comms, devices, anchorDay, loading, error, reload };
+  return { usage, inventory, status, comms, devices, anchorDay, loading, refreshing, error, reload };
 }
 
 function latestPerDevice(rows: DeviceStatus[]): DeviceStatus[] {

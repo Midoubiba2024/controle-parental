@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import {
   ArrowRight, Battery, BatteryCharging, Check, Clock3, Database, EyeOff, LayoutGrid, ShieldCheck,
 } from "lucide-react";
@@ -6,7 +6,7 @@ import {
   byApp, byCategory, dailyTotals, totalForDay, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, dayKey, dayTick, fmtBytes, fmtDayLabel,
+  appLabelOf, categoryColor, categoryLabel, dayKey, dayLabelFor, dayTick, dayTickMin, fmtBytes, 
   fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { useDailyLimits } from "../../lib/rules";
@@ -28,13 +28,16 @@ export function OverviewView({ obs, child, onNavigate }: {
   const todayMs = totalForDay(usage, today);
   const { limitFor } = useDailyLimits(child.id);
 
-  // --- Tendance « jusqu'ici, vs hier (journée entière) » : seulement si la veille
-  // a des données RÉELLES et si le jour de référence est bien aujourd'hui (sinon
-  // l'appareil n'a rien remonté depuis plus d'un jour : comparaison trompeuse).
+  // --- Tendance « par rapport à hier » (aujourd'hui jusqu'ici, hier en journée
+  // entière) : seulement si la veille a des données RÉELLES, si le jour de
+  // référence est bien aujourd'hui ET si le dernier relevé date de moins de 24 h
+  // (sinon l'appareil ne remonte plus rien : comparaison trompeuse).
   const yesterday = shiftDay(anchorDay, -1);
   const hasYesterday = usage.some((u) => u.day === yesterday);
   const anchorIsToday = anchorDay === dayKey(0);
-  const diffMs = hasYesterday && anchorIsToday ? todayMs - totalForDay(usage, yesterday) : null;
+  const lastReading = status.reduce((max, s) => Math.max(max, new Date(s.captured_at).getTime() || 0), 0);
+  const recent = lastReading > 0 && Date.now() - lastReading < 24 * 3_600_000;
+  const diffMs = hasYesterday && anchorIsToday && recent ? todayMs - totalForDay(usage, yesterday) : null;
 
   // --- 7 jours + limite quotidienne de chaque jour (si une limite existe).
   const days = Array.from({ length: 7 }, (_, i) => shiftDay(anchorDay, -(6 - i)));
@@ -42,8 +45,8 @@ export function OverviewView({ obs, child, onNavigate }: {
   const limitsMs = days.map((d) => { const m = limitFor(d); return m == null ? null : m * 60_000; });
   const hasLimit = limitsMs.some((l) => l != null);
   const barData: Slice[] = days.map((d, i) => ({
-    key: d, label: fmtDayLabel(d), value: totals[i], color: "var(--chart-bar)",
-    tick: dayTick(d, 7, i),
+    key: d, label: dayLabelFor(d, 7), value: totals[i], color: "var(--chart-bar)",
+    tick: dayTick(d, 7, i), tickMin: dayTickMin(d, 7, i),
   }));
   const daysWithData = totals.filter((v) => v > 0).length;
   const avg = daysWithData > 0 ? totals.reduce((s, v) => s + v, 0) / daysWithData : 0;
@@ -75,10 +78,13 @@ export function OverviewView({ obs, child, onNavigate }: {
       <section className="grid cols-4" aria-label={t("views.overview.tilesLabel")}>
         <Tile label={t("views.overview.tiles.screenTimeToday")} value={fmtDuration(todayMs)} icon={Clock3} tone="accent"
           foot={diffMs != null && (
-            <span className={`trend ${diffMs < 0 ? "down" : diffMs > 0 ? "up" : "flat"}`}>
-              {diffMs === 0 ? t("views.overview.trend.same")
-                : t(diffMs < 0 ? "views.overview.trend.less" : "views.overview.trend.more", { duration: fmtDuration(Math.abs(diffMs)) })}
-            </span>
+            <>
+              <span className={`trend ${diffMs < 0 ? "down" : diffMs > 0 ? "up" : "flat"}`}>
+                {diffMs === 0 ? t("views.overview.trend.same")
+                  : t(diffMs < 0 ? "views.overview.trend.less" : "views.overview.trend.more", { duration: fmtDuration(Math.abs(diffMs)) })}
+              </span>
+              <span className="trend-caption">{t("views.overview.trend.caption")}</span>
+            </>
           )} />
         <Tile label={t("views.overview.tiles.installedApps")} value={activeApps.length || t("common.none")} icon={LayoutGrid} tone="plum"
           foot={lastInstalled && t("views.overview.tiles.lastInstalled", {
@@ -104,47 +110,34 @@ export function OverviewView({ obs, child, onNavigate }: {
           ) : null} />
       </section>
 
-      <div className="grid dash-wide">
-        <section className="card stack-card" aria-labelledby="ov-7d">
-          <CardHead id="ov-7d" title={t("views.overview.last7Days")}
-            sub={avg > 0 ? t("views.overview.averagePerDay", { avg: fmtDuration(avg) }) : undefined}
-            action={totals.some((v) => v > 0) && (
-              <div className="legend" style={{ marginTop: 0 }}>
-                <span className="it"><span className="sw" style={{ background: "var(--c-accent)" }} />{t("views.overview.legend.today")}</span>
-                <span className="it"><span className="sw" style={{ background: "var(--chart-bar)" }} />{t("views.overview.legend.previousDays")}</span>
-                {hasLimit && <span className="it"><span className="sw" style={{ background: "var(--chart-bar-over)" }} />{t("views.overview.legend.overLimit")}</span>}
-                {hasLimit && <span className="it"><span className="sw-line" />{t("views.overview.legend.dailyLimit")}</span>}
-              </div>
-            )} />
-          {totals.some((v) => v > 0) ? (
-            <>
-              <Bars data={barData} fmt={fmtDuration} valueFmt={fmtDurationShort} highlightKey={today}
-                limits={hasLimit ? limitsMs : undefined}
-                limitLabel={constantLimit != null ? <Trans k="views.overview.limitLabel" params={{ value: fmtDuration(constantLimit) }}
-                  tags={{ l: (c) => <span style={{ display: "block" }}>{c}</span> }} /> : undefined} />
-              {hasLimit && (
-                <p className="card-sub card-foot">
-                  {exceeded > 0 ? t("views.overview.limitExceeded", { count: exceeded }) : t("views.overview.limitNeverExceeded")}
-                </p>
-              )}
-            </>
-          ) : <EmptyState icon={Clock3} title={t("views.overview.noScreenTimeTitle")}
-                hint={t("views.overview.noScreenTimeHint")} />}
-        </section>
+      <section className="card stack-card" aria-labelledby="ov-7d">
+        <CardHead id="ov-7d" title={t("views.overview.last7Days")}
+          sub={avg > 0 ? t("views.overview.averagePerDay", { avg: fmtDuration(avg) }) : undefined}
+          action={totals.some((v) => v > 0) && (
+            <div className="legend" style={{ marginTop: 0 }}>
+              <span className="it"><span className="sw" style={{ background: "var(--c-accent)" }} />{t("views.overview.legend.today")}</span>
+              <span className="it"><span className="sw" style={{ background: "var(--chart-bar)" }} />{t("views.overview.legend.previousDays")}</span>
+              {hasLimit && <span className="it"><span className="sw" style={{ background: "var(--chart-bar-over)" }} />{t("views.overview.legend.overLimit")}</span>}
+              {hasLimit && <span className="it"><span className="sw-line" />{t("views.overview.legend.dailyLimit")}</span>}
+            </div>
+          )} />
+        {totals.some((v) => v > 0) ? (
+          <>
+            <Bars data={barData} fmt={fmtDuration} valueFmt={fmtDurationShort} highlightKey={today}
+              limits={hasLimit ? limitsMs : undefined}
+              limitLabel={constantLimit != null ? <Trans k="views.overview.limitLabel" params={{ value: fmtDuration(constantLimit) }}
+                tags={{ l: (c) => <span style={{ display: "block" }}>{c}</span> }} /> : undefined} />
+            {hasLimit && (
+              <p className="card-sub card-foot">
+                {exceeded > 0 ? t("views.overview.limitExceeded", { count: exceeded }) : t("views.overview.limitNeverExceeded")}
+              </p>
+            )}
+          </>
+        ) : <EmptyState icon={Clock3} title={t("views.overview.noScreenTimeTitle")}
+              hint={t("views.overview.noScreenTimeHint")} />}
+      </section>
 
-        <section className="card" aria-labelledby="ov-cat">
-          <CardHead id="ov-cat" title={t("views.overview.todayByCategory")} sub={t("views.overview.categorySubtitle")} />
-          {catSlices.length > 0 ? (
-            <>
-              <Donut data={catSlices} fmt={fmtDuration}
-                center={{ primary: fmtDuration(todayMs), secondary: t("views.overview.donutTotal") }} />
-              <CategoryList items={catSlices} fmt={fmtDuration} />
-            </>
-          ) : <EmptyState icon={LayoutGrid} title={t("views.overview.noActivityToday")} />}
-        </section>
-      </div>
-
-      <div className="grid dash-wide">
+      <div className="grid dash-wide top">
         <section className="card stack-card" aria-labelledby="ov-apps">
           <CardHead id="ov-apps" title={t("views.overview.topAppsToday")} sub={t("views.overview.topAppsSubtitle")}
             action={<button type="button" className="link" onClick={() => onNavigate("apps")}>
@@ -173,22 +166,32 @@ export function OverviewView({ obs, child, onNavigate }: {
           )}
         </section>
 
-        <TransparencyCard name={child.display_name} active={liveDevices.length > 0}
-          onPrivacy={() => onNavigate("privacy")} />
+        <section className="card" aria-labelledby="ov-cat">
+          <CardHead id="ov-cat" title={t("views.overview.todayByCategory")} sub={t("views.overview.categorySubtitle")} />
+          {catSlices.length > 0 ? (
+            <>
+              <Donut data={catSlices} fmt={fmtDuration}
+                center={{ primary: fmtDuration(todayMs), secondary: t("views.overview.donutTotal") }} />
+              <CategoryList items={catSlices} fmt={fmtDuration} />
+            </>
+          ) : <EmptyState icon={LayoutGrid} title={t("views.overview.noActivityToday")} />}
+        </section>
       </div>
+
+      <TransparencyCard name={child.display_name} active={liveDevices.length > 0}
+        onPrivacy={() => onNavigate("privacy")} />
     </div>
   );
 }
 
 /**
  * Carte de transparence : ce que le parent voit / ne voit JAMAIS. Liste STATIQUE,
- * alignée mot pour mot sur ce que l'enfant lit dans « Mes données » (app enfant :
- * strings.xml, clés shared_* et never_shared). Sur mobile, la liste « Vous voyez »
- * se replie après 3 éléments (« Voir toute la liste ») sans jamais quitter la page.
+ * alignée sur ce que l'enfant lit dans « Mes données » (app enfant : strings.xml,
+ * clés shared_* et never_shared). Pleine largeur, deux colonnes ; TOUTE la liste
+ * reste visible, sur mobile comme sur grand écran (puces compactes).
  */
 function TransparencyCard({ name, active, onPrivacy }: { name: string; active: boolean; onPrivacy: () => void }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
   const see = ["usage", "inventory", "device", "location", "filter", "calls", "safety", "exchanges"] as const;
   const never = ["content", "notifications", "pages", "passwords", "media"] as const;
   return (
@@ -202,31 +205,30 @@ function TransparencyCard({ name, active, onPrivacy }: { name: string; active: b
           <p className="t-sub">{t("views.overview.transparency.subtitle", { name })}</p>
         </div>
       </div>
-      <div>
-        <p className="t-kicker yes">{t("views.overview.transparency.youSee")}</p>
-        <ul id="t-see" className={`t-list${expanded ? "" : " collapsible"}`}>
-          {see.map((k) => (
-            <li key={k} className="yes"><Check {...icSm} size={18} />{t(`views.overview.transparency.see.${k}`)}</li>
-          ))}
-        </ul>
-        {!expanded && (
-          <button type="button" className="t-more" aria-expanded={false} aria-controls="t-see" onClick={() => setExpanded(true)}>
-            {t("views.overview.transparency.showAll")}
-          </button>
-        )}
+      <div className="t-cols">
+        <div>
+          <p className="t-kicker yes">{t("views.overview.transparency.youSee")}</p>
+          <ul>
+            {see.map((k) => (
+              <li key={k} className="yes"><Check {...icSm} size={18} />{t(`views.overview.transparency.see.${k}`)}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="t-kicker no">{t("views.overview.transparency.youNeverSee")}</p>
+          <ul>
+            {never.map((k) => (
+              <li key={k} className="no"><EyeOff {...icSm} size={18} />{t(`views.overview.transparency.never.${k}`)}</li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <div>
-        <p className="t-kicker no">{t("views.overview.transparency.youNeverSee")}</p>
-        <ul>
-          {never.map((k) => (
-            <li key={k} className="no"><EyeOff {...icSm} size={18} />{t(`views.overview.transparency.never.${k}`)}</li>
-          ))}
-        </ul>
+      <div className="t-foot">
+        <p className="t-same">{t("views.overview.transparency.sameList", { name })}</p>
+        <button type="button" className="link" onClick={onPrivacy}>
+          {t("views.overview.transparency.link")}<ArrowRight {...icSm} className="flip-rtl" />
+        </button>
       </div>
-      <p className="t-same">{t("views.overview.transparency.sameList", { name })}</p>
-      <button type="button" className="link" onClick={onPrivacy}>
-        {t("views.overview.transparency.link")}<ArrowRight {...icSm} className="flip-rtl" />
-      </button>
     </section>
   );
 }

@@ -178,7 +178,7 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
           <EmptyState icon={DoorOpen} title={t("views.location.events.emptyTitle")}
             hint={t("views.location.events.emptyHint")} />
         ) : (
-          <div className="tbl-wrap"><table className="tbl">
+          <div className="tbl-wrap"><table className="tbl compact">
             <thead><tr><th>{t("views.location.events.colEvent")}</th><th>{t("views.location.events.colZone")}</th><th>{t("views.location.events.colWhen")}</th></tr></thead>
             <tbody>
               {loc.events.slice(0, 20).map((e) => (

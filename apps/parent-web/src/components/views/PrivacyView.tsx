@@ -105,7 +105,7 @@ function RetentionCard() {
       <p className="muted small" style={{ marginTop: 0 }}>
         {t("views.privacy.retention.intro")}
       </p>
-      <div className="tbl-wrap"><table className="tbl">
+      <div className="tbl-wrap"><table className="tbl pairs">
         <thead><tr><th>{t("views.privacy.retention.colData")}</th><th>{t("views.privacy.retention.colRetention")}</th></tr></thead>
         <tbody>
           {RETENTION.map((r) => (

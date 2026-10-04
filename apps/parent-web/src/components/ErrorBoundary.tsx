@@ -42,7 +42,7 @@ function CrashScreen() {
  * ni la barre latérale ni l'en-tête. Monté avec `key={vue}` : changer de vue
  * réinitialise l'erreur et relance le chargement.
  */
-export class ViewErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean; attempt: number }> {
+export class ViewErrorBoundary extends Component<{ children: ReactNode; onRetry?: () => void }, { failed: boolean; attempt: number }> {
   state = { failed: false, attempt: 0 };
 
   static getDerivedStateFromError() {
@@ -53,7 +53,10 @@ export class ViewErrorBoundary extends Component<{ children: ReactNode }, { fail
     console.error("[vue interrompue]", error, info.componentStack);
   }
 
-  retry = () => this.setState((s) => ({ failed: false, attempt: s.attempt + 1 }));
+  retry = () => {
+    this.props.onRetry?.();
+    this.setState((s) => ({ failed: false, attempt: s.attempt + 1 }));
+  };
 
   render() {
     if (this.state.failed) return <ViewFailed onRetry={this.retry} />;

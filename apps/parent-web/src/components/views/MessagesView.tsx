@@ -99,7 +99,7 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
 
       {/* Seuls les NOUVEAUX messages de l'enfant sont annoncés (pas tout l'historique). */}
       <p className="visually-hidden" aria-live="polite">{announce}</p>
-      <div className="scroll thread" style={{ maxHeight: "min(460px, 60dvh)" }}>
+      <div className="scroll thread">
         {messages.length === 0 && !err && <EmptyState icon={MessageCircle} title={t("views.messages.emptyTitle")}
           hint={t("views.messages.emptyHint")} />}
         {messages.map((m) => {

@@ -23,8 +23,9 @@ function read(): Theme {
 export const PALETTES = {
   // Couleur de fond (--c-bg) de chaque mode : sert à <meta name="theme-color">
   // (la barre du navigateur ne lit pas les variables CSS).
+  // Recopiée dans styles.css (--c-bg), index.html et le manifeste : `npm run check:theme`.
   cocon: { light: "#FAF6EF", dark: "#170F18" },
-} as const;
+} as const satisfies Record<string, { light: `#${string}`; dark: `#${string}` }>;
 export type Palette = keyof typeof PALETTES;
 export const DEFAULT_PALETTE: Palette = "cocon";
 const PALETTE_KEY = "cp.palette";

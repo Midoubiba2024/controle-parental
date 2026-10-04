@@ -49,9 +49,9 @@ export function Login() {
         <p id="auth-headline" className="auth-headline">{t("login.headline")}</p>
         <p className="auth-lead">{t("login.lead")}</p>
         <ul className="auth-points">
-          <li><span className="pt-ic"><ShieldCheck {...ic} size={18} /></span>{t("login.points.visible")}</li>
-          <li><span className="pt-ic"><Waypoints {...ic} size={18} /></span>{t("login.points.metadata")}</li>
-          <li><span className="pt-ic"><FileText {...ic} size={18} /></span>{t("login.points.audit")}</li>
+          <li><span className="pt-ic"><ShieldCheck {...ic} size={18} /></span><span className="pt-long">{t("login.points.visible")}</span><span className="pt-short">{t("login.pointsShort.visible")}</span></li>
+          <li><span className="pt-ic"><Waypoints {...ic} size={18} /></span><span className="pt-long">{t("login.points.metadata")}</span><span className="pt-short">{t("login.pointsShort.metadata")}</span></li>
+          <li><span className="pt-ic"><FileText {...ic} size={18} /></span><span className="pt-long">{t("login.points.audit")}</span><span className="pt-short">{t("login.pointsShort.audit")}</span></li>
         </ul>
       </section>
 
@@ -80,7 +80,7 @@ export function Login() {
               </span>
             </div>
             <button disabled={busy} type="submit" className="block" style={{ minHeight: 48, marginTop: 4 }}>
-              {mode === "signin" ? <LogIn {...ic} size={18} /> : <UserPlus {...ic} size={18} />}
+              {mode === "signin" ? <LogIn {...ic} size={18} className="flip-rtl" /> : <UserPlus {...ic} size={18} />}
               {busy ? t("common.busy") : mode === "signin" ? t("login.signIn") : t("login.signUp")}
             </button>
           </form>
@@ -97,7 +97,8 @@ export function Login() {
           </div>
           <p className="auth-foot">
             <ShieldCheck {...ic} size={18} />
-            <span>{t("dashboard.footerNote")}</span>
+            {/* Phrase de transparence complète (le panneau de marque en donne la version courte). */}
+            <span>{t("dashboard.footerPrivacy")}</span>
           </p>
         </div>
       </main>

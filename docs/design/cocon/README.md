@@ -9,7 +9,7 @@ de la console (`apps/parent-web`) :
 | Fichier | Écran |
 |---|---|
 | `vue-ensemble.dc.html` | Vue d'ensemble : coquille commune, tuiles, histogramme 7 jours, anneau par catégorie, top des applications, carte de transparence |
-| `famille.dc.html` | Famille & appareils : ajout d'un enfant, fiche enfant, code d'appairage, journal d'audit |
+| `famille.dc.html` | Famille : ajout d'un enfant, fiche enfant, code d'appairage, journal d'audit |
 
 Ce sont des maquettes HTML à styles en ligne, au format d'un outil de conception
 (balise `<x-dc>`, trou `{{accent}}`). Elles **ne s'ouvrent pas telles quelles**
@@ -22,6 +22,21 @@ Les noms, l'e-mail et les chiffres qui y figurent sont **100 % fictifs** (famill
 réelles : le dépôt est public. Les maquettes ne chargent aucune police en ligne ;
 l'application, elle, embarque Fraunces et Figtree en local (`apps/parent-web/src/fonts.css`).
 
+## Ce qui fait foi
+
+Les maquettes fixent l'**intention visuelle** ; elles ne sont pas mises à jour à
+chaque itération. En cas d'écart, l'application fait foi :
+
+- **textes** : le catalogue `apps/parent-web/src/i18n/locales/fr.ts`. En
+  particulier, la liste « Vous voyez / Vous ne voyez jamais » de la carte de
+  transparence (`views.overview.transparency.*`) est celle, alignée sur ce que
+  l'enfant lit dans « Mes données », qui s'affiche réellement — la liste écrite
+  dans `vue-ensemble.dc.html` n'est qu'une illustration antérieure ;
+- **jetons** (couleurs, rayons, ombres, polices) : `apps/parent-web/src/styles.css`.
+- **mise en page** : la carte de transparence occupe désormais toute la largeur,
+  sous les rangées de graphiques, en deux colonnes (une seule sous 760 px), et
+  la liste complète reste visible sur mobile.
+
 ## Jetons (résumé)
 
 - **Couleurs (clair)**
@@ -29,7 +44,9 @@ l'application, elle, embarque Fraunces et Figtree en local (`apps/parent-web/src
   - bordure `#ECE2D3` (contrôles `#E2D6C4`, champs de saisie `#9C8B7E`)
   - encre aubergine `#2A1B2D`, texte secondaire `#6E5F69`
 - **Barre latérale** : prune `#2A1B2D`, liens `#E8DEE5`, titres de section `#A9949F`, pied `#BFAFC0`.
-- **Accent** corail profond `#B5472F` (5,4:1 avec du blanc).
+- **Accent** corail profond `#B5472F` (5,4:1 avec du blanc). En sombre, le rouge
+  de danger est volontairement plus froid (`#F26D6D`) pour ne pas se confondre
+  avec l'accent.
   - teinte claire de l'accent `#F6E3DC`
   - survol des liens `#8E3522`
 - **Couleurs secondaires**

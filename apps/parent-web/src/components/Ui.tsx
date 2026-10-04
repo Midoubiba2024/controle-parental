@@ -104,7 +104,10 @@ export function ViewSkeleton({ compact = false }: { compact?: boolean }) {
  * Liste tronquée : n'affiche que `limit` éléments, avec un fondu et un bouton
  * « Afficher les N autres » (puis « Afficher moins »). Aucun défilement imbriqué.
  */
-export function useShowMore<T>(items: T[], limit: number) {
+/** Taille commune des listes tronquées de la console. */
+export const SHOW_MORE_LIMIT = 8;
+
+export function useShowMore<T>(items: T[], limit = SHOW_MORE_LIMIT) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const hidden = Math.max(0, items.length - limit);

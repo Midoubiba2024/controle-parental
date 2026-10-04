@@ -1,8 +1,8 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { Blocks, Search } from "lucide-react";
 import { byApp, dailyTotals, totalInRange, type ObservationData } from "../../lib/observation";
 import {
-  appInitials, appLabelOf, categoryColor, categoryLabel, dayTick, fmtDateTime, fmtDayLabel,
+  appInitials, appLabelOf, categoryColor, categoryLabel, dayLabelFor, dayTick, dayTickMin, fmtDateTime, 
   fmtDuration, shiftDay,
 } from "../../lib/format";
 import { Trans, useI18n } from "../../i18n";
@@ -13,13 +13,20 @@ import type { AppInventory } from "../../lib/types";
 
 type Period = 7 | 30;
 const PERIODS: Period[] = [7, 30];
-const LIST_LIMIT = 10;
 
 export function ApplicationsView({ obs }: { obs: ObservationData }) {
   const { t } = useI18n();
   const { inventory, usage, anchorDay } = obs;
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
+  // Sur mobile (détail SOUS la liste), choisir une application amène son détail à l'écran.
+  function select(pkg: string) {
+    setSelected(pkg);
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }));
+  }
   // Période PARTAGÉE par la liste et le détail (mêmes chiffres des deux côtés).
   const [period, setPeriod] = useState<Period>(7);
 
@@ -42,7 +49,7 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
         || appLabelOf(a.app_label, a.package_name).localeCompare(appLabelOf(b.app_label, b.package_name)));
   }, [inventory, query, usageByPkg]);
 
-  const { visible, button, truncated } = useShowMore(apps, LIST_LIMIT);
+  const { visible, button, truncated } = useShowMore(apps);
   const current = apps.find((a) => a.package_name === selected) ?? apps[0] ?? null;
 
   if (inventory.length === 0) {
@@ -78,7 +85,7 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
               const active = current?.package_name === a.package_name;
               return (
                 <button key={a.id} type="button" className={`app-row ${active ? "active" : ""}`}
-                  aria-pressed={active} onClick={() => setSelected(a.package_name)}>
+                  aria-pressed={active} onClick={() => select(a.package_name)}>
                   <span className="app-ic sm" aria-hidden="true" style={{ "--ic-color": categoryColor(a.category) } as CSSProperties}>
                     {appInitials(a.app_label, a.package_name)}
                   </span>
@@ -101,7 +108,9 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
           {apps.length === 0 && <EmptyState title={t("views.applications.noMatch")} />}
         </div>
 
-        {current && <AppDetail app={current} usage={usage} anchorDay={anchorDay} period={period} />}
+        <div ref={detailRef} className="scroll-anchor">
+          {current && <AppDetail app={current} usage={usage} anchorDay={anchorDay} period={period} />}
+        </div>
       </div>
     </div>
   );
@@ -117,7 +126,7 @@ function AppDetail({ app, usage, anchorDay, period }: {
   const days = Array.from({ length: period }, (_, i) => shiftDay(anchorDay, -(period - 1 - i)));
   const totals = dailyTotals(pkgUsage, days);
   const bars: Slice[] = days.map((d, i) => ({
-    key: d, label: fmtDayLabel(d), tick: dayTick(d, period, i), value: totals[i], color: "var(--chart-bar)",
+    key: d, label: dayLabelFor(d, period), tick: dayTick(d, period, i), tickMin: dayTickMin(d, period, i), value: totals[i], color: "var(--chart-bar)",
   }));
   const total = totalInRange(pkgUsage, from, to);
   const launches = pkgUsage.filter((u) => u.day >= from && u.day <= to).reduce((s, u) => s + u.launch_count, 0);

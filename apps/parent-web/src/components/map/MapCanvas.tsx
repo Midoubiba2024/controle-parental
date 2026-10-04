@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { t } from "../../i18n";
@@ -45,13 +45,30 @@ export interface MapCircle {
  * Résout un token CSS (« var(--series-1) ») en couleur calculée : Leaflet pose
  * `color` comme attribut SVG `stroke`, qui n'interprète PAS les variables CSS.
  * On lit donc la valeur effective sur :root. Les couleurs littérales passent tel
- * quel. (Un changement de thème est répercuté au prochain redraw des données.)
+ * quel. Un changement de thème/palette redessine les couches (useThemeVersion).
  */
 function resolveColor(c: string): string {
   const m = c.match(/^var\((--[\w-]+)\)$/);
   if (!m) return c;
   const v = getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim();
   return v || "currentColor";
+}
+
+/**
+ * Version du thème : change quand data-theme / data-palette changent sur <html>
+ * ou quand le thème système bascule — les couleurs résolues doivent être relues.
+ */
+function useThemeVersion(): number {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => setVersion((v) => v + 1);
+    const obs = new MutationObserver(bump);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", bump);
+    return () => { obs.disconnect(); mq.removeEventListener("change", bump); };
+  }, []);
+  return version;
 }
 
 export function MapCanvas({
@@ -76,6 +93,7 @@ export function MapCanvas({
   const programmaticRef = useRef(false);
   const lastFitSigRef = useRef<string | null>(null);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const themeVersion = useThemeVersion();
 
   // Création unique de la carte.
   useEffect(() => {
@@ -176,7 +194,7 @@ export function MapCanvas({
     }
     // Rend la main après que les événements de mouvement programmatiques soient passés.
     setTimeout(() => { programmaticRef.current = false; }, 0);
-  }, [markers, circles, path]);
+  }, [markers, circles, path, themeVersion]);
 
   return (
     <div

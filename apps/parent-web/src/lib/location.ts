@@ -235,12 +235,13 @@ export function activeSos(sos: SosEvent[]): SosEvent | null {
   return sos.find((s) => s.status === "active" || s.status === "acked") ?? null;
 }
 
-/** Zone de confiance → couleur de série CVD-safe (identité aussi portée par
- *  l'icône + le label, jamais la couleur seule). */
+/** Zone de confiance → couleur de la palette de graphiques Cocon (identité aussi
+ *  portée par l'icône + le libellé, jamais par la couleur seule). La maison n'utilise
+ *  PAS --series-1 (corail, trop proche de l'accent et du marqueur SOS). */
 export function geofenceColor(type: Geofence["type"]): string {
   switch (type) {
-    case "home": return "var(--series-1)";   // bleu
-    case "school": return "var(--series-3)";  // aqua
-    default: return "var(--series-7)";        // violet
+    case "home": return "var(--series-2)";    // vert d'eau
+    case "school": return "var(--series-5)";  // bleu
+    default: return "var(--series-3)";        // prune
   }
 }

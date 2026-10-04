@@ -1,8 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { createElement, lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { LucideIcon } from "lucide-react";
 import {
-  Blocks, CalendarClock, Clock3, Funnel, House, Inbox, LayoutDashboard, Lock, LogOut, MapPin,
+  Blocks, CalendarClock, Clock3, Funnel, House, Inbox, Gauge, Lock, LogOut, MapPin,
   Menu, MessageCircle, Monitor, Moon, Phone, ShieldAlert, Sun, TriangleAlert, UserRoundCheck, Users, X,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -13,6 +13,7 @@ import { ageProfileLabel } from "../lib/labels";
 import { errorMessage, Trans, useI18n } from "../i18n";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ViewErrorBoundary } from "./ErrorBoundary";
+import { clearChunkReloadFlag } from "../lib/chunkReload";
 import { ViewSkeleton } from "./Ui";
 import { ic, Logo } from "./icons";
 import type { Child, Device, DeviceStatus, Family } from "../lib/types";
@@ -23,8 +24,28 @@ import type { Child, Device, DeviceStatus, Family } from "../lib/types";
 // Un échec réseau ponctuel est retenté une fois ; un chunk réellement disparu
 // (nouvelle version publiée) est traité par `vite:preloadError` (main.tsx) puis,
 // à défaut, par ViewErrorBoundary (« Réessayer » / « Recharger »).
-const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
-  lazy(() => load().catch(() => load()).then((m) => ({ default: m[name] })));
+// Chaque vue est un composant STABLE qui rend un React.lazy interne ; après un
+// échec, `resetFailedViews()` (bouton « Réessayer ») recrée ce lazy — React.lazy
+// mémorise sinon sa promesse rejetée et l'échec serait définitif.
+const failedResets = new Set<() => void>();
+export function resetFailedViews() {
+  for (const reset of [...failedResets]) reset();
+  failedResets.clear();
+}
+function named<K extends string, P extends object>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) {
+  const make = () => lazy(() => load().catch(() => load())
+    .then((m) => {
+      const C: ComponentType<P> | undefined = (m as Partial<Record<K, ComponentType<P>>> | undefined)?.[name];
+      if (!C) throw new Error(`Vue introuvable dans le module : ${name}`);
+      clearChunkReloadFlag();          // vue chargée : un futur échec pourra recharger
+      return { default: C };
+    })
+    .catch((e: unknown) => { failedResets.add(reset); throw e; }));
+  let Current = make();
+  const reset = () => { Current = make(); };
+  // Cast : createElement ne sait pas relier un P générique à ses attributs (ref, key).
+  return function View(props: P) { return createElement(Current as unknown as ComponentType<P>, props); };
+}
 const OverviewView = named(() => import("./views/OverviewView"), "OverviewView");
 const ScreenTimeView = named(() => import("./views/ScreenTimeView"), "ScreenTimeView");
 const ApplicationsView = named(() => import("./views/ApplicationsView"), "ApplicationsView");
@@ -47,7 +68,7 @@ export type View =
 // dashboard.navSections.<section> ; titres de page : dashboard.viewTitle.<vue>.
 const NAV: { section: "follow" | "protect" | "exchange" | "account"; items: { key: View; icon: LucideIcon }[] }[] = [
   { section: "follow", items: [
-    { key: "overview", icon: LayoutDashboard },
+    { key: "overview", icon: Gauge },
     { key: "screen", icon: Clock3 },
     { key: "apps", icon: Blocks },
     { key: "calls", icon: Phone },
@@ -100,6 +121,9 @@ export function Dashboard({ session }: { session: Session }) {
   // Horloge de la coquille : « relevé il y a X min » et fraîcheur restent justes.
   const [now, setNow] = useState(() => Date.now());
   const [pendingCount, setPendingCount] = useState(0);
+  // Incrémenté par RequestsView après une réponse : le badge se met à jour aussitôt.
+  const [requestsVersion, setRequestsVersion] = useState(0);
+  const onRequestsChanged = useCallback(() => setRequestsVersion((v) => v + 1), []);
 
   const loadFamilies = useCallback(async () => {
     setLoading(true);
@@ -129,7 +153,8 @@ export function Dashboard({ session }: { session: Session }) {
   useEffect(() => { try { localStorage.setItem("cp.view", view); } catch { /* ignore */ } }, [view]);
 
   // --- Demandes en attente (badge de navigation) : simple comptage, même table
-  // et même RLS que RequestsView. Relu au changement de vue et chaque minute.
+  // et même RLS que RequestsView. Relu au changement de vue, chaque minute et
+  // après chaque réponse donnée dans la vue Demandes.
   useEffect(() => {
     let active = true;
     if (!familyId) { setPendingCount(0); return; }
@@ -139,10 +164,12 @@ export function Dashboard({ session }: { session: Session }) {
       if (active && !error) setPendingCount(count ?? 0);
     })();
     return () => { active = false; };
-  }, [familyId, view, now]);
+  }, [familyId, view, now, requestsVersion]);
 
   // --- Tiroir mobile : Échap / voile ferment, focus piégé puis rendu ---------
   const closeDrawer = useCallback(() => {
+    // Lever `inert` AVANT de rendre le focus : un élément inerte ne le reçoit pas.
+    mainRef.current?.removeAttribute("inert");
     setDrawerOpen(false);
     menuBtnRef.current?.focus();
   }, []);
@@ -151,10 +178,11 @@ export function Dashboard({ session }: { session: Session }) {
     const panel = sidebarRef.current;
     const focusables = () => Array.from(panel?.querySelectorAll<HTMLElement>(
       "button:not([disabled]), a[href], select, input, [tabindex]:not([tabindex='-1'])") ?? []);
-    (panel?.querySelector<HTMLElement>("[aria-current='page']") ?? focusables()[0])?.focus();
-    // Le contenu derrière le tiroir devient inerte (ni focus, ni lecteur d'écran).
+    // Le contenu derrière le tiroir devient inerte (ni focus, ni lecteur d'écran),
+    // puis le focus va au premier élément du tiroir.
     const main = mainRef.current;
     main?.setAttribute("inert", "");
+    focusables()[0]?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); closeDrawer(); return; }
       if (e.key !== "Tab") return;
@@ -189,17 +217,22 @@ export function Dashboard({ session }: { session: Session }) {
   // restaurée depuis le cache) : on rafraîchit l'heure ET les données.
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), MINUTE);
+    // Relecture EN ARRIÈRE-PLAN (obs.refreshing) : aucune vue n'est démontée,
+    // la saisie et le défilement en cours sont conservés.
     const wake = () => {
       if (document.visibilityState !== "visible") return;
       setNow(Date.now());
       reloadObs();
     };
+    // pageshow : seulement une page restaurée du cache (bfcache) ; au premier
+    // affichage, les données viennent d'être lues.
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) wake(); };
     document.addEventListener("visibilitychange", wake);
-    window.addEventListener("pageshow", wake);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", wake);
-      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, [reloadObs]);
 
@@ -304,14 +337,16 @@ export function Dashboard({ session }: { session: Session }) {
         <header className="header">
           <div className="header-top">
             <button type="button" ref={menuBtnRef} className="icon-btn menu-btn"
-              aria-label={t("dashboard.openMenu")} aria-expanded={drawerOpen} aria-controls="sidebar"
+              aria-label={pendingCount > 0 ? t("dashboard.openMenuPending", { count: pendingCount }) : t("dashboard.openMenu")}
+              aria-expanded={drawerOpen} aria-controls="sidebar"
               onClick={() => setDrawerOpen(true)}>
               <Menu {...ic} />
+              {pendingCount > 0 && <span className="menu-count" aria-hidden="true">{fmt.number(pendingCount)}</span>}
             </button>
             <p className="header-date">
-              {t("dashboard.headerDate", { date: todayCap })}
+              <span className="nowrap-date">{t("dashboard.headerDate", { date: todayCap })}</span>
               {currentChild && view !== "family" && view !== "requests" && (
-                <span className="profile"> {t("dashboard.headerProfile", { profile: ageProfileLabel(currentChild.age_profile) })}</span>
+                <span className="profile" aria-hidden="true">{t("dashboard.headerProfileInline", { profile: ageProfileLabel(currentChild.age_profile) })}</span>
               )}
             </p>
             {/* Ordre du DOM = ordre visuel sur mobile (thème / déconnexion sur la 1re ligne). */}
@@ -321,7 +356,7 @@ export function Dashboard({ session }: { session: Session }) {
               </button>
               <button type="button" className="ghost" onClick={() => supabase.auth.signOut()}
                 aria-label={t("dashboard.signOut")}>
-                <LogOut {...ic} size={18} />
+                <LogOut {...ic} size={18} className="flip-rtl" />
                 <span className="signout-label">{t("dashboard.signOut")}</span>
               </button>
             </div>
@@ -338,7 +373,14 @@ export function Dashboard({ session }: { session: Session }) {
               {showChildPicker && (
                 <div className="picker">
                   <span className="avatar" aria-hidden="true">{initial(currentChild?.display_name)}</span>
-                  <label htmlFor="child-picker">{t("dashboard.childLabel")}</label>
+                  <label htmlFor="child-picker">
+                    {t("dashboard.childLabel")}
+                    {currentChild && (
+                      <span className="visually-hidden">
+                        {t("dashboard.headerProfileInline", { profile: ageProfileLabel(currentChild.age_profile) })}
+                      </span>
+                    )}
+                  </label>
                   <select id="child-picker" value={childId ?? ""} onChange={(e) => setChildId(e.target.value)}>
                     {children.map((c) => <option key={c.id} value={c.id}>{c.display_name}</option>)}
                   </select>
@@ -368,12 +410,12 @@ export function Dashboard({ session }: { session: Session }) {
         {obs.error && <p className="msg error">{obs.error}</p>}
         <ProtectionBanner childId={childId} status={obs.status} devices={obs.devices} />
 
-        <ViewErrorBoundary key={view}>
+        <ViewErrorBoundary key={view} onRetry={resetFailedViews}>
         <Suspense fallback={<ViewSkeleton />}>
           {view === "family" ? (
             <FamilyView familyId={familyId!} onChildrenChanged={loadChildren} />
           ) : view === "requests" ? (
-            <RequestsView familyId={familyId!} children={children} />
+            <RequestsView familyId={familyId!} children={children} onChanged={onRequestsChanged} />
           ) : !childId || !currentChild ? (
             <div className="card"><p className="empty"><Trans k="dashboard.noChild" tags={{ b: (c) => <b>{c}</b> }} /></p></div>
           ) : view === "rules" ? (

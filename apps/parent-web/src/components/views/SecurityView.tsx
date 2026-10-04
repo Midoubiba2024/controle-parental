@@ -5,7 +5,7 @@ import {
 } from "../../lib/location";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
 import type { CSSProperties } from "react";
-import { BatteryLow, Check, House, LifeBuoy, MapPin, Plus, School, Siren } from "lucide-react";
+import { BatteryLow, Check, House, LifeBuoy, MapPin, Plus, School, Siren, Trash2 } from "lucide-react";
 import { EmptyState, ViewSkeleton } from "../Ui";
 import { ic } from "../icons";
 import { useI18n, t as tr } from "../../i18n";
@@ -52,7 +52,7 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
           <EmptyState icon={LifeBuoy} title={t("views.security.history.emptyTitle")}
             hint={t("views.security.history.emptyHint")} />
         ) : (
-          <div className="tbl-wrap"><table className="tbl">
+          <div className="tbl-wrap"><table className="tbl compact">
             <thead><tr><th>{t("views.security.history.colStatus")}</th><th>{t("views.security.history.colStart")}</th><th>{t("views.security.history.colEnd")}</th></tr></thead>
             <tbody>
               {loc.sos.map((s) => (
@@ -264,8 +264,9 @@ function ZonesCard({ familyId, child, loc, run }: {
                 {g.enabled ? t("views.security.zones.disable") : t("views.security.zones.enable")}
               </button>
               <button className="soft" onClick={() => setEditing(g)}>{t("views.security.zones.edit")}</button>
-              <button className="link" style={{ color: "var(--c-danger)" }} onClick={() => { if (confirm(t("views.security.zones.confirmDelete", { name: g.name }))) run(() => deleteGeofence(g.id)); }}>
-                {t("views.security.zones.delete")}
+              <button className="link zone-delete" aria-label={t("views.security.zones.delete")}
+                onClick={() => { if (confirm(t("views.security.zones.confirmDelete", { name: g.name }))) run(() => deleteGeofence(g.id)); }}>
+                <Trash2 {...ic} size={18} /><span className="lbl" aria-hidden="true">{t("views.security.zones.delete")}</span>
               </button>
               </div>
             </div>
@@ -368,14 +369,14 @@ function AlertsCard({ loc, run }: {
   return (
     <div className="card">
       <h2>{t("views.security.alerts.title")} <span className="muted small">{t("views.security.alerts.unseen", { count: unseen.length })}</span></h2>
-      <div className="tbl-wrap"><table className="tbl">
+      <div className="tbl-wrap"><table className="tbl compact">
         <thead><tr><th>{t("views.security.alerts.colAlert")}</th><th>{t("views.security.alerts.colWhen")}</th><th>{t("views.security.alerts.colState")}</th></tr></thead>
         <tbody>
           {loc.alerts.slice(0, 20).map((a) => (
             <tr key={a.id}>
               <td><BatteryLow {...ic} size={18} style={{ verticalAlign: "middle", marginInlineEnd: 8, color: "var(--c-warning)" }} />{a.battery_level != null ? t("views.security.alerts.lowBatteryLevel", { level: fmt.percent(a.battery_level) }) : t("views.security.alerts.lowBattery")}</td>
               <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.alerts.colWhen") })}>{fmtDateTime(a.created_at)}</td>
-              <td data-label={t("common.cellLabel", { label: t("views.security.alerts.colState") })}>{a.acknowledged_at
+              <td className="t-badge" data-label={t("common.cellLabel", { label: t("views.security.alerts.colState") })}>{a.acknowledged_at
                 ? <span className="badge good">{t("views.security.alerts.seen")}</span>
                 : <button className="link" onClick={() => run(() => acknowledgeAlert(a.id))}>{t("views.security.alerts.markSeen")}</button>}
               </td>

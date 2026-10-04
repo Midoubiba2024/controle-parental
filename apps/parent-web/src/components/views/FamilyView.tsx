@@ -49,7 +49,7 @@ export function FamilyView({ familyId, onChildrenChanged }: {
   useEffect(() => { void refresh(); }, [refresh]);
 
   const paired = devices.filter((d) => !d.revoked_at).length;
-  const { visible: auditVisible, button: auditMore, truncated: auditTruncated } = useShowMore(audit, 6);
+  const { visible: auditVisible, button: auditMore, truncated: auditTruncated } = useShowMore(audit);
 
   return (
     <div className="grid dash-wide top">
@@ -238,12 +238,15 @@ function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string })
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   // Le code est à usage unique et expire : passé l'heure, chiffres grisés, Copier
   // désactivé et invitation à en générer un nouveau.
-  const [expired, setExpired] = useState(() => Date.now() >= new Date(expiresAt).getTime());
+  // L'état est AUSSI calculé au rendu : un nouveau code (ou une heure dépassée
+  // pendant une mise en veille) est juste dès le premier affichage.
+  const [expiredTick, setExpiredTick] = useState(false);
+  const expired = expiredTick || Date.now() >= new Date(expiresAt).getTime();
   useEffect(() => {
     const left = new Date(expiresAt).getTime() - Date.now();
-    if (left <= 0) { setExpired(true); return; }
-    setExpired(false);
-    const id = window.setTimeout(() => setExpired(true), left);
+    setExpiredTick(left <= 0);
+    if (left <= 0) return;
+    const id = window.setTimeout(() => setExpiredTick(true), left);
     return () => window.clearTimeout(id);
   }, [expiresAt]);
   const digitsRef = useRef<HTMLParagraphElement | null>(null);
@@ -287,19 +290,24 @@ function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string })
         <p className="digits" ref={digitsRef}>
           {groups.map((g, i) => <span key={i} className="grp">{g}</span>)}
         </p>
-        <p className="exp" role={expired ? "status" : undefined}>
+        <p className="exp">
           <Clock3 {...icSm} size={15} />
           {expired ? t("views.family.pairing.expired")
             : t("views.family.pairing.expiresAt", { time: fmt.time(expiresAt, { hour: "2-digit", minute: "2-digit" }) })}
         </p>
-        {state === "failed" && <p className="exp" role="status">{t("views.family.pairing.copyFallback")}</p>}
+        {state === "failed" && <p className="exp">{t("views.family.pairing.copyFallback")}</p>}
       </div>
       <button type="button" className={`copy${state === "copied" ? " done" : ""}`} onClick={copy} disabled={expired}
         aria-label={t("views.family.pairing.copyAria")}>
         {state === "copied" ? <Check {...ic} /> : <Copy {...ic} />}
         <span aria-hidden="true">{state === "copied" ? t("views.family.pairing.copied") : t("views.family.pairing.copy")}</span>
       </button>
-      <span className="visually-hidden" aria-live="polite">{state === "copied" ? t("views.family.pairing.copiedAnnounce") : ""}</span>
+      {/* Région d'annonce PERMANENTE (montée dès le départ) : copie, échec, expiration. */}
+      <span className="visually-hidden" aria-live="polite">
+        {state === "copied" ? t("views.family.pairing.copiedAnnounce")
+          : state === "failed" ? t("views.family.pairing.copyFallback")
+          : expired ? t("views.family.pairing.expired") : ""}
+      </span>
     </div>
   );
 }

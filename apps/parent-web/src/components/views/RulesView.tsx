@@ -56,21 +56,24 @@ export function RulesView({ familyId, child, obs }: {
 
   return (
     <div className="grid dash">
-      {r.error && <p className="msg error">{r.error}</p>}
+      {r.error && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{r.error}</p>}
       {msg && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{msg}</p>}
 
-      <TimeLimitsCard r={r} familyId={familyId} child={child} busy={busy} run={run}
-        usageTodayTotal={usageTodayTotal} />
+      {/* Deux colonnes INDÉPENDANTES : une carte haute ne crée pas de vide dans l'autre. */}
+      <div className="stack">
+        <TimeLimitsCard r={r} familyId={familyId} child={child} busy={busy} run={run}
+          usageTodayTotal={usageTodayTotal} />
+        <CategoryRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
+          usageByCat={usageTodayByCat} />
+        <AppRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
+          inventory={obs.inventory} usageByPkg={usageTodayByPkg} anchorDay={obs.anchorDay} />
+      </div>
       <div className="stack">
         <InstantControlCard familyId={familyId} childId={childId} devices={obs.devices}
           busy={busy} run={run} commands={r.commands} />
         <GuardsCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
+        <SchedulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
       </div>
-      <CategoryRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
-        usageByCat={usageTodayByCat} />
-      <AppRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
-        inventory={obs.inventory} usageByPkg={usageTodayByPkg} anchorDay={obs.anchorDay} />
-      <SchedulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
     </div>
   );
 }
@@ -151,9 +154,11 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
 
       <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.dailyLimitTitle")}</h3>
       <div className="inline">
-        <input type="number" inputMode="numeric" min={0} aria-label={t("views.rules.timeLimits.dailyLimitTitle")} placeholder={t("views.rules.timeLimits.dailyLimitPlaceholder")} value={global} style={{ width: 120 }}
-          onChange={(e) => setGlobal(e.target.value)} />
-        <span className="muted small">{t("views.rules.timeLimits.minutesPerDay")}</span>
+        <span className="unit-field">
+          <input type="number" inputMode="numeric" min={0} aria-label={t("views.rules.timeLimits.dailyLimitTitle")} placeholder={t("views.rules.timeLimits.dailyLimitPlaceholder")} value={global} style={{ width: 120 }}
+            onChange={(e) => setGlobal(e.target.value)} />
+          <span aria-hidden="true">{t("views.rules.timeLimits.minutesPerDay")}</span>
+        </span>
         <button disabled={busy} onClick={() => run(() =>
           savePolicy({ daily_limit_minutes: global.trim() === "" ? null : Math.max(0, parseInt(global, 10) || 0) }))}>
           {t("views.rules.timeLimits.save")}
@@ -161,7 +166,7 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
       </div>
 
       <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.weekdayTitle")}</h3>
-      <div className="row" style={{ gap: 6 }}>
+      <div className="weekday-grid">
         {DOW_ORDER.map((d) => (
           <WeekdayLimit key={d} label={DOW_LABELS[d]} value={limitFor(d)} busy={busy}
             onSave={(m) => run(() => setWeekday(d, m))} />
@@ -199,7 +204,7 @@ function WeekdayLimit({ label, value, busy, onSave }: {
     <label style={{ alignItems: "center", gap: 4, fontWeight: 500, color: "var(--c-muted)" }}>
       <span>{label}</span>
       <input type="number" inputMode="numeric" min={0} value={v} placeholder={t("common.none")} disabled={busy}
-        style={{ width: 64, textAlign: "center", padding: "0 4px" }}
+        style={{ width: "100%", textAlign: "center", padding: "0 4px" }}
         onChange={(e) => setV(e.target.value)}
         onBlur={() => onSave(v.trim() === "" ? null : Math.max(0, parseInt(v, 10) || 0))} />
     </label>
@@ -380,7 +385,7 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
                 <td><span className="badge"><span className="sw" style={{ background: categoryColor(cat) }} />{categoryLabel(cat)}</span></td>
                 <td className="muted small" data-label={t("common.cellLabel", { label: t("views.rules.categoryRules.colToday") })}>
                   {ms > 0 ? fmtDuration(ms) : t("common.none")}</td>
-                <td>
+                <td data-label={t("common.cellLabel", { label: t("views.rules.categoryRules.colRule") })}>
                   <span className="rule-cell">
                   <select aria-label={categoryLabel(cat)} value={rule?.action ?? ""} disabled={busy}
                     onChange={(e) => run(() => setCat(cat, (e.target.value || null) as RuleAction | null, rule?.daily_limit_minutes))}>
@@ -425,7 +430,9 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
       .filter((a) => !a.removed_at)
       .filter((a) => !onlyRecent || (a.first_seen_at && a.first_seen_at.slice(0, 10) >= recentCut))
       .filter((a) => !q || appLabelOf(a.app_label, a.package_name).toLowerCase().includes(q) || a.package_name.toLowerCase().includes(q))
-      .sort((a, b) => (usageByPkg.get(b.package_name) ?? 0) - (usageByPkg.get(a.package_name) ?? 0));
+      // Même tri que la vue Applications : usage décroissant, puis nom.
+      .sort((a, b) => (usageByPkg.get(b.package_name) ?? 0) - (usageByPkg.get(a.package_name) ?? 0)
+        || appLabelOf(a.app_label, a.package_name).localeCompare(appLabelOf(b.app_label, b.package_name)));
   }, [inventory, query, onlyRecent, recentCut, usageByPkg]);
 
   async function setApp(pkg: string, action: RuleAction | null, limit?: number | null) {
@@ -443,7 +450,7 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
   }
 
   const newCount = inventory.filter((a) => !a.removed_at && a.first_seen_at && a.first_seen_at.slice(0, 10) >= recentCut).length;
-  const { visible, button, truncated } = useShowMore(apps, 8);
+  const { visible, button, truncated } = useShowMore(apps);
 
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
@@ -621,10 +628,15 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
               onClick={() => setMask((m) => m ^ dowBit(d))}>{DOW_LABELS[d]}</button>
           ))}
         </div>
+        <div className="window-times">
+          <label className="fld">{t("views.rules.schedules.fromLabel")}
+            <input type="time" aria-label={t("views.rules.schedules.startLabel")} value={start} onChange={(e) => setStart(e.target.value)} />
+          </label>
+          <label className="fld">{t("views.rules.schedules.toLabel")}
+            <input type="time" aria-label={t("views.rules.schedules.endLabel")} value={end} onChange={(e) => setEnd(e.target.value)} />
+          </label>
+        </div>
         <div className="inline">
-          <input type="time" aria-label={t("views.rules.schedules.startLabel")} value={start} onChange={(e) => setStart(e.target.value)} />
-          <span className="muted" aria-hidden="true" style={{ alignSelf: "center" }}>{t("views.rules.schedules.rangeArrow")}</span>
-          <input type="time" aria-label={t("views.rules.schedules.endLabel")} value={end} onChange={(e) => setEnd(e.target.value)} />
           <button className="ghost" disabled={busy || mask === 0} onClick={() => run(addWindow)}><Plus {...ic} size={18} strokeWidth={2} />{t("views.rules.schedules.addWindow")}</button>
         </div>
       </div>

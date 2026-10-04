@@ -12,8 +12,19 @@
    - RTL (LOT 9) : uniquement des propriétés LOGIQUES (margin-inline-*,
      padding-inline-*, inset-inline-*, text-align: start/end) — jamais
      left/right — pour que la mise en page se retourne quand <html dir="rtl">.
+   - Deux axes sur <html> : data-palette (identité) × data-theme (clair/sombre ;
+     absent = système). Toute couleur passe par un jeton --c-* défini dans CHAQUE
+     bloc de palette (clair, sombre, sombre-système).
+   - Fond de page (--c-bg) recopié dans theme.ts, index.html et le manifeste :
+     `npm run check:theme` vérifie qu'ils restent identiques.
+   - Leaflet : leaflet.css est chargé APRÈS ce fichier ; ses surcharges sont
+     préfixées « .map-frame .leaflet-container » (spécificité supérieure).
+   - Mobile = (max-width: 900px), (max-height: 500px) : tiroir, tableaux en
+     lignes-cartes sous 640 px (.compact : titre + méta, libellés lus par les
+     lecteurs d'écran mais masqués à l'écran).
    - Pas de dégradé, pas de liseré gauche coloré ; cibles ≥ 44 px.
    - Champs de saisie ≥ 16 px (sinon iOS zoome au focus).
+   - Focus : anneau --c-focus au clavier (:focus-visible), jamais à la souris.
    ============================================================================= */
 
 @import "./fonts.css";
@@ -132,6 +143,8 @@
   --c-side-foot:     #BFAFC0;
   --c-side-hover:    rgba(255, 255, 255, 0.07);
   --c-side-line:     rgba(255, 255, 255, 0.12);
+  --c-side-control:  #8A7590;   /* bordure des champs sur la barre (≥ 3:1) */
+  --side-color-scheme: dark;    /* barre prune : contrôles natifs sombres */
   --c-side-active:   #FAF6EF;
   --c-side-active-ink: #2A1B2D;
 
@@ -259,7 +272,7 @@
   --c-good-soft:     #1E3324;
   --c-warning:       #E8B85A;
   --c-warning-soft:  #3A2E14;
-  --c-danger:        #FF8A7E;
+  --c-danger:        #F26D6D;   /* rouge plus froid : distinct de l'accent corail */
   --c-danger-soft:   #45201D;
   --c-side:          #2A1D2E;   /* prune un cran PLUS CLAIRE que la page */
   --c-side-ink:      #E8DEE5;
@@ -268,6 +281,7 @@
   --c-side-foot:     #BFAFC0;
   --c-side-hover:    rgba(255, 255, 255, 0.06);
   --c-side-line:     rgba(255, 255, 255, 0.10);
+  --c-side-control:  #8A7590;
   --c-side-active:   rgba(255, 255, 255, 0.09);
   --c-side-active-ink: #FFF8F1;
   --c-focus:         #F29B87;
@@ -353,7 +367,7 @@
     --c-good-soft:     #1E3324;
     --c-warning:       #E8B85A;
     --c-warning-soft:  #3A2E14;
-    --c-danger:        #FF8A7E;
+    --c-danger:        #F26D6D;
     --c-danger-soft:   #45201D;
     --c-side:          #2A1D2E;   /* prune un cran PLUS CLAIRE que la page */
     --c-side-ink:      #E8DEE5;
@@ -362,6 +376,7 @@
     --c-side-foot:     #BFAFC0;
     --c-side-hover:    rgba(255, 255, 255, 0.06);
     --c-side-line:     rgba(255, 255, 255, 0.10);
+    --c-side-control:  #8A7590;
     --c-side-active:   rgba(255, 255, 255, 0.09);
     --c-side-active-ink: #FFF8F1;
     --c-focus:         #F29B87;
@@ -463,12 +478,12 @@ h2 {
   font-size: var(--fs-h2); font-weight: 600; line-height: 1.3; margin: 0 0 14px;
   color: var(--c-ink); letter-spacing: -0.005em;
 }
-h2 .muted, h2 .small { font-family: var(--font-body); font-weight: 500; font-size: var(--fs-small); letter-spacing: 0; }
+h2 .muted, h2 .small { font-family: var(--font-body); font-weight: 500; font-size: var(--fs-small); letter-spacing: 0; white-space: nowrap; }
 h3 { font-size: 14.5px; font-weight: 700; margin: 0 0 8px; color: var(--c-ink); }
 
 /* Focus clavier très visible, jamais à la souris (sans changer l'arrondi). */
-:focus { outline: none; }
-:where(:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-focus); outline-offset: 2px;
 }
@@ -546,7 +561,7 @@ button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visi
 .sidebar-email { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--c-side-email); overflow-wrap: anywhere; }
 .sidebar-note { margin: 6px 0 0; font-size: var(--fs-caption); line-height: 1.5; color: var(--c-side-foot); }
 label.lang-switch { display: flex; flex-direction: row; align-items: center; gap: 8px; margin-top: 10px; color: var(--c-side-foot); font-size: var(--fs-caption); font-weight: 500; }
-.lang-switch select { background-color: var(--c-side); color: var(--c-side-ink); border-color: var(--c-side-line); min-height: 44px; color-scheme: dark; }
+.lang-switch select { background-color: var(--c-side); color: var(--c-side-ink); border-color: var(--c-side-control); min-height: 44px; color-scheme: var(--side-color-scheme); }
 
 .main {
   min-width: 0; display: flex; flex-direction: column; gap: 24px;
@@ -554,13 +569,17 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
   padding-inline: 24px 28px;
   padding-inline-end: max(28px, env(safe-area-inset-right));
 }
-[dir="rtl"] .main { padding-inline-end: max(28px, env(safe-area-inset-left)); }
-[dir="rtl"] .sidebar { margin-inline-start: max(16px, env(safe-area-inset-right)); }
+/* RTL, grand écran seulement (sur mobile, le tiroir et .main ont leurs propres marges). */
+@media (min-width: 901px) and (min-height: 501px) {
+  [dir="rtl"] .main { padding-inline-end: max(28px, env(safe-area-inset-left)); }
+  [dir="rtl"] .sidebar { margin-inline-start: max(16px, env(safe-area-inset-right)); }
+}
 
 /* --- En-tête sur deux niveaux ------------------------------------------- */
 .header { display: flex; flex-direction: column; gap: 18px; }
 .header-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
 .header-date { margin: 0; font-size: var(--fs-small); font-weight: 500; color: var(--c-muted); }
+.header-date .profile, .nowrap-date { white-space: nowrap; }
 .header-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-inline-start: auto; }
 .header-title { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
 .menu-btn { display: none; }
@@ -667,19 +686,20 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
    Tuiles statistiques (grands chiffres en serif)
    ============================================================================= */
 .tile { display: flex; flex-direction: column; padding: 20px 22px; }
-.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.tile-label { font-size: var(--fs-small); font-weight: 600; color: var(--c-muted); }
+.tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+/* Libellé réservé sur 2 lignes : les grands chiffres d'une rangée restent alignés. */
+.tile-label { font-size: var(--fs-small); font-weight: 600; color: var(--c-muted); line-height: 1.4; min-height: 2.8em; }
 .tile-ic {
   width: 36px; height: 36px; border-radius: var(--r-ctl); flex: none;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .tile-head { min-height: 36px; }
 .tile-value {
-  margin: auto 0 0; padding-top: 12px; font-family: var(--font-display); font-size: var(--fs-stat); font-weight: 500;
+  margin: 12px 0 0; font-family: var(--font-display); font-size: var(--fs-stat); font-weight: 500;
   line-height: 1.1; color: var(--c-ink); font-variant-numeric: tabular-nums lining-nums;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word; hyphens: auto;
 }
-.tile-foot { margin-top: 12px; min-height: 0; font-size: var(--fs-small); color: var(--c-muted); display: flex; flex-direction: column; gap: 8px; }
+.tile-foot { margin-top: auto; padding-top: 12px; min-height: 0; font-size: var(--fs-small); color: var(--c-muted); display: flex; flex-direction: column; gap: 8px; }
 .tile-foot .meter { margin-top: 2px; }
 
 .tone-accent { background: var(--c-accent-soft); color: var(--c-accent-text); }
@@ -696,6 +716,7 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
 .trend.down { background: var(--c-good-soft); color: var(--c-good); }
 .trend.up   { background: var(--c-accent-soft); color: var(--c-accent-text); }
 .trend.flat { background: var(--c-sunken); color: var(--c-muted); }
+.trend-caption { font-size: var(--fs-caption); color: var(--c-muted); }
 
 /* --- Jauges ------------------------------------------------------------- */
 .meter { height: 6px; border-radius: var(--r-xxs); background: var(--c-track); overflow: hidden; }
@@ -725,6 +746,12 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
 .app-list .bar-track { flex: 0 1 180px; height: 6px; border-radius: var(--r-xxs); background: var(--c-track); }
 .app-list .bar-track > span { display: block; height: 6px; border-radius: var(--r-xxs); }
 .app-list .dur { flex: none; min-width: 64px; text-align: end; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Très petit écran : la barre passe SOUS le nom (alignée sur le texte, pas sur l'icône). */
+@media (max-width: 480px) {
+  .app-list li { flex-wrap: wrap; row-gap: 6px; padding-block: 10px; }
+  .app-list li .bar-track { display: block; order: 3; flex: 1 1 100%; margin-inline-start: 54px; }
+}
+.scroll-anchor { min-width: 0; scroll-margin-top: max(12px, env(safe-area-inset-top)); }
 
 .app-ic {
   width: 40px; height: 40px; border-radius: var(--r-ctl); flex: none;
@@ -749,7 +776,9 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
 .app-row .dur { margin-inline-start: auto; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; white-space: nowrap; }
 
 .scroll { max-height: 460px; overflow: auto; overscroll-behavior: contain; }
-@media (max-width: 900px), (max-height: 500px) { .scroll { max-height: none; overflow: visible; } }
+@media (max-width: 900px), (max-height: 500px) { .scroll:not(.thread) { max-height: none; overflow: visible; } }
+/* Fil de messages : défile TOUJOURS dans sa carte (le champ de saisie reste visible). */
+.thread.scroll { max-height: min(460px, 60dvh); overflow: auto; }
 /* Liste tronquée : fondu sur le dernier élément + bouton « Afficher les N autres ». */
 .truncated { position: relative; }
 .truncated::after {
@@ -795,6 +824,29 @@ table.tbl td.wrap { white-space: normal; min-width: 180px; }
   table.tbl td.wrap { min-width: 0; }
   table.tbl td:empty { display: none; }
   table.tbl code { white-space: normal; overflow-wrap: anywhere; }
+  /* .compact : ligne 1 = titre + pastille (.t-badge), ligne 2 = méta « 4 min · 10:31 ».
+     Les libellés restent dans l'arbre d'accessibilité, masqués à l'écran. */
+  table.tbl.compact tr { gap: 4px 10px; }
+  table.tbl.compact td:first-child { flex: 1 1 0; order: 0; }
+  table.tbl.compact td.t-badge { order: 1; }
+  table.tbl.compact td.t-none { display: none; }
+  table.tbl.compact td.t-actions { order: 4; flex-basis: 100%; }
+  table.tbl.compact td:has(+ td.t-actions)::after { content: none; }
+  table.tbl.compact tr::after { content: ""; flex-basis: 100%; order: 2; }
+  table.tbl.compact td:not(:first-child):not(.t-badge) { order: 3; gap: 0; }
+  table.tbl.compact td[data-label]:not(:first-child)::before {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  table.tbl.compact td:not(:first-child):not(.t-badge):not(:last-child):not(:empty)::after {
+    content: "·"; content: "·" / ""; margin-inline-start: 10px; color: var(--c-muted);
+  }
+  /* Tableau à 2 colonnes (libellé / valeur) : pas de préfixe, valeurs alignées. */
+  table.tbl.pairs tr { flex-wrap: nowrap; align-items: baseline; justify-content: space-between; }
+  table.tbl.pairs td:first-child { flex: 1 1 auto; font-weight: 500; font-size: 14px; }
+  table.tbl.pairs td[data-label]:not(:first-child)::before {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  table.tbl.pairs td:not(:first-child) { text-align: end; justify-content: flex-end; }
 }
 
 /* --- Pastilles ----------------------------------------------------------- */
@@ -820,7 +872,7 @@ table.tbl td.wrap { white-space: normal; min-width: 180px; }
 label, label.fld, div.fld { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-small); font-weight: 600; color: var(--c-ink); }
 label.row, label.check { flex-direction: row; font-weight: 500; font-size: 14.5px; }
 label.row { flex-wrap: nowrap; align-items: center; gap: 10px; min-height: 44px; }
-table.tbl code { overflow-wrap: normal; white-space: nowrap; }
+@media (min-width: 641px) { table.tbl code { overflow-wrap: normal; white-space: nowrap; } }
 label.check { align-items: flex-start; gap: 12px; min-height: 44px; padding: 10px 0; cursor: pointer; line-height: 1.45; }
 label.check > input, label.row > input[type="checkbox"] { margin-top: 1px; }
 label.row:has(> input[type="checkbox"]) { align-items: flex-start; padding-block: 10px; line-height: 1.45; }
@@ -915,6 +967,14 @@ button.btn-danger:hover { background: var(--c-danger-soft); color: var(--c-dange
 button.btn-danger.solid { background: var(--c-danger); color: var(--c-surface); }
 button.btn-danger.solid:hover { background: color-mix(in srgb, var(--c-danger) 85%, var(--c-ink)); color: var(--c-surface); }
 button.block { width: 100%; }
+/* État désactivé commun à TOUTES les variantes (sinon .ghost/.soft/.link… gardent leur aspect actif). */
+button:is(.ghost, .soft, .link, .icon-btn, .btn-danger, .solid):disabled,
+button:is(.ghost, .soft, .link, .icon-btn, .btn-danger, .solid):disabled:hover,
+.ticket .copy:disabled, .ticket .copy:disabled:hover {
+  background: var(--c-sunken); color: var(--c-muted); border-color: var(--c-border);
+  cursor: not-allowed; box-shadow: none; text-decoration: none;
+}
+button.link:disabled, button.link:disabled:hover { background: none; }
 /* Petite touche tactile : sur écran tactile, cible du lien icône ≥ 44 px garantie ci-dessus. */
 
 form { display: flex; flex-direction: column; gap: 12px; }
@@ -997,6 +1057,9 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .bars-col .lim { position: absolute; inset-inline: 0; border-top: 2px dashed var(--chart-limit); opacity: .85; pointer-events: none; }
 .bars-x { display: flex; margin-top: 10px; }
 .bars-x span { flex: 1 1 0; min-width: 0; text-align: center; font-size: var(--fs-small); color: var(--c-muted); white-space: nowrap; overflow: hidden; unicode-bidi: plaintext; }
+.bars-x .tk, .bars-x .tk-min { flex: none; display: inline; }
+.bars-x .tk-min { display: none; }
+@media (max-width: 399px) { .bars-x .tk { display: none; } .bars-x .tk-min { display: inline; } }
 .bars-x span.hot { color: var(--c-ink); font-weight: 700; }
 .bars-limit-label { position: absolute; inset-inline-start: 0; font-size: var(--fs-caption); line-height: 1.25; font-weight: 700; color: var(--chart-limit); pointer-events: none; }
 
@@ -1020,6 +1083,10 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
   background: var(--c-sage-soft); border: 1px solid var(--c-sage-border); border-radius: var(--r-card);
   padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0;
 }
+/* Pleine largeur : « Vous voyez » / « Vous ne voyez jamais » côte à côte. */
+.transparency .t-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px 32px; }
+@media (max-width: 760px) { .transparency .t-cols { grid-template-columns: minmax(0, 1fr); } }
+.transparency .t-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; }
 .transparency .t-head { display: flex; align-items: flex-start; gap: 12px; }
 .transparency .t-ic {
   width: 44px; height: 44px; border-radius: var(--r-lg); flex: none;
@@ -1032,21 +1099,18 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .transparency .t-kicker.yes { color: var(--c-sage-ink); }
 .transparency .t-kicker.no { color: var(--c-brick); }
 .transparency ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--c-ink); }
+@media (max-width: 900px), (max-height: 500px) {
+  /* Mobile : puces compactes, toute la liste reste visible. */
+  .transparency ul { gap: 4px; font-size: 13.5px; line-height: 1.4; }
+  .transparency li svg { width: 16px; height: 16px; }
+}
 .transparency li { display: flex; align-items: flex-start; gap: 8px; }
 .transparency li svg { margin-top: 2px; }
 .transparency li.yes svg { color: var(--c-sage-ink); }
 .transparency li.no svg { color: var(--c-brick); }
-.transparency .link { color: var(--c-sage-ink); margin-top: auto; padding: 0; align-self: flex-start; }
+.transparency .link { color: var(--c-sage-ink); padding: 0; }
 .transparency .link:hover { color: var(--c-sage-title); }
-/* « Voir toute la liste » : seulement sur mobile ; sur grand écran, tout est visible. */
-.transparency .t-more { display: none; }
-@media (max-width: 900px), (max-height: 500px) {
-  .transparency .t-list.collapsible li:nth-child(n+4) { display: none; }
-  .transparency .t-more { display: inline-flex; margin-top: 10px; }
-}
 .transparency .t-same { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--c-sage-ink); }
-.transparency .t-more { align-self: flex-start; background: transparent; color: var(--c-sage-ink); border-color: var(--c-sage-border); box-shadow: none; min-height: 44px; }
-.transparency .t-more:hover { background: var(--c-surface); color: var(--c-sage-title); }
 
 /* =============================================================================
    Famille — fiche enfant, ticket d'appairage, frise d'audit
@@ -1058,11 +1122,20 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .rule-cell { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .unit-field { display: inline-flex; align-items: center; gap: 6px; color: var(--c-muted); font-size: var(--fs-small); }
 .unit-field input { width: 76px; }
+@media (max-width: 640px) { table.tbl td:has(> .rule-cell), table.tbl td .rule-cell { flex: 1 1 100%; } }
 .add-window {
   margin-top: 12px; padding: 14px 16px; border-radius: var(--r-lg); display: flex; flex-direction: column; gap: 10px;
   background: var(--c-sand); border: 1.5px dashed var(--c-sand-border);
 }
 .dow-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; max-width: 420px; }
+@media (max-width: 380px) { .dow-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Limites par jour : 7 colonnes, 4 sur petit écran. */
+.weekday-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; max-width: 520px; }
+.weekday-grid label { min-width: 0; }
+@media (max-width: 480px) { .weekday-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Créneau : « De » / « À » sur deux colonnes, même sur mobile. */
+.window-times { display: grid; grid-template-columns: repeat(2, minmax(0, 160px)); gap: 10px; }
+.window-times input { width: 100%; }
 .dow-grid button { min-width: 0; }
 .sub-title { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--c-ink); }
 /* Formulaire d'ajout : bouton aligné en bas des champs seulement en multi-colonnes. */
@@ -1126,28 +1199,44 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
    Carte Leaflet (LOT 3)
    ============================================================================= */
 .map-frame { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--c-border); }
-.leaflet-container { background: var(--c-sunken); font: inherit; }
+/* leaflet.css est chargé APRÈS (chunk paresseux) et ajoute .leaflet-touch : chaque
+   règle est préfixée « .map-frame .leaflet-container » pour une spécificité
+   STRICTEMENT supérieure à la sienne (sinon ses blancs et bleus l'emportent en sombre). */
+.map-frame .leaflet-container { background: var(--c-sunken); font: inherit; color: var(--c-ink); }
 /* Tuiles OSM claires : atténuées en sombre par le jeton --map-tile-filter
    (marqueurs SVG dessinés au-dessus, non filtrés). */
-.leaflet-tile { filter: var(--map-tile-filter); }
-/* Préfixe .map-frame : leaflet.css est chargé APRÈS (chunk paresseux) — il faut
-   une spécificité supérieure pour que l'habillage Cocon l'emporte. */
-.map-frame .leaflet-container { background: var(--c-sunken); font: inherit; }
-.map-frame .leaflet-popup-content-wrapper, .map-frame .leaflet-popup-tip { background: var(--c-surface); color: var(--c-ink); box-shadow: var(--shadow-pop); }
-.map-frame .leaflet-popup-content-wrapper { border-radius: var(--r-ctl); }
-.map-frame .leaflet-popup-content { font-size: 14px; margin: 10px 14px; }
-.map-frame .leaflet-bar { border: 1px solid var(--c-border); border-radius: var(--r-ctl); box-shadow: var(--shadow-card); overflow: hidden; }
-.map-frame .leaflet-bar a {
-  width: 40px; height: 40px; line-height: 40px; font-size: 20px; font-weight: 500;
-  background: var(--c-surface); color: var(--c-ink); border-bottom-color: var(--c-divider);
+.map-frame .leaflet-container .leaflet-tile { filter: var(--map-tile-filter); }
+.map-frame .leaflet-container .leaflet-popup-content-wrapper,
+.map-frame .leaflet-container .leaflet-popup-tip { background: var(--c-surface); color: var(--c-ink); box-shadow: var(--shadow-pop); }
+.map-frame .leaflet-container .leaflet-popup-content-wrapper { border-radius: var(--r-ctl); }
+.map-frame .leaflet-container .leaflet-popup-content { font-size: 14px; margin: 10px 14px; }
+.map-frame .leaflet-container a.leaflet-popup-close-button {
+  width: 32px; height: 32px; font: 22px/32px var(--font-body); color: var(--c-muted); border-radius: var(--r-md);
 }
-.map-frame .leaflet-bar a:hover { background: var(--c-sunken); color: var(--c-ink); }
-.map-frame .leaflet-bar a:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
-.map-frame .leaflet-control-attribution {
+.map-frame .leaflet-container a.leaflet-popup-close-button:hover,
+.map-frame .leaflet-container a.leaflet-popup-close-button:focus { color: var(--c-ink); background: var(--c-sunken); }
+.map-frame .leaflet-container .leaflet-bar {
+  border: 1px solid var(--c-border); border-radius: var(--r-ctl); box-shadow: var(--shadow-card); overflow: hidden;
+}
+.map-frame .leaflet-container .leaflet-bar a {
+  width: 40px; height: 40px; line-height: 40px; font-size: 20px; font-weight: 500;
+  background: var(--c-surface); color: var(--c-ink); border-bottom: 1px solid var(--c-divider);
+}
+.map-frame .leaflet-container .leaflet-bar a:is(:first-child, :last-child) { border-radius: 0; }
+.map-frame .leaflet-container .leaflet-bar a:last-child { border-bottom: 0; }
+.map-frame .leaflet-container .leaflet-bar a:hover,
+.map-frame .leaflet-container .leaflet-bar a:focus { background: var(--c-sunken); color: var(--c-ink); }
+.map-frame .leaflet-container .leaflet-bar a:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+.map-frame .leaflet-container .leaflet-bar a.leaflet-disabled,
+.map-frame .leaflet-container .leaflet-bar a.leaflet-disabled:hover { background: var(--c-sunken); color: var(--c-muted); cursor: not-allowed; }
+@media (pointer: coarse) {
+  .map-frame .leaflet-container .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+}
+.map-frame .leaflet-container .leaflet-control-attribution {
   background: var(--c-surface); color: var(--c-ink-2); font-size: 11px; padding: 2px 8px;
   border-start-start-radius: var(--r-chip);
 }
-.map-frame .leaflet-control-attribution a { color: var(--c-accent-text); }
+.map-frame .leaflet-container .leaflet-control-attribution a { color: var(--c-accent-text); }
 
 /* --- SOS actif (bordure pleine + fond teinté : pas de liseré coloré) ----- */
 .sos-banner {
@@ -1166,6 +1255,13 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .zone-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-inline-start: auto; }
 .zone-actions button.soft { min-height: 40px; padding: 0 14px; font-size: 14px; }
 @media (pointer: coarse) { .zone-actions button.soft { min-height: 44px; } }
+.zone-actions .zone-delete { color: var(--c-danger); }
+.zone-actions .zone-delete:hover { color: var(--c-danger); }
+/* Très petit écran (iPhone SE) : suppression en simple icône (nom accessible conservé). */
+@media (max-width: 400px) {
+  .zone-actions .zone-delete { width: 44px; justify-content: center; }
+  .zone-actions .zone-delete .lbl { display: none; }
+}
 @media (max-width: 600px) {
   .settings-row > .fld { flex: 1 1 100%; }
   .settings-row select { width: 100%; }
@@ -1232,6 +1328,20 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
   .auth-card { padding: 24px 20px; max-width: none; }
   .auth-card h1 { font-size: 26px; }
 }
+/* Paysage bas (iPhone couché) : marque et formulaire côte à côte. */
+@media (max-height: 500px) and (min-width: 700px) {
+  .auth { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .auth-card { max-width: 440px; }
+  .auth-main { padding-top: 0; }
+  .auth-headline { font-size: 24px; }
+}
+/* Petits écrans : titre resserré, points sur une ligne (variante courte). */
+.auth-points .pt-short { display: none; }
+@media (max-width: 480px) {
+  .auth-headline { font-size: 22px; }
+  .auth-points .pt-long { display: none; }
+  .auth-points .pt-short { display: inline; }
+}
 
 /* =============================================================================
    Mobile / iPhone : la barre latérale devient un TIROIR hors écran
@@ -1256,7 +1366,13 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
     opacity: 0; pointer-events: none; transition: opacity 200ms var(--ease);
   }
   .shell.drawer-open .scrim { opacity: 1; pointer-events: auto; }
-  .menu-btn { display: inline-flex; }
+  .menu-btn { display: inline-flex; position: relative; }
+  .menu-count {
+    position: absolute; inset-block-start: -6px; inset-inline-end: -6px; min-width: 20px; height: 20px; padding: 0 5px;
+    border-radius: var(--r-pill); background: var(--c-accent); color: var(--c-accent-ink);
+    font-size: 11.5px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums;
+    box-shadow: 0 0 0 2px var(--c-bg);
+  }
   .main {
     padding-top: max(14px, env(safe-area-inset-top));
     padding-bottom: max(32px, env(safe-area-inset-bottom));
@@ -1298,6 +1414,36 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
       var(--c-side);
   }
   .main[inert] { pointer-events: none; }
+}
+/* Tiroir sur écran peu haut : entrées resserrées, ombre de défilement plus marquée. */
+@media (max-width: 900px) and (max-height: 700px), (max-height: 500px) {
+  .sidebar .nav-item { min-height: 40px; }
+  .sidebar .nav { gap: 8px; }
+  .sidebar {
+    background:
+      linear-gradient(var(--c-side) 30%, transparent) center top / 100% 32px no-repeat local,
+      linear-gradient(transparent, var(--c-side) 70%) center bottom / 100% 32px no-repeat local,
+      linear-gradient(var(--c-scroll-shadow), transparent) center top / 100% 20px no-repeat scroll,
+      linear-gradient(transparent, var(--c-scroll-shadow)) center bottom / 100% 20px no-repeat scroll,
+      var(--c-side);
+  }
+}
+@media (max-height: 500px) {
+  .sidebar .brand-sub { display: none; }
+  .sidebar .brand-logo { width: 32px; height: 32px; }
+}
+@media (max-height: 500px) and (min-width: 600px) {
+  /* Tiroir large en paysage : sections sur deux colonnes. */
+  .sidebar { width: min(560px, 80vw); }
+  .sidebar .nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; align-content: start; }
+  /* En-tête : sélecteur et pastille sur une seule ligne. */
+  .header-ctl { display: flex; flex: 1 1 100%; flex-wrap: nowrap; gap: 10px; }
+  .header-ctl .picker { flex: 0 1 320px; max-width: 320px; }
+  .header-ctl .status-pill { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  h1 { font-size: 24px; }
+}
+@media (max-height: 500px) and (min-width: 700px) {
+  .grid.dash-wide { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
 }
 /* Petits écrans : la date seule (le profil est déjà dans le sélecteur d'enfant). */
 @media (max-width: 480px) {

@@ -15,6 +15,7 @@ export interface Slice {
   value: number;
   color: string;      // ex. "var(--series-1)"
   tick?: string;      // libellé court de l'axe (sinon `label`)
+  tickMin?: string;   // variante très courte pour les axes étroits (< 400 px)
 }
 
 interface Tip { x: number; y: number; node: ReactNode }
@@ -168,7 +169,11 @@ export function Bars({
       </div>
       <div className="bars-x" style={{ gap, paddingInlineStart: pad }} aria-hidden="true">
         {data.map((d) => (
-          <span key={d.key} className={d.key === highlightKey ? "hot" : undefined}>{d.tick ?? d.label}</span>
+          <span key={d.key} className={d.key === highlightKey ? "hot" : undefined}>
+            {d.tickMin != null && d.tickMin !== (d.tick ?? d.label)
+              ? <><span className="tk">{d.tick ?? d.label}</span><span className="tk-min">{d.tickMin}</span></>
+              : d.tick ?? d.label}
+          </span>
         ))}
       </div>
       <Tooltip tip={tip} />
@@ -193,8 +198,8 @@ export function HBars({
       {rows.map((d) => (
         <li key={d.key} style={{ gap: 12 }}>
           <span className="lbl" style={{ flex: "0 1 38%" }}>{d.label}</span>
-          <span style={{ flex: 1, height: 8, borderRadius: 4, background: "var(--c-track)" }} aria-hidden="true">
-            <span style={{ display: "block", width: `${Math.max((d.value / max) * 100, 2)}%`, height: 8, borderRadius: 4, background: d.color }} />
+          <span style={{ flex: 1, height: 8, borderRadius: "var(--r-xs)", background: "var(--c-track)" }} aria-hidden="true">
+            <span style={{ display: "block", width: `${Math.max((d.value / max) * 100, 2)}%`, height: 8, borderRadius: "var(--r-xs)", background: d.color }} />
           </span>
           <span className="val" style={{ minWidth: 64, textAlign: "end" }}>{fmt(d.value)}</span>
         </li>

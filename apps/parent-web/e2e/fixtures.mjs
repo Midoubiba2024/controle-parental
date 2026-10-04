@@ -93,12 +93,12 @@ const EXTRA_APPS = [
 ];
 const app_inventory = [
   ...APPS.map((a, i) => ({
-    id: `inv-${i}`, child_id: CHILD, device_id: DEV, package_name: a.pkg, app_label: a.label, category: a.cat,
+    id: `inv-${i}`, family_id: FAM, child_id: CHILD, device_id: DEV, package_name: a.pkg, app_label: a.label, category: a.cat,
     is_system: a.pkg === "com.android.camera", installed_at: ago((30 + i * 9) * 24 * H),
     first_seen_at: ago(38 * 24 * H), last_seen_at: ago(5 * MIN), removed_at: null,
   })),
   ...EXTRA_APPS.map(([pkg, label, cat, sys], i) => ({
-    id: `inv-x${i}`, child_id: CHILD, device_id: DEV, package_name: pkg, app_label: label, category: cat,
+    id: `inv-x${i}`, family_id: FAM, child_id: CHILD, device_id: DEV, package_name: pkg, app_label: label, category: cat,
     is_system: sys, installed_at: i === 5 ? ago(26 * H) : ago((60 + i) * 24 * H),
     first_seen_at: i === 5 ? ago(26 * H) : ago(38 * 24 * H), last_seen_at: ago(5 * MIN), removed_at: null,
   })),
@@ -107,6 +107,8 @@ const app_inventory = [
 const comm_events = [
   ["incoming", 4 * MIN + 12_000, 2 * H, "a91f3c"], ["outgoing", 2 * MIN, 5 * H, "7be20d"],
   ["missed", null, 26 * H, "a91f3c"], ["incoming", 11 * MIN, 30 * H, "c40e88"],
+  // Dernier appel : RÉELLEMENT anonyme (numéro masqué par l'appelant) → aucun
+  // identifiant (hash null) ; la console affiche alors « Numéro masqué ».
   ["outgoing", 45_000, 52 * H, "a91f3c"], ["blocked", null, 70 * H, null],
 ].map(([direction, duration_ms, back, hash], i) => ({
   id: `call-${i}`, child_id: CHILD, device_id: DEV, kind: "call", direction,

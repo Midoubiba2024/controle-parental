@@ -4,7 +4,7 @@ import {
   HELP_RESOURCES, SAFETY_CATEGORIES, SEVERITY_LABEL, SEVERITY_ORDER,
   safetyCategoryColor, safetyCategoryLabel, toSafetySettingsUpsert, useSafety,
 } from "../../lib/safety";
-import { fmtAgo, fmtDateTime } from "../../lib/format";
+import { fmtAgo, fmtAt, fmtDateTime } from "../../lib/format";
 import type { CSSProperties } from "react";
 import { CalendarClock, CirclePause, CloudSun, ExternalLink, FolderOpen, Funnel, HeartHandshake, MapPin, TriangleAlert, UserRoundCheck } from "lucide-react";
 import { EmptyState, ViewSkeleton } from "../Ui";
@@ -87,7 +87,7 @@ function YoungChildNotice({ child, onNavigate }: { child: Child; onNavigate: (v:
     <div className="card">
       <div className="empty">
         <span className="empty-ic"><UserRoundCheck {...ic} size={22} /></span>
-        <h2 className="empty-title" style={{ fontSize: 20 }}>{t("views.wellbeing.youngChild.title")}</h2>
+        <h2 className="empty-title" style={{ fontSize: "var(--fs-h2)" }}>{t("views.wellbeing.youngChild.title")}</h2>
         <p className="empty-hint" style={{ maxWidth: "52ch" }}>{t("views.wellbeing.youngChild.body", { name: child.display_name })}</p>
         <p className="empty-hint" style={{ marginTop: 10 }}>{t("views.wellbeing.youngChild.protectedBy")}</p>
         <div className="row" style={{ justifyContent: "center", marginTop: 6 }}>
@@ -170,7 +170,7 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
                       ? (st.last_revoked_at ? t("views.wellbeing.settings.cutAgo", { ago: fmtAgo(st.last_revoked_at) }) : "")
                       : stale
                         ? t("views.wellbeing.settings.silentSince", { ago: fmtAgo(st.updated_at) })
-                        : t("views.wellbeing.settings.lastSeen", { when: fmtDateTime(st.updated_at) })}
+                        : t("views.wellbeing.settings.lastSeen", { when: fmtAt(st.updated_at) })}
                   </span>
                 </span>
               </li>
@@ -255,7 +255,7 @@ function SignalsCard({ s, busy, run, acknowledge }: {
       {s.signals.length === 0 ? (
         <EmptyState icon={FolderOpen} title={t("views.wellbeing.signals.emptyTitle")} hint={t("views.wellbeing.signals.emptyHint")} />
       ) : (
-        <div className="tbl-wrap"><table className="tbl">
+        <div className="tbl-wrap"><table className="tbl compact">
           <thead><tr>
             <th>{t("views.wellbeing.signals.colCategory")}</th><th>{t("views.wellbeing.signals.colSeverity")}</th>
             <th>{t("views.wellbeing.signals.colApp")}</th><th>{t("views.wellbeing.signals.colOccurrences")}</th>
@@ -269,13 +269,13 @@ function SignalsCard({ s, busy, run, acknowledge }: {
                     <span className="sw" style={{ background: safetyCategoryColor(sig.category) }} />{safetyCategoryLabel(sig.category)}
                   </span>
                 </td>
-                <td data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colSeverity") })}><span className={`badge ${sig.severity === "high" ? "danger" : sig.severity === "medium" ? "warn" : "good"}`}>
+                <td className="t-badge" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colSeverity") })}><span className={`badge ${sig.severity === "high" ? "danger" : sig.severity === "medium" ? "warn" : "good"}`}>
                   {SEVERITY_LABEL[sig.severity]}
                 </span></td>
                 <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colApp") })}><code>{sig.source_app ?? t("common.none")}</code></td>
                 <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colOccurrences") })}>{sig.occurrence_count}</td>
                 <td className="muted small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colWhen") })}>{fmtDateTime(sig.occurred_at)}</td>
-                <td>
+                <td className="t-actions">
                   {sig.acknowledged_at
                     ? <span className="muted small">{t("views.wellbeing.signals.seen")}</span>
                     : <button className="link" disabled={busy} onClick={() => run(() => acknowledge(sig.id))}>{t("views.wellbeing.signals.markSeen")}</button>}

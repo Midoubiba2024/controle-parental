@@ -2,14 +2,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import { I18nProvider, initI18n } from "./i18n";
+import { clearChunkReloadFlag, RELOAD_FLAG } from "./lib/chunkReload";
 import "./styles.css";
 
-// Après un redéploiement (GitHub Pages), les chunks de l'ancienne version ont
-// disparu : un import paresseux échoue. On recharge UNE seule fois la page pour
-// récupérer la nouvelle version (drapeau de session, effacé après un montage
-// réussi) ; sinon ViewErrorBoundary propose « Réessayer » / « Recharger ».
-const RELOAD_FLAG = "cp.chunkReload";
+// Chunk introuvable (nouvelle version publiée) : on recharge UNE seule fois la
+// page pour récupérer la nouvelle version ; sinon — ou hors ligne, où recharger
+// ne servirait à rien — ViewErrorBoundary propose « Réessayer » / « Recharger ».
 window.addEventListener("vite:preloadError", (event) => {
+  if (!navigator.onLine) return;
   try {
     if (sessionStorage.getItem(RELOAD_FLAG)) return;          // déjà tenté : laisser l'erreur remonter
     sessionStorage.setItem(RELOAD_FLAG, "1");
@@ -28,6 +28,7 @@ void initI18n().finally(() => {
       </I18nProvider>
     </React.StrictMode>,
   );
-  // Montage réussi : un futur chunk manquant pourra de nouveau déclencher un rechargement.
-  window.setTimeout(() => { try { sessionStorage.removeItem(RELOAD_FLAG); } catch { /* ignore */ } }, 5000);
+  // Filet : sans vue paresseuse montée (ex. écran de connexion), on efface le
+  // drapeau après 30 s pour qu'un futur chunk manquant puisse recharger à nouveau.
+  window.setTimeout(clearChunkReloadFlag, 30_000);
 });
