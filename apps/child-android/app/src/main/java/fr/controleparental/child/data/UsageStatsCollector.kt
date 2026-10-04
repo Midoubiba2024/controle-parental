@@ -56,17 +56,20 @@ class UsageStatsCollector(private val context: Context) {
     }
 
     /**
-     * Collecte les agrégats des [daysBack] derniers jours (aujourd'hui inclus).
-     * Retourne une ligne par (jour, package) réellement utilisé.
+     * Collecte les agrégats des [daysBack] derniers jours (aujourd'hui inclus),
+     * jamais avant [notBefore] (instant d'appairage, LOT 12b ; 0 = sans borne) :
+     * un jour entièrement antérieur est ignoré, le jour de l'appairage ne compte
+     * qu'à partir de l'appairage. Une ligne par (jour, package) réellement utilisé.
      */
-    fun collect(daysBack: Int = 3): List<UsageRow> {
+    fun collect(daysBack: Int = 3, notBefore: Long = 0L): List<UsageRow> {
         if (!hasUsageAccess()) return emptyList()
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val pm = context.packageManager
         val rows = mutableListOf<UsageRow>()
 
         for (offset in 0 until daysBack) {
-            val (start, end, dayLabel) = dayBounds(offset)
+            val (dayStart, dayEnd, dayLabel) = dayBounds(offset)
+            val (start, end) = CollectionWindows.usageWindow(dayStart, dayEnd, notBefore) ?: continue
             // Agrégation à partir des évènements (durée de premier plan + lancements).
             val agg = HashMap<String, Agg>()
             val events = usm.queryEvents(start, end)

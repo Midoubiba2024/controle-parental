@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import fr.controleparental.child.Config
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,10 +49,11 @@ class SafetyNotificationListener : NotificationListenerService() {
 
     // Instantané de décision (mémoire) — jamais lu depuis les prefs sur le callback.
     // L'enrôlement courant se lit dans SupervisionStore.current (mémoire, sans
-    // déchiffrement) ; [snapChildId] = enfant pour lequel la config a été
-    // synchronisée AVEC SUCCÈS. Aucune analyse si les deux diffèrent (LOT 12b :
-    // jamais la config d'un ancien enfant appliquée à un nouvel appairage).
-    @Volatile private var snapChildId: String? = null
+    // déchiffrement) ; [snapDeviceId] = ENRÔLEMENT pour lequel la config a été
+    // synchronisée AVEC SUCCÈS. Chaque appairage crée un nouveau device_id : même
+    // le ré-appairage du MÊME enfant exige une nouvelle synchro du consentement
+    // avant toute analyse (LOT 12b).
+    @Volatile private var snapDeviceId: String? = null
     @Volatile private var snapActive = false   // consentement + profil ado
     @Volatile private var snapPaused = false   // pause de confidentialité (K8)
     @Volatile private var snapSynced = false   // une config fiable a été obtenue
@@ -82,6 +84,8 @@ class SafetyNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (!Config.featureSafetySignals || sbn == null) return
         val current = SupervisionStore.current.value ?: return
+        // Aucune analyse sans notification de supervision visible (LOT 12b).
+        if (!SupervisionService.foregroundActive) return
         val n = sbn.notification ?: return
         // #2 — ignorer les résumés de groupe (pas un vrai message).
         if ((n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
@@ -92,15 +96,15 @@ class SafetyNotificationListener : NotificationListenerService() {
         if (lastSeen.put(key, sbn.postTime) == sbn.postTime) return
         if (lastSeen.size > MAX_SEEN) lastSeen.clear()
 
-        // Config synchronisée pour un AUTRE enfant (ou jamais) : resynchroniser,
+        // Config synchronisée pour un AUTRE enrôlement (ou jamais) : resynchroniser,
         // et ne rien analyser d'ici là.
-        val sameChild = snapChildId == current.childId
+        val sameEnrollment = snapDeviceId == current.deviceId
         // Rafraîchir l'instantané si périmé (asynchrone, en mémoire — pas de prefs ici).
-        maybeRefreshSnapshot(force = !sameChild)
+        maybeRefreshSnapshot(force = !sameEnrollment)
 
         // Défaut protecteur : pas de config fiable pour CET enfant, non
         // consenti/gradué, ou en pause → rien.
-        if (!sameChild || !snapSynced || !snapActive || snapPaused) return
+        if (!sameEnrollment || !snapSynced || !snapActive || snapPaused) return
 
         // Extraction du texte EN MÉMOIRE (variable locale, jamais loggée/persistée).
         val text = extractText(n) ?: return
@@ -110,7 +114,7 @@ class SafetyNotificationListener : NotificationListenerService() {
         val sourceApp = sbn.packageName
         scope.launch {
             // Dernière garde avant envoi : toujours le même enfant enrôlé.
-            if (SupervisionStore.current.value?.childId == current.childId) client.reportSignals(signals, sourceApp)
+            if (SupervisionStore.current.value?.deviceId == current.deviceId) client.reportSignals(signals, sourceApp)
         }
     }
 
@@ -122,17 +126,17 @@ class SafetyNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Synchronise la config puis l'instantané. [snapChildId] ne prend la valeur de
-     * l'enfant courant qu'après une synchro RÉUSSIE pour lui (gardes connues).
+     * Synchronise la config puis l'instantané. [snapDeviceId] ne prend la valeur
+     * de l'enrôlement courant qu'après une synchro RÉUSSIE pour lui (gardes connues).
      */
     private suspend fun syncSnapshot() {
-        val childId = SupervisionStore.current.value?.childId
+        val deviceId = SupervisionStore.current.value?.deviceId
         val ok = client.syncSettings(cache) != null
         applySnapshot()
-        snapChildId = when {
-            childId == null || SupervisionStore.current.value?.childId != childId -> null
-            ok && snapSynced -> childId
-            snapChildId == childId -> childId   // échec réseau : on garde la config de CET enfant
+        snapDeviceId = when {
+            deviceId == null || SupervisionStore.current.value?.deviceId != deviceId -> null
+            ok && snapSynced -> deviceId
+            snapDeviceId == deviceId -> deviceId   // échec réseau : config de CET enrôlement
             else -> null
         }
     }

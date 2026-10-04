@@ -82,7 +82,7 @@ fun PairingScreen(
     fun submit() {
         if (!canSubmit) return
         store.acknowledgeUnenrolled()
-        PairingController.submit(store, code)
+        PairingController.submit(context, store, code)
     }
 
     val errorCode = pairing.errorCode

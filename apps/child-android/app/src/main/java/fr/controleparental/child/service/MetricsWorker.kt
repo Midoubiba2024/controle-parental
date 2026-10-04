@@ -25,6 +25,9 @@ class MetricsWorker(
 
     override suspend fun doWork(): Result {
         if (!SupervisionStore(applicationContext).isEnrolled) return Result.success()
+        // Invariant de transparence (LOT 12b) : aucune collecte sans notification de
+        // supervision visible. Le prochain cycle rattrapera (bornes d'appairage).
+        if (!SupervisionService.foregroundActive) return Result.success()
         val report = MetricsCollector(applicationContext).collectAndUpload()
         // Les remontées sont idempotentes (upsert on_conflict pour usage_daily/
         // app_inventory/comm_events/device_status), donc un rejeu ne crée pas de
@@ -67,6 +70,13 @@ class MetricsWorker(
                 PERIODIC, ExistingPeriodicWorkPolicy.KEEP, periodic,
             )
             runNow(context)
+        }
+
+        /** Désenrôlement : annule toute collecte planifiée (périodique et ponctuelle). */
+        fun cancel(context: Context) {
+            val wm = WorkManager.getInstance(context)
+            wm.cancelUniqueWork(PERIODIC)
+            wm.cancelUniqueWork(ONESHOT)
         }
 
         /** Déclenche une collecte unique immédiate (ex. au démarrage du service). */

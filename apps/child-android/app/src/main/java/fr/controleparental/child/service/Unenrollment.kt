@@ -66,11 +66,30 @@ object Unenrollment {
         if (!store.isEnrolled && store.teardownPending) release(context, null)
     }
 
+    /**
+     * Exécute [block] SEULEMENT si l'enrôlement [deviceId] (capturé AVANT les appels
+     * réseau) est toujours le courant, sous le MÊME verrou que [release] : une
+     * synchro en vol ne peut plus réappliquer une restriction, réécrire un cache
+     * ou réenregistrer un géorepère après (ou pendant) le démontage. null sinon.
+     * [block] ne doit ni suspendre ni rappeler [Unenrollment].
+     */
+    suspend fun <T> ifStillEnrolled(deviceId: String, block: () -> T): T? = mutex.withLock {
+        if (SupervisionStore.current.value?.deviceId == deviceId) block() else null
+    }
+
+    /**
+     * Exécute [block] en exclusion mutuelle avec le démontage (appairage) : un
+     * appairage ne peut pas aboutir PENDANT un démontage, et inversement.
+     */
+    suspend fun <T> exclusive(block: () -> T): T = mutex.withLock { block() }
+
     /** [reason] null = reprise du filet (la notification a déjà pu être publiée). */
     suspend fun release(context: Context, reason: SupervisionStore.UnenrollReason?) = mutex.withLock {
         val store = runCatching { SupervisionStore(context) }.getOrNull() ?: return@withLock
         // Ré-appairé entre-temps : ne surtout rien démonter.
         if (store.isEnrolled) return@withLock
+        // Reprise en double (filet déjà passé) : rien à refaire.
+        if (reason == null && !store.teardownPending) return@withLock
 
         // 1. Restrictions système (device owner) : suspensions, verrou des réglages, VPN always-on.
         runCatching { releaseDeviceOwnerRestrictions(context) }
@@ -82,6 +101,8 @@ object Unenrollment {
         runCatching { PolicyCache(context).clear() }
         runCatching { FilterCache(context).clear() }
         runCatching { SafetyCache(context).clear() }
+        // 4 bis. Plus aucune collecte planifiée (périodique et ponctuelle).
+        runCatching { MetricsWorker.cancel(context) }
         // 5. Information visible, puis arrêt de la supervision (overlay masqué à l'arrêt).
         val shown = reason ?: SupervisionStore.unenrolled.value
         if (shown != null) runCatching { notifyUnenrolled(context, shown) }

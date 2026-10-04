@@ -3,6 +3,7 @@ package fr.controleparental.child.filter
 import fr.controleparental.child.data.BatchRows
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.Unenrollment
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -27,6 +28,7 @@ class FilterClient(private val store: SupervisionStore) {
     suspend fun syncAndCache(cache: FilterCache): FilterConfig? {
         val e = store.load() ?: return null
         val cid = e.childId
+        val deviceId = e.deviceId
 
         val pol = firstRow(client.get("filter_policy", "child_id=eq.$cid&select=*"))
         if (pol == null && lastWasNetworkError) return null
@@ -35,8 +37,11 @@ class FilterClient(private val store: SupervisionStore) {
         val combined = JSONObject()
         if (pol != null) combined.put("policy", pol)
         combined.put("rules", rulesArr)
-        cache.configJson = combined.toString()
-        return parseConfig(combined)
+        // Jamais réécrit après (ou pendant) un démontage (LOT 12b).
+        return Unenrollment.ifStillEnrolled(deviceId) {
+            cache.configJson = combined.toString()
+            parseConfig(combined)
+        }
     }
 
     /** Charge la config depuis le cache chiffré (hors ligne / écran « mes données »). */

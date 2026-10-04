@@ -1,7 +1,9 @@
 package fr.controleparental.child.ui
 
+import android.content.Context
 import fr.controleparental.child.data.PairingClient
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,13 +29,21 @@ object PairingController {
     val state: StateFlow<State> = _state.asStateFlow()
 
     /** Lance l'appairage (ignoré si un appel est déjà en cours). */
-    fun submit(store: SupervisionStore, code: String) {
+    fun submit(context: Context, store: SupervisionStore, code: String) {
+        val app = context.applicationContext ?: context
         val previous = _state.value
         if (previous.busy) return
         _state.value = State(busy = true, errorSeq = previous.errorSeq)
         scope.launch {
             val next = when (val r = PairingClient(store).complete(code)) {
-                is PairingClient.Result.Ok -> State(errorSeq = previous.errorSeq)
+                is PairingClient.Result.Ok -> {
+                    // Notification de supervision dès l'enrôlement, même si l'écran a
+                    // été quitté pendant l'appel (au mieux : un démarrage en arrière-
+                    // plan peut être refusé ; MainActivity le relance à l'ouverture,
+                    // et rien n'est collecté d'ici là — SupervisionService.foregroundActive).
+                    SupervisionService.start(app)
+                    State(errorSeq = previous.errorSeq)
+                }
                 is PairingClient.Result.Error -> State(errorCode = r.code, errorSeq = previous.errorSeq + 1)
             }
             _state.value = next

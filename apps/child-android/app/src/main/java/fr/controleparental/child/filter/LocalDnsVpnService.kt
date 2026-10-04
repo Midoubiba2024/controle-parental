@@ -17,6 +17,7 @@ import fr.controleparental.child.MainActivity
 import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.enforce.ReinforcedEnforcer
+import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -225,6 +226,8 @@ class LocalDnsVpnService : VpnService() {
         // Non enrôlé : rien n'est journalisé. Sinon, l'événement est étiqueté avec
         // l'appareil courant (lecture mémoire, sans déchiffrement par paquet DNS).
         val deviceId = SupervisionStore.current.value?.deviceId ?: return
+        // Aucune journalisation sans notification de supervision visible (LOT 12b).
+        if (!SupervisionService.foregroundActive) return
         synchronized(pending) {
             if (pending.size >= MAX_BUFFER) pending.removeFirst()
             pending.addLast(FilterClient.DomainEvent(domain, category, action, Instant.now().toString(), deviceId))

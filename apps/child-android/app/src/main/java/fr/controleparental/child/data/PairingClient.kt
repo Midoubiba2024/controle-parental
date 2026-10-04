@@ -6,6 +6,7 @@ import fr.controleparental.child.pairing.AuthSession
 import fr.controleparental.child.pairing.PairingCode
 import fr.controleparental.child.pairing.PairingProtocol
 import fr.controleparental.child.pairing.RpcOutcome
+import fr.controleparental.child.service.Unenrollment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,8 +41,11 @@ class PairingClient(private val store: SupervisionStore) {
 
     /** [code] : saisie de l'enfant (normalisée ici ; le serveur reste l'arbitre). */
     suspend fun complete(code: String): Result = withContext(Dispatchers.IO) {
-        // Jamais deux appels en parallèle (double clic) : verrou de processus.
-        mutex.withLock { completeLocked(PairingCode.normalize(code)) }
+        // Jamais deux appels en parallèle (double clic) : verrou de processus. Puis
+        // exclusion mutuelle avec un démontage (Unenrollment) : un appairage ne peut
+        // pas aboutir pendant qu'un désenrôlement efface caches et notification.
+        // Ordre des verrous toujours : appairage → démontage.
+        mutex.withLock { Unenrollment.exclusive { completeLocked(PairingCode.normalize(code)) } }
     }
 
     private fun completeLocked(code: String): Result {

@@ -71,6 +71,7 @@ class SupervisionStore(context: Context) {
      * réutilisée après succès.
      */
     fun completeEnrollment(e: Enrollment) {
+        val now = System.currentTimeMillis()
         prefs.edit()
             .putString(KEY_DEVICE_ID, e.deviceId)
             .putString(KEY_FAMILY_ID, e.familyId)
@@ -80,6 +81,9 @@ class SupervisionStore(context: Context) {
             .putString(KEY_REFRESH, e.refreshToken)
             .putLong(KEY_EXPIRES_AT, e.expiresAt)
             .putLong(KEY_OBTAINED_AT, e.obtainedAt)
+            // Minimisation (LOT 12b) : toute collecte commence à l'appairage.
+            .putLong(KEY_ENROLLED_AT, now)
+            .putLong(KEY_CALL_WM, now)
             .remove(KEY_PENDING_ACCESS)
             .remove(KEY_PENDING_REFRESH)
             .remove(KEY_PENDING_EXPIRES_AT)
@@ -200,6 +204,12 @@ class SupervisionStore(context: Context) {
         )
     }
 
+    /**
+     * Instant de l'appairage (epoch ms) : borne basse de TOUTE collecte
+     * (CollectionWindows). 0 = enrôlement antérieur au LOT 12b (pas de borne).
+     */
+    val enrolledAt: Long get() = prefs.getLong(KEY_ENROLLED_AT, 0L)
+
     /** Filigrane de la dernière métadonnée d'appel remontée (epoch ms). */
     var callLogWatermark: Long
         get() = prefs.getLong(KEY_CALL_WM, 0L)
@@ -277,6 +287,7 @@ class SupervisionStore(context: Context) {
         private const val KEY_FILTER_DESIRED = "filter_desired"
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_OBTAINED_AT = "obtained_at"
+        private const val KEY_ENROLLED_AT = "enrolled_at"
         private const val KEY_PENDING_OBTAINED_AT = "pending_obtained_at"
         private const val KEY_PENDING_ACCESS = "pending_access_token"
         private const val KEY_PENDING_REFRESH = "pending_refresh_token"

@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.Unenrollment
 import fr.controleparental.child.location.LocationCoordinator
 
 /**
@@ -38,9 +39,10 @@ class CommandExecutor(
     private val policyClient = PolicyClient(store)
 
     suspend fun processPending() {
-        if (!store.isEnrolled) return
+        // Enrôlement capturé AVANT le réseau (garde LOT 12b, voir apply()).
+        val deviceId = SupervisionStore.current.value?.deviceId ?: return
         for (c in policyClient.pendingCommands()) {
-            apply(c)
+            apply(c, deviceId)
             policyClient.ackCommand(c.id, "acked")
         }
     }
@@ -82,11 +84,14 @@ class CommandExecutor(
      *  commande `message` (#4/#8) → pas de collision ni de spam au re-sondage. */
     private fun messageNotifId(id: String): Int = MSG_NOTIF_BASE + ((id.hashCode() and 0x7fffffff) % 1000)
 
-    private suspend fun apply(c: PolicyClient.CommandRow) {
+    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String) {
         when (c.type) {
-            "pause" -> cache.pauseActive = true
-            "resume" -> cache.pauseActive = false
-            "lock_now" -> if (!reinforced.lockNow()) cache.pauseActive = true
+            // Écritures de cache / appels DPM : jamais après (ou pendant) un démontage.
+            "pause" -> Unenrollment.ifStillEnrolled(deviceId) { cache.pauseActive = true }
+            "resume" -> Unenrollment.ifStillEnrolled(deviceId) { cache.pauseActive = false }
+            "lock_now" -> Unenrollment.ifStillEnrolled(deviceId) {
+                if (!reinforced.lockNow()) cache.pauseActive = true
+            }
             "ring" -> ring()
             "message" -> notifyMessage(c.payload.optString("message").ifBlank { context.getString(R.string.parent_message_default) }, CMD_MSG_NOTIF_ID)
             "locate" -> location?.checkInOnDemand()

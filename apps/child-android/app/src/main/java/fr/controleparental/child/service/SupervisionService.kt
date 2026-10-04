@@ -81,6 +81,9 @@ class SupervisionService : Service() {
         executor = CommandExecutor(this, PolicyCache(this), reinforced, location)
         policyClient = PolicyClient(SupervisionStore(this))
         registerBatteryReceiver()
+        // Filet LOT 12b : relancé par le système (START_STICKY) après un processus
+        // tué en plein démontage → le rejouer, même si startForeground échoue ensuite.
+        Unenrollment.resumeIfPending(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -101,6 +104,7 @@ class SupervisionService : Service() {
         }
         try {
             ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), type)
+            foregroundActive = true
         } catch (e: Exception) {
             // ForegroundServiceStartNotAllowedException (API 31+) / SecurityException :
             // démarrage FGS refusé dans cet état (ex. dataSync depuis le boot sur
@@ -115,6 +119,7 @@ class SupervisionService : Service() {
     }
 
     override fun onDestroy() {
+        foregroundActive = false
         scope.cancel()
         runCatching { overlay.hide() }
         batteryReceiver?.let { runCatching { unregisterReceiver(it) } }
@@ -183,15 +188,22 @@ class SupervisionService : Service() {
     }
 
     private suspend fun syncRules() {
+        // Enrôlement capturé AVANT le réseau : si un démontage survient pendant la
+        // synchro, rien n'est réappliqué ensuite (Unenrollment.ifStillEnrolled).
+        val deviceId = SupervisionStore.current.value?.deviceId ?: return
         val installed = runCatching { AppInventoryCollector(this).collect().map { it.packageName }.toSet() }
             .getOrDefault(emptySet())
-        val rs = policyClient.syncAndCache(PolicyCache(this), installed)
-        if (rs != null) {
-            manager.setRules(rs)
-            manager.applyStaticSuspensions(reinforced, installed)
-            reinforced.setSystemSettingsLock(rs.policy?.lockSystemSettings == true)
-        } else {
-            manager.loadFromCache()
+        val fetched = policyClient.fetchRules()
+        Unenrollment.ifStillEnrolled(deviceId) {
+            if (fetched != null) {
+                val cache = PolicyCache(this)
+                policyClient.commitToCache(cache, fetched, installed)
+                manager.setRules(fetched.ruleSet)
+                manager.applyStaticSuspensions(reinforced, installed)
+                reinforced.setSystemSettingsLock(fetched.ruleSet.policy?.lockSystemSettings == true)
+            } else {
+                manager.loadFromCache()
+            }
         }
     }
 
@@ -251,6 +263,16 @@ class SupervisionService : Service() {
         private const val COMMANDS_EVERY = 5L     // ~15 s
         private const val SYNC_EVERY = 100L       // ~5 min
         const val EXTRA_FROM_BOOT = "from_boot"
+
+        /**
+         * Notification de supervision RÉELLEMENT affichée dans ce processus (vrai
+         * après un startForeground réussi, faux à la destruction). Invariant de
+         * transparence (LOT 12b) : collecte (MetricsWorker), analyse bien-être et
+         * journal DNS ne font rien tant qu'il est faux.
+         */
+        @Volatile
+        var foregroundActive: Boolean = false
+            private set
 
         /** Arrêt (désenrôlement) : la notification de supervision disparaît. */
         fun stop(context: Context) {
