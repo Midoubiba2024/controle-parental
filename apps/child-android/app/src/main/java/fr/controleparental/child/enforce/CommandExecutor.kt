@@ -44,8 +44,10 @@ class CommandExecutor(
         // Enrôlement capturé AVANT le réseau (garde LOT 12b, voir apply()).
         val deviceId = SupervisionStore.current.value?.deviceId ?: return
         for (c in policyClient.pendingCommands()) {
-            apply(c, deviceId)
-            policyClient.ackCommand(c.id, "acked")
+            // false : état transitoire (notification de supervision pas encore
+            // affichée) → la commande reste en attente, retraitée au tick suivant ;
+            // l'expiration normale s'applique.
+            if (apply(c, deviceId)) policyClient.ackCommand(c.id, "acked")
         }
     }
 
@@ -86,7 +88,8 @@ class CommandExecutor(
      *  commande `message` (#4/#8) → pas de collision ni de spam au re-sondage. */
     private fun messageNotifId(id: String): Int = MSG_NOTIF_BASE + ((id.hashCode() and 0x7fffffff) % 1000)
 
-    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String) {
+    /** Applique la commande ; false = ne pas l'acquitter maintenant (transitoire). */
+    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String): Boolean {
         when (c.type) {
             // Écritures de cache / appels DPM : jamais après (ou pendant) un démontage.
             "pause" -> Unenrollment.ifStillEnrolled(deviceId) { cache.pauseActive = true }
@@ -96,16 +99,18 @@ class CommandExecutor(
             }
             "ring" -> ring()
             "message" -> notifyMessage(c.payload.optString("message").ifBlank { context.getString(R.string.parent_message_default) }, CMD_MSG_NOTIF_ID)
-            // Supervision non visible : AUCUNE position ; la commande est acquittée
-            // (le serveur n'autorise à l'appareil aucun statut d'échec —
-            // app.commands_guard_child_update) et, si les notifications sont
-            // coupées, le parent en est informé par le canal device_status.
-            "locate" -> if (location?.checkInOnDemand() == LocationCoordinator.CheckIn.SUPERVISION_NOT_VISIBLE &&
-                !SupervisionService.notificationsAllowed(context)
-            ) {
-                SupervisionSignal.reportNotificationsOff(store)
+            // Supervision non visible : AUCUNE position.
+            //  - notifications autorisées : état transitoire (notification pas encore
+            //    affichée / republiée) → pas d'acquittement, nouvel essai au tick suivant ;
+            //  - notifications coupées : commande acquittée (le serveur n'autorise à
+            //    l'appareil aucun statut d'échec — app.commands_guard_child_update) et
+            //    parent informé par le canal device_status.
+            "locate" -> if (location?.checkInOnDemand() == LocationCoordinator.CheckIn.SUPERVISION_NOT_VISIBLE) {
+                if (SupervisionService.notificationsAllowed(context)) return false
+                SupervisionSignal.reportNotificationsOff(context, store)
             }
         }
+        return true
     }
 
     private fun ring() {

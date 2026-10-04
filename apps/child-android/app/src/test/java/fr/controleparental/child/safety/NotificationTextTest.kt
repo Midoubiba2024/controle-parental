@@ -52,4 +52,21 @@ class NotificationTextTest {
         val msgs = listOf(NotificationText.Message(5, "message"))
         assertEquals("message", NotificationText.assemble(null, null, null, null, msgs, null, 10, enrolledAt = 0))
     }
+
+    @Test fun cumulativeNotificationPresentBeforePairingIsNeverAnalysed() {
+        // Inbox/BigText republiée après l'appairage, mais déjà présente avant (T3).
+        val lines = listOf<CharSequence>("ancienne ligne")
+        assertNull(
+            NotificationText.assemble(
+                "Boîte", "texte", "grand texte", null, null, lines, enrolledAt + 5, enrolledAt,
+                presentBeforeEnrollment = true,
+            ),
+        )
+        // MessagingStyle : filtré par date, la présence antérieure ne bloque pas les nouveaux messages.
+        val msgs = listOf(NotificationText.Message(enrolledAt + 1, "nouveau"))
+        assertEquals(
+            "nouveau",
+            NotificationText.assemble(null, null, null, null, msgs, null, enrolledAt + 5, enrolledAt, presentBeforeEnrollment = true),
+        )
+    }
 }

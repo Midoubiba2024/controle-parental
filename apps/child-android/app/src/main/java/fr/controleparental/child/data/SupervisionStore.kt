@@ -89,6 +89,11 @@ class SupervisionStore(context: Context) {
             .remove(KEY_FILTER_DESIRED)
             .remove(KEY_STATUS_TS)
             .remove(KEY_MSG_WM)
+            .remove(KEY_VISIBLE_SINCE)
+            .remove(KEY_LAST_VISIBLE_AT)
+            .remove(KEY_SOS_LOCAL_ID)
+            .remove(KEY_SOS_LOCAL_BOOT)
+            .remove(KEY_SOS_LOCAL_ELAPSED)
             .remove(KEY_PENDING_ACCESS)
             .remove(KEY_PENDING_REFRESH)
             .remove(KEY_PENDING_EXPIRES_AT)
@@ -218,7 +223,57 @@ class SupervisionStore(context: Context) {
      * Instant de l'appairage (epoch ms) : borne basse de TOUTE collecte
      * (CollectionWindows). 0 = enrôlement antérieur au LOT 12b (pas de borne).
      */
-    val enrolledAt: Long get() = prefs.getLong(KEY_ENROLLED_AT, 0L)
+    val enrolledAt: Long
+        get() {
+            // Dans le futur (horloge corrigée en arrière) : ramené à maintenant et réécrit.
+            val clamp = CollectionWindows.clampEnrolledAt(prefs.getLong(KEY_ENROLLED_AT, 0L), System.currentTimeMillis())
+            clamp.toPersist?.let { prefs.edit().putLong(KEY_ENROLLED_AT, it).apply() }
+            return clamp.effective
+        }
+
+    /**
+     * Dernier retour à la visibilité de la supervision (epoch ms, 0 = jamais) :
+     * borne basse de collecte avec [enrolledAt] (VisibilityWindow, T2).
+     */
+    val visibleSince: Long get() = prefs.getLong(KEY_VISIBLE_SINCE, 0L)
+
+    /**
+     * À appeler quand la notification de supervision est constatée VISIBLE. Après
+     * une interruption, la fenêtre de collecte repart de maintenant et le filigrane
+     * des appels avance : rien de la période sans supervision n'est rattrapé.
+     */
+    fun noteSupervisionVisible(now: Long = System.currentTimeMillis()) {
+        if (!isEnrolled) return
+        val step = VisibilityWindow.onVisible(
+            VisibilityWindow.State(prefs.getLong(KEY_VISIBLE_SINCE, 0L), prefs.getLong(KEY_LAST_VISIBLE_AT, 0L)),
+            now,
+        )
+        if (!step.persist) return
+        val edit = prefs.edit()
+            .putLong(KEY_VISIBLE_SINCE, step.state.visibleSince)
+            .putLong(KEY_LAST_VISIBLE_AT, step.state.lastVisibleAt)
+        step.resetAt?.let { edit.putLong(KEY_CALL_WM, maxOf(callLogWatermark, it)) }
+        edit.apply()
+    }
+
+    /** SOS déclenché SUR CET APPAREIL (T1) : seul lui peut être diffusé en direct. */
+    data class LocalSos(val id: String, val boot: Int, val startedElapsedMs: Long)
+
+    var localSos: LocalSos?
+        get() {
+            val id = prefs.getString(KEY_SOS_LOCAL_ID, null) ?: return null
+            return LocalSos(id, prefs.getInt(KEY_SOS_LOCAL_BOOT, -1), prefs.getLong(KEY_SOS_LOCAL_ELAPSED, 0L))
+        }
+        set(v) {
+            val e = prefs.edit()
+            if (v == null) {
+                e.remove(KEY_SOS_LOCAL_ID).remove(KEY_SOS_LOCAL_BOOT).remove(KEY_SOS_LOCAL_ELAPSED)
+            } else {
+                e.putString(KEY_SOS_LOCAL_ID, v.id).putInt(KEY_SOS_LOCAL_BOOT, v.boot)
+                    .putLong(KEY_SOS_LOCAL_ELAPSED, v.startedElapsedMs)
+            }
+            e.commit()
+        }
 
     /** Filigrane de la dernière métadonnée d'appel remontée (epoch ms). */
     var callLogWatermark: Long
@@ -298,6 +353,11 @@ class SupervisionStore(context: Context) {
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_OBTAINED_AT = "obtained_at"
         private const val KEY_ENROLLED_AT = "enrolled_at"
+        private const val KEY_VISIBLE_SINCE = "supervision_visible_since"
+        private const val KEY_LAST_VISIBLE_AT = "supervision_last_visible_at"
+        private const val KEY_SOS_LOCAL_ID = "sos_local_id"
+        private const val KEY_SOS_LOCAL_BOOT = "sos_local_boot"
+        private const val KEY_SOS_LOCAL_ELAPSED = "sos_local_started_elapsed"
         private const val KEY_PENDING_OBTAINED_AT = "pending_obtained_at"
         private const val KEY_PENDING_ACCESS = "pending_access_token"
         private const val KEY_PENDING_REFRESH = "pending_refresh_token"

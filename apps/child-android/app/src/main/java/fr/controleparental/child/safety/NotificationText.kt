@@ -25,6 +25,12 @@ object NotificationText {
         postTime: Long,
         enrolledAt: Long,
         recent: Int = 3,
+        /**
+         * La notification (même clé) existait déjà avant l'appairage (T3) : une
+         * notification cumulative republiée (Inbox, BigText) contient alors des
+         * messages anciens non datés — jamais analysée hors MessagingStyle.
+         */
+        presentBeforeEnrollment: Boolean = false,
     ): String? {
         val parts = mutableListOf<CharSequence>()
         if (messages != null) {
@@ -33,7 +39,7 @@ object NotificationText {
             title?.let { parts += it }
             kept.forEach { parts += it.text!! }
         } else {
-            if (postTime < enrolledAt) return null
+            if (postTime < enrolledAt || presentBeforeEnrollment) return null
             listOfNotNull(title, text, bigText, subText).forEach { parts += it }
             inboxLines?.takeLast(recent)?.forEach { parts += it }
         }

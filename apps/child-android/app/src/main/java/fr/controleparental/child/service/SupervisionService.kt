@@ -30,6 +30,7 @@ import fr.controleparental.child.enforce.PolicyCache
 import fr.controleparental.child.enforce.PolicyClient
 import fr.controleparental.child.enforce.ReinforcedEnforcer
 import fr.controleparental.child.location.LocationCoordinator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -181,12 +182,28 @@ class SupervisionService : Service() {
             // est donc bon marché.
             runCatching { location.onTick() }
 
+            val allowed = notificationsAllowed(this)
             // Notification balayée (possible en mode Standard sous Android 14+) :
-            // on la republie — la supervision doit rester visible.
-            runCatching { republishIfDismissed() }
+            // on la republie — la supervision doit rester visible. Inutile si les
+            // notifications sont coupées (rien ne s'afficherait).
+            if (allowed) {
+                try {
+                    withContext(Dispatchers.Main) {
+                        // Jamais une notification orpheline après l'arrêt / le désenrôlement.
+                        if (foregroundActive && scope.isActive && store.isEnrolled) republishIfDismissed()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
+            }
+            // Battement de visibilité : après une interruption, la collecte repart
+            // d'ici, sans rattrapage (T2).
+            if (supervisionVisible(this)) runCatching { store.noteSupervisionVisible() }
             // Notifications coupées : la collecte est suspendue (supervisionVisible) ;
-            // le parent en est informé (perm_notifications=false, au plus 1×/h).
-            if (!notificationsAllowed(this)) runCatching { SupervisionSignal.reportNotificationsOff(store) }
+            // le parent en est informé (perm_notifications=false, au plus 1×/h),
+            // hors du chemin critique de l'overlay.
+            if (!allowed) SupervisionSignal.reportNotificationsOffAsync(this, store)
 
             val res = runCatching { manager.evaluateForeground() }.getOrNull()
             withContext(Dispatchers.Main) { applyDecision(res) }
@@ -267,6 +284,9 @@ class SupervisionService : Service() {
             .setOngoing(true)            // non balayable
             .setContentIntent(openApp)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
+            // Affichée IMMÉDIATEMENT (Android 12+ peut différer de 10 s une
+            // notification de service) : la supervision se voit dès le démarrage.
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 

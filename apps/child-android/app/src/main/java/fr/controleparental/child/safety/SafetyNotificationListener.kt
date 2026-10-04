@@ -57,6 +57,12 @@ class SafetyNotificationListener : NotificationListenerService() {
     // Instant d'appairage (mis en mémoire à la synchro, jamais lu des prefs sur le
     // callback) : aucun message antérieur n'est analysé (NotificationText).
     @Volatile private var snapEnrolledAt = Long.MAX_VALUE
+    // Clés des notifications DÉJÀ présentes avant l'appairage (T3) : une
+    // notification cumulative (Inbox, BigText) republiée ensuite contient
+    // d'anciens messages non datés → jamais analysée hors MessagingStyle.
+    // Rempli sur IO (syncSnapshot), vidé au changement d'enrôlement.
+    private val preEnrollmentKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    @Volatile private var preEnrollmentKeysFor: String? = null
     @Volatile private var snapActive = false   // consentement + profil ado
     @Volatile private var snapPaused = false   // pause de confidentialité (K8)
     @Volatile private var snapSynced = false   // une config fiable a été obtenue
@@ -110,7 +116,7 @@ class SafetyNotificationListener : NotificationListenerService() {
         if (!sameEnrollment || !snapSynced || !snapActive || snapPaused) return
 
         // Extraction du texte EN MÉMOIRE (variable locale, jamais loggée/persistée).
-        val text = extractText(n, sbn.postTime) ?: return
+        val text = extractText(n, sbn.postTime, presentBefore = sbn.key in preEnrollmentKeys) ?: return
         val signals = SafetyDetectionEngine.analyze(text, sbn.packageName)
         // `text` sort de portée ici : aucune trace. Seuls les signaux remontent.
         if (signals.isEmpty()) return
@@ -140,11 +146,27 @@ class SafetyNotificationListener : NotificationListenerService() {
         // Les gardes en cache doivent avoir été synchronisées pour CET enrôlement
         // (SafetyCache.syncedDeviceId, écrit seulement si consentement ET profil
         // sont connus) — une synchro partielle ou celle d'un autre appairage ne suffit pas.
-        snapDeviceId = if (
+        val synced = if (
             deviceId != null &&
             SupervisionStore.current.value?.deviceId == deviceId &&
             cache.syncedDeviceId == deviceId
         ) deviceId else null
+        // Clés antérieures recensées AVANT d'autoriser l'analyse pour cet enrôlement.
+        refreshPreEnrollmentKeys(deviceId)
+        snapDeviceId = synced
+    }
+
+    /** Recense les notifications présentes publiées AVANT l'appairage (T3). */
+    private fun refreshPreEnrollmentKeys(deviceId: String?) {
+        if (deviceId != preEnrollmentKeysFor) {
+            preEnrollmentKeys.clear()
+            preEnrollmentKeysFor = deviceId
+        }
+        if (deviceId == null) return
+        val enrolledAt = snapEnrolledAt
+        runCatching { activeNotifications }.getOrNull()?.forEach { sbn ->
+            if (sbn.postTime < enrolledAt) sbn.key?.let { preEnrollmentKeys.add(it) }
+        }
     }
 
     private fun maybeRefreshSnapshot(force: Boolean = false) {
@@ -169,7 +191,7 @@ class SafetyNotificationListener : NotificationListenerService() {
      * l'appairage n'est analysé (LOT 12b). ⚠️ Le texte reste STRICTEMENT local
      * (jamais loggé/persisté/envoyé). Retourne null s'il ne reste rien.
      */
-    private fun extractText(n: Notification, postTime: Long): String? {
+    private fun extractText(n: Notification, postTime: Long, presentBefore: Boolean): String? {
         val extras = n.extras ?: return null
         // MessagingStyle (WhatsApp, Messages…) : messages datés, filtrés à l'appairage.
         val messages = runCatching {
@@ -185,6 +207,7 @@ class SafetyNotificationListener : NotificationListenerService() {
             postTime = postTime,
             enrolledAt = snapEnrolledAt,
             recent = RECENT_MESSAGES,
+            presentBeforeEnrollment = presentBefore,
         )
     }
 

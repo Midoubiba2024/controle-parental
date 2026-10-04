@@ -12,6 +12,23 @@ object CollectionWindows {
     fun callsSince(watermark: Long, enrolledAt: Long): Long = maxOf(watermark, enrolledAt)
 
     /**
+     * Borne basse de collecte : appairage ET dernier retour à la visibilité de la
+     * supervision (T2) — rien de ce qui s'est passé pendant une période sans
+     * notification visible n'est rattrapé ensuite (échec fermé).
+     */
+    fun notBefore(enrolledAt: Long, visibleSince: Long): Long = maxOf(enrolledAt, visibleSince)
+
+    /**
+     * Instant d'appairage relu : s'il est dans le futur (horloge corrigée en
+     * arrière), il est ramené à [nowMs] et [toPersist] indique la valeur à
+     * réécrire — sinon toutes les positions (SOS compris) seraient rejetées.
+     */
+    data class Clamp(val effective: Long, val toPersist: Long?)
+
+    fun clampEnrolledAt(stored: Long, nowMs: Long): Clamp =
+        if (stored > nowMs) Clamp(nowMs, nowMs) else Clamp(stored, null)
+
+    /**
      * Fenêtre d'agrégation d'un jour [[dayStart], [dayEnd]) bornée à [enrolledAt] :
      * null si le jour est entièrement antérieur à l'appairage, sinon le début
      * ramené à l'appairage.

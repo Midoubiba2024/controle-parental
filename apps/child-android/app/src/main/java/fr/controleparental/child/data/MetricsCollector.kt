@@ -29,8 +29,9 @@ class MetricsCollector(private val context: Context) {
 
         // 1) Temps d'écran (agrégat par app/jour).
         // Jamais rien d'antérieur à l'appairage (LOT 12b, minimisation).
-        val enrolledAt = store.enrolledAt
-        val usage = UsageStatsCollector(context).collect(daysBack = 3, notBefore = enrolledAt)
+        // … ni de la période où la supervision n'était pas visible (T2, échec fermé).
+        val notBefore = CollectionWindows.notBefore(store.enrolledAt, store.visibleSince)
+        val usage = UsageStatsCollector(context).collect(daysBack = 3, notBefore = notBefore)
         val ids = BatchRows.base(e.familyId, e.childId, e.deviceId)
         // Un upsert PAR JEU DE CLÉS : une colonne facultative inconnue est retirée
         // (pas d'écrasement par NULL) sans casser l'homogénéité du lot (PGRST102).
@@ -77,7 +78,7 @@ class MetricsCollector(private val context: Context) {
         var callCount = 0
         val callCollector = CallLogCollector(context)
         if (callCollector.isEnabledAndGranted()) {
-            val since = CollectionWindows.callsSince(store.callLogWatermark, enrolledAt)
+            val since = CollectionWindows.callsSince(store.callLogWatermark, notBefore)
             val calls = callCollector.collect(since)
             // counterparty_hash null (appel anonyme) reste une clé PRÉSENTE (PGRST102).
             val callArr = BatchRows.toJsonArray(calls.map { BatchRows.call(ids, it) })

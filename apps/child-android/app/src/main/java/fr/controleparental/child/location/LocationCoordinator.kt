@@ -4,7 +4,6 @@ import android.content.Context
 import fr.controleparental.child.data.DeviceStatusCollector
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.service.SupervisionService
-import java.time.Instant
 
 /**
  * LOT 3 — Orchestration de la localisation côté appareil enfant, pilotée par la
@@ -49,9 +48,9 @@ class LocationCoordinator(context: Context) {
     private var lastPeriodicMs = 0L
     private var lastSosPollMs = 0L
     private var lastSosFixMs = 0L
-    // Épisode SOS en cours connu (id + instant de début) ; null si aucun.
+    // Épisode SOS actif côté serveur (id) ; null si aucun. Diffusé seulement s'il
+    // est le SOS local (SosWindow).
     private var sosId: String? = null
-    private var sosStartedMs = 0L
 
     /** Rafraîchit le réglage de partage + ré-enregistre les geofences si besoin. */
     suspend fun onSync() {
@@ -82,19 +81,25 @@ class LocationCoordinator(context: Context) {
             val row = runCatching { repo.activeSos() }.getOrNull()
             if (row != null) {
                 sosId = row.optString("id")
-                sosStartedMs = runCatching { Instant.parse(row.optString("started_at")).toEpochMilli() }
-                    .getOrDefault(now)
             } else {
                 sosId = null
             }
         }
         val active = sosId ?: return
-        // Diffusion BORNÉE : au-delà de la fenêtre, on cesse de diffuser (l'épisode
-        // reste ouvert jusqu'à clôture parent/enfant, mais plus de captation).
-        if (now - sosStartedMs > MAX_SOS_LIVE_MS) return
+        // Diffusion SEULEMENT pour le SOS déclenché sur CET appareil par l'enfant,
+        // et BORNÉE en temps écoulé (T1) : une ligne repassée en « active » côté
+        // serveur ne déclenche jamais de suivi en direct. Au-delà de la fenêtre,
+        // l'épisode reste ouvert jusqu'à clôture, mais plus de captation.
+        val local = store.localSos
+        if (!SosWindow.isLive(
+                rowId = active, localId = local?.id,
+                localBoot = local?.boot ?: -1, currentBoot = BootClock.bootCount(appContext),
+                startedElapsedMs = local?.startedElapsedMs ?: 0L, nowElapsedMs = BootClock.elapsedMs(),
+                maxMs = MAX_SOS_LIVE_MS,
+            )
+        ) return
         if (now - lastSosFixMs < SOS_FIX_MS) return
         lastSosFixMs = now
-        if (active.isEmpty()) return
         val loc = client.currentFix(highAccuracy = true) ?: return
         repo.insertFix(loc, source = "sos", batteryLevel = batteryLevel())
     }
@@ -118,7 +123,8 @@ class LocationCoordinator(context: Context) {
     /** Check-in ponctuel (commande 'locate', D2). */
     suspend fun checkInOnDemand(): CheckIn {
         // Collecte demandée par le parent : jamais sans notification de supervision
-        // visible (LOT 12b). L'appelant n'accuse alors PAS l'exécution.
+        // visible (LOT 12b). L'appelant (CommandExecutor) laisse alors la commande
+        // en attente si l'état est transitoire, sinon l'acquitte sans position.
         if (!SupervisionService.supervisionVisible(appContext)) return CheckIn.SUPERVISION_NOT_VISIBLE
         // On RECHARGE le réglage (il a pu changer) et on RESPECTE le choix du
         // parent : si le partage est désactivé (off / !enabled), on ne remonte

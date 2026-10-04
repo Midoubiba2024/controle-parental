@@ -97,7 +97,8 @@ class MainActivity : ComponentActivity() {
                     if (enrollment != null) {
                         Column {
                             // Transparence (LOT 12b) : sans notification, la supervision
-                            // ne se voit plus — rien n'est alors collecté ; on explique
+                            // ne se voit plus — collecte et analyse sont suspendues (seul
+                            // l'état des permissions est signalé au parent) ; on explique
                             // pourquoi et comment la rétablir.
                             if (!notificationsAllowed) NotificationsOffBanner { openNotificationSettings() }
                             MyDataScreen(enrollment = enrollment)

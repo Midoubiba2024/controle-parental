@@ -49,4 +49,16 @@ class CollectionWindowsTest {
         assertEquals(enrolledAt, start)
         assertEquals(4 * 3_600_000L, end - start)
     }
+
+    @Test fun enrolledAtInTheFutureIsClampedAndRewritten() {
+        val now = d0 + 3_600_000L
+        assertEquals(CollectionWindows.Clamp(now, now), CollectionWindows.clampEnrolledAt(now + day, now))
+        assertEquals(CollectionWindows.Clamp(now - 5, null), CollectionWindows.clampEnrolledAt(now - 5, now))
+        assertEquals(CollectionWindows.Clamp(0, null), CollectionWindows.clampEnrolledAt(0, now))
+    }
+
+    @Test fun collectionStartsAtLastReturnToVisibility() {
+        assertEquals(d0 + 50, CollectionWindows.notBefore(enrolledAt = d0, visibleSince = d0 + 50))
+        assertEquals(d0, CollectionWindows.notBefore(enrolledAt = d0, visibleSince = 0))
+    }
 }

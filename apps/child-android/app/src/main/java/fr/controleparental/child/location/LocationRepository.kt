@@ -1,10 +1,12 @@
 package fr.controleparental.child.location
 
+import android.content.Context
 import android.location.Location
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.service.Unenrollment
 import java.time.Instant
+import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -136,16 +138,31 @@ class LocationRepository(private val store: SupervisionStore) {
         ) is SupabaseClient.Result.Ok
     }
 
-    /** Déclenche un SOS (déclenché par l'enfant → transparent). */
-    suspend fun startSos(message: String?): Boolean {
+    /**
+     * Déclenche un SOS (déclenché par l'enfant → transparent). L'identifiant est
+     * généré ICI et mémorisé avec l'instant de déclenchement (temps écoulé) : seul
+     * ce SOS local pourra être diffusé en direct (T1 — une ligne rouverte côté
+     * serveur ne déclenche jamais de suivi).
+     */
+    suspend fun startSos(context: Context, message: String?): Boolean {
         val e = store.load() ?: return false
+        val id = UUID.randomUUID().toString()
+        val boot = BootClock.bootCount(context)
+        val startedElapsed = BootClock.elapsedMs()
         val row = JSONObject()
+            .put("id", id)
             .put("family_id", e.familyId)
             .put("child_id", e.childId)
             .put("device_id", e.deviceId)
             .put("status", "active")
         if (!message.isNullOrBlank()) row.put("message", message)
-        return client.upsert("sos_events", JSONArray().put(row)) is SupabaseClient.Result.Ok
+        val ok = client.upsert("sos_events", JSONArray().put(row)) is SupabaseClient.Result.Ok
+        if (ok) {
+            Unenrollment.ifStillEnrolled(e.deviceId) {
+                store.localSos = SupervisionStore.LocalSos(id, boot, startedElapsed)
+            }
+        }
+        return ok
     }
 
     /** L'enfant clôt son propre SOS (status → resolved). */
