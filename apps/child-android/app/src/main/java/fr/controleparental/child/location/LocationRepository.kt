@@ -7,6 +7,8 @@ import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.service.Unenrollment
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -107,21 +109,14 @@ class LocationRepository(private val store: SupervisionStore) {
         return out
     }
 
-    /** Épisode SOS en cours (active|acked) pour cet enfant, ou null. */
-    suspend fun activeSos(): JSONObject? {
-        val e = store.load() ?: return null
-        val res = client.get("sos_events",
-            "child_id=eq.${e.childId}&status=in.(active,acked)&select=id,status,started_at&order=started_at.desc&limit=1")
-        val arr = asArray(res) ?: return null
-        return if (arr.length() > 0) arr.optJSONObject(0) else null
-    }
-
     /** Insère un relevé de position (idempotent sur device_id+captured_at). */
     suspend fun insertFix(loc: Location, source: String, batteryLevel: Int?, capturedAtMs: Long = loc.time.takeIf { it > 0 } ?: System.currentTimeMillis()): Boolean {
         val e = store.load() ?: return false
         // Minimisation (LOT 12b) : jamais une position antérieure à l'appairage
-        // (repli lastLocation du cache système sans limite d'âge).
-        if (capturedAtMs < store.enrolledAt) return false
+        // (repli lastLocation du cache système sans limite d'âge). Le SOS en est
+        // EXEMPTÉ : position actuelle par construction, et il n'est jamais bloqué
+        // (même si l'horloge est en retard sur l'instant d'appairage).
+        if (source != "sos" && capturedAtMs < store.enrolledAt) return false
         val row = JSONObject()
             .put("family_id", e.familyId)
             .put("child_id", e.childId)
@@ -156,13 +151,34 @@ class LocationRepository(private val store: SupervisionStore) {
             .put("device_id", e.deviceId)
             .put("status", "active")
         if (!message.isNullOrBlank()) row.put("message", message)
-        val ok = client.upsert("sos_events", JSONArray().put(row)) is SupabaseClient.Result.Ok
-        if (ok) {
-            Unenrollment.ifStillEnrolled(e.deviceId) {
-                store.localSos = SupervisionStore.LocalSos(id, boot, startedElapsed)
+        // Ni une rotation d'écran ni la fin de la coroutine appelante n'interrompent
+        // l'enregistrement du SOS (tour 5, U3).
+        return withContext(NonCancellable) {
+            // Mémorisé AVANT l'envoi : une réponse perdue ou un délai dépassé laisse
+            // un SOS peut-être créé côté serveur — il doit rester diffusable.
+            val previous = Unenrollment.ifStillEnrolled(e.deviceId) {
+                store.localSos.also { store.localSos = SupervisionStore.LocalSos(id, boot, startedElapsed) }
             }
+            val res = client.upsert("sos_events", JSONArray().put(row))
+            // Échec CERTAIN (refus 4xx reçu) seulement : on restaure l'ancien SOS local.
+            if (res is SupabaseClient.Result.Error && res.code.startsWith("http_4")) {
+                Unenrollment.ifStillEnrolled(e.deviceId) {
+                    if (store.localSos?.id == id) store.localSos = previous
+                }
+            }
+            res is SupabaseClient.Result.Ok
         }
-        return ok
+    }
+
+    /**
+     * État d'UN SOS précis (le SOS local), ou null s'il n'est plus actif/acquitté
+     * ou en cas d'erreur — jamais « le plus récent de l'enfant », qui peut venir
+     * d'un autre appareil.
+     */
+    suspend fun sosById(id: String): JSONObject? {
+        val res = client.get("sos_events", "id=eq.$id&status=in.(active,acked)&select=id,status&limit=1")
+        val arr = asArray(res) ?: return null
+        return if (arr.length() > 0) arr.optJSONObject(0) else null
     }
 
     /** L'enfant clôt son propre SOS (status → resolved). */

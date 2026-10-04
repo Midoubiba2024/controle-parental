@@ -75,26 +75,29 @@ class LocationCoordinator(context: Context) {
     }
 
     private suspend fun handleSos(now: Long) {
-        // Interroge l'état SOS à cadence modérée (évite de marteler la base).
-        if (now - lastSosPollMs >= SOS_POLL_MS) {
-            lastSosPollMs = now
-            val row = runCatching { repo.activeSos() }.getOrNull()
-            if (row != null) {
-                sosId = row.optString("id")
-            } else {
-                sosId = null
-            }
-        }
-        val active = sosId ?: return
         // Diffusion SEULEMENT pour le SOS déclenché sur CET appareil par l'enfant,
         // et BORNÉE en temps écoulé (T1) : une ligne repassée en « active » côté
         // serveur ne déclenche jamais de suivi en direct. Au-delà de la fenêtre,
         // l'épisode reste ouvert jusqu'à clôture, mais plus de captation.
-        val local = store.localSos
+        // Sans SOS local dans sa fenêtre : aucune requête.
+        val local = store.localSos ?: run { sosId = null; return }
+        val inWindow = SosWindow.isLive(
+            rowId = local.id, localId = local.id,
+            localBoot = local.boot, currentBoot = BootClock.bootCount(appContext),
+            startedElapsedMs = local.startedElapsedMs, nowElapsedMs = BootClock.elapsedMs(),
+            maxMs = MAX_SOS_LIVE_MS,
+        )
+        if (!inWindow) { sosId = null; return }
+        // État de CE SOS (clos par l'enfant ou le parent ?), à cadence modérée.
+        if (now - lastSosPollMs >= SOS_POLL_MS) {
+            lastSosPollMs = now
+            sosId = runCatching { repo.sosById(local.id) }.getOrNull()?.optString("id")
+        }
+        val active = sosId ?: return
         if (!SosWindow.isLive(
-                rowId = active, localId = local?.id,
-                localBoot = local?.boot ?: -1, currentBoot = BootClock.bootCount(appContext),
-                startedElapsedMs = local?.startedElapsedMs ?: 0L, nowElapsedMs = BootClock.elapsedMs(),
+                rowId = active, localId = local.id,
+                localBoot = local.boot, currentBoot = BootClock.bootCount(appContext),
+                startedElapsedMs = local.startedElapsedMs, nowElapsedMs = BootClock.elapsedMs(),
                 maxMs = MAX_SOS_LIVE_MS,
             )
         ) return
