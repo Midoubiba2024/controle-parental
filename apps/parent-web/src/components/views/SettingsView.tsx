@@ -47,17 +47,17 @@ export function SettingsView() {
                 <label key={id} className={`palette-option${checked ? " on" : ""}`}>
                   <input type="radio" name="palette" value={id} className="visually-hidden"
                     checked={checked} onChange={() => setPalette(id)}
-                    aria-describedby={`palette-desc-${id}`} />
+                    aria-labelledby={`palette-name-${id}`} aria-describedby={`palette-desc-${id}`} />
                   <PaletteThumb id={id} sample={t("views.settings.palette.sample")} />
                   <span className="palette-text">
-                    <span className="palette-name">
+                    <span className="palette-name" id={`palette-name-${id}`}>
                       {t(`views.settings.palettes.${id}.name`)}
                       {id === DEFAULT_PALETTE && <span className="badge">{t("views.settings.palette.default")}</span>}
                     </span>
                     <span className="palette-desc" id={`palette-desc-${id}`}>{t(`views.settings.palettes.${id}.desc`)}</span>
                   </span>
                   {checked && (
-                    <span className="palette-check" aria-hidden="true" title={t("views.settings.palette.selected")}>
+                    <span className="palette-check" aria-hidden="true">
                       <Check {...ic} size={16} strokeWidth={2.5} />
                     </span>
                   )}

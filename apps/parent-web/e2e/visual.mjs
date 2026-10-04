@@ -145,6 +145,7 @@ async function mockNetwork(context, account = { metadata: {} }) {
     const path = url.pathname;
     if (path.startsWith("/auth/v1/user")) {
       if (req.method() === "PUT") {
+        if (account.failPut) return json({ code: 503, msg: "indisponible" }, 503);
         const body = JSON.parse(req.postData() || "{}");
         account.metadata = { ...account.metadata, ...(body.data ?? {}) };
         account.puts = (account.puts ?? 0) + 1;
@@ -226,28 +227,40 @@ async function checkOverflow(page, name) {
   if (over > 0) console.warn(`  ⚠ ${name} : défilement horizontal de ${over}px`);
 }
 
-/** Contexte de console connecté, palette + mode posés en localStorage. */
-async function openConsole(vp, theme, palette, view, account) {
+/**
+ * Contexte de console connecté, palette + mode posés en localStorage (une seule
+ * fois par CONTEXTE : rechargements et 2ᵉ onglet gardent l'état). `extra` :
+ * clés localStorage supplémentaires (propriétaire, préférence de l'appareil…).
+ */
+async function openConsole(vp, theme, palette, view, account, extra = {}) {
   const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: theme === "system" ? "light" : theme });
   await mockNetwork(context, account);
-  await context.addInitScript(([key, sess, th, v, pal]) => {
+  await context.addInitScript(([key, sess, th, v, pal, more]) => {
     try {
-      // Une seule fois par contexte : un rechargement garde l'état de la page.
-      if (sessionStorage.getItem("e2e-init")) return;
-      sessionStorage.setItem("e2e-init", "1");
+      if (localStorage.getItem("e2e-init")) return;
+      localStorage.setItem("e2e-init", "1");
       localStorage.setItem(key, JSON.stringify(sess));
       localStorage.setItem("cp.theme", th);
       localStorage.setItem("cp.view", v);
       if (pal) localStorage.setItem("cp.palette", pal);
+      for (const [k, val] of Object.entries(more)) localStorage.setItem(k, val);
     } catch { /* */ }
-  }, [STORAGE_KEY, session(), theme, view, palette]);
+  }, [STORAGE_KEY, session(), theme, view, palette, extra]);
+  const { page, fonts, errors } = await openPage(context);
+  return { context, page, fonts, errors };
+}
+
+/** Nouvel onglet de console dans un contexte existant (erreurs captées DÈS le chargement). */
+async function openPage(context) {
   const page = await context.newPage();
   const fonts = [];
+  const errors = [];
   page.on("request", (r) => { if (r.url().endsWith(".woff2")) fonts.push(r.url()); });
+  page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(base);
   await page.waitForSelector(".shell h1", { timeout: 20_000 });
   await settle(page);
-  return { context, page, fonts };
+  return { page, fonts, errors };
 }
 
 const rootAttr = (page, a) => page.evaluate((x) => document.documentElement.getAttribute(x), a);
@@ -305,6 +318,60 @@ try {
       expect(await rootAttr(page, "data-palette") === "cocon", "valeur inconnue → cocon");
       await context.close();
     }
+    const local = (page, k) => page.evaluate((key) => localStorage.getItem(key), k);
+    // e) Choix non envoyé (compte injoignable) : il survit au rechargement malgré
+    //    l'ancienne valeur du compte, puis part au retour du réseau.
+    {
+      const account = { metadata: { palette: "jardin", theme: "light" }, failPut: true };
+      const { context, page } = await openConsole(vp, "light", "jardin", "settings", account);
+      await page.locator(".palette-option", { hasText: "Clarté" }).click();
+      await page.waitForTimeout(1200);
+      expect(!!(await local(page, "cp.appearance.pending")), "hors ligne : choix marqué « non synchronisé »");
+      await page.reload();
+      await page.waitForSelector(".shell h1");
+      await settle(page);
+      expect(await rootAttr(page, "data-palette") === "clarte", "rechargement : le choix non envoyé prime sur l'ancienne valeur du compte");
+      account.failPut = false;
+      await page.evaluate(() => window.dispatchEvent(new Event("online")));
+      await page.waitForTimeout(800);
+      expect(account.metadata.palette === "clarte", `retour du réseau : choix envoyé au compte (${account.metadata.palette})`);
+      expect(!(await local(page, "cp.appearance.pending")), "retour du réseau : marqueur effacé");
+      await context.close();
+    }
+    // f) Appareil partagé : la préférence d'un AUTRE compte n'est ni gardée ni
+    //    envoyée ; la déconnexion rétablit la préférence de l'appareil.
+    {
+      const account = { metadata: {} };
+      const { context, page } = await openConsole(vp, "light", "jardin", "overview", account, {
+        "cp.appearance.owner": "autre-compte-fictif",
+        "cp.appearance.device": JSON.stringify({ palette: "clarte", theme: "light" }),
+      });
+      await page.waitForTimeout(800);
+      expect(await rootAttr(page, "data-palette") === "clarte", "appareil partagé : préférence d'un autre compte remplacée par celle de l'appareil");
+      expect(!account.puts || account.metadata.palette !== "jardin", "appareil partagé : préférence d'un autre compte jamais envoyée");
+      // Choix puis déconnexion IMMÉDIATE : l'envoi part avant signOut.
+      await page.locator(".header-actions .icon-btn").first().click();       // clair → sombre
+      await page.getByRole("button", { name: "Déconnexion" }).click();
+      await page.waitForSelector(".auth", { timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      expect(account.metadata.theme === "dark", `déconnexion : choix envoyé avant signOut (${account.metadata.theme})`);
+      expect(await rootAttr(page, "data-palette") === "clarte" && await rootAttr(page, "data-theme") === "light",
+        "déconnexion : retour à la préférence de l'appareil");
+      await context.close();
+    }
+    // g) Deux onglets : un choix dans l'un s'applique à l'autre, sans 2ᵉ envoi.
+    {
+      const account = { metadata: {} };
+      const { context, page } = await openConsole(vp, "light", "cocon", "settings", account);
+      const { page: other } = await openPage(context);
+      await page.waitForTimeout(1000);
+      const before = account.puts ?? 0;
+      await page.locator(".palette-option", { hasText: "Jardin" }).click();
+      await page.waitForTimeout(1500);
+      expect(await rootAttr(other, "data-palette") === "jardin", "2ᵉ onglet : palette suivie (événement storage)");
+      expect((account.puts ?? 0) - before === 1, `2ᵉ onglet : un seul envoi au compte (${(account.puts ?? 0) - before})`);
+      await context.close();
+    }
   }
 
   for (const palette of PALETTES) {
@@ -328,9 +395,7 @@ try {
       }
       // --- Console (session simulée) --------------------------------------
       for (const view of VIEWS) {
-        const { context, page } = await openConsole(vp, theme, palette, view);
-        const errors = [];
-        page.on("pageerror", (e) => errors.push(String(e)));
+        const { context, page, errors } = await openConsole(vp, theme, palette, view);
         if (await rootAttr(page, "data-palette") !== palette) failures.push(`${palette}/${view} : data-palette inattendu`);
         if (view === "family") {
           await page.getByRole("button", { name: /Générer un code d.appairage/ }).first().click();
@@ -341,6 +406,13 @@ try {
         await checkOverflow(page, name);
         if (theme === "dark" && view === "location") await checkLeafletTheme(page, name);
         await shot(page, name);
+        // Contraste élevé (Windows) : la sélection doit rester visible.
+        if (view === "settings" && vpName === "desktop") {
+          await page.emulateMedia({ forcedColors: "active" });
+          await page.waitForTimeout(200);
+          await shot(page, `${name}-forced-colors`);
+          await page.emulateMedia({ forcedColors: "none" });
+        }
         if (vpName !== "desktop" && view === "overview") {
           await page.getByRole("button", { name: /^Ouvrir le menu/ }).click();
           await page.waitForTimeout(300);

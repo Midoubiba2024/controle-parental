@@ -857,7 +857,6 @@ const fr = {
         // Exemple de la police de titre, dans la vignette d'aperçu.
         sample: "Aa",
         default: "Par défaut",
-        selected: "Choisie",
       },
       palettes: {
         cocon: { name: "Cocon", desc: "Chaleureuse et rassurante : ivoire, prune et corail." },

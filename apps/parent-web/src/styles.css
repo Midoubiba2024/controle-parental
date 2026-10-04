@@ -1203,14 +1203,14 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .palette-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1100px) { .palette-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); } }
 .palette-option {
-  position: relative; display: flex; flex-direction: column; gap: 12px; padding: 12px 12px 16px;
-  background: var(--c-surface); border: 1px solid var(--c-control-soft); border-radius: var(--r-panel);
+  position: relative; display: flex; flex-direction: column; gap: 12px; padding: 11px 11px 15px;
+  background: var(--c-surface); border: 2px solid var(--c-control-soft); border-radius: var(--r-panel);
   cursor: pointer; transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
   /* Le libellé générique des <label> (formulaires) ne s'applique pas ici. */
   font-size: var(--fs-body); font-weight: 400; color: var(--c-ink); letter-spacing: 0;
 }
 .palette-option:hover { border-color: var(--c-control); }
-.palette-option.on { border-color: var(--c-accent); box-shadow: var(--shadow-selected); }
+.palette-option.on { border-color: var(--c-accent); }
 .palette-option:has(input:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 .palette-text { display: flex; flex-direction: column; gap: 4px; padding-inline: 4px; }
 .palette-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 700; font-size: 15.5px; }
@@ -1257,12 +1257,17 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 }
 .mode-option {
   display: inline-flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
-  border-radius: var(--r-md); cursor: pointer; color: var(--c-ink-2);
+  border-radius: var(--r-md); border: 2px solid transparent; cursor: pointer; color: var(--c-ink-2);
   font-size: 14.5px; font-weight: 600; letter-spacing: 0;
   transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .mode-option:hover { background: var(--c-track); color: var(--c-ink); }
-.mode-option.on { background: var(--c-surface); color: var(--c-ink); box-shadow: var(--shadow-card), inset 0 0 0 1.5px var(--c-accent); }
+.mode-option.on { background: var(--c-surface); color: var(--c-ink); border-color: var(--c-accent); box-shadow: var(--shadow-card); }
+/* Contraste élevé (Windows) : fonds et ombres disparaissent, la sélection reste visible. */
+@media (forced-colors: active) {
+  .mode-option.on, .palette-option.on { outline: 2px solid Highlight; outline-offset: 2px; }
+  .palette-check { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+}
 .mode-option:has(input:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 /* Petit écran : trois colonnes égales, icône au-dessus du libellé (pas de retour à la ligne). */
 @media (max-width: 480px) {

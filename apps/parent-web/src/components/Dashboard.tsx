@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
+import { flushAppearance } from "../lib/appearanceSync";
 import { useObservation } from "../lib/observation";
 import { fmtAgo } from "../lib/format";
 import { ageProfileLabel } from "../lib/labels";
@@ -358,7 +359,8 @@ export function Dashboard({ session }: { session: Session }) {
               <button type="button" className="icon-btn" title={themeTitle} aria-label={themeTitle} onClick={cycleTheme}>
                 <ThemeIcon {...ic} />
               </button>
-              <button type="button" className="ghost" onClick={() => supabase.auth.signOut()}
+              <button type="button" className="ghost"
+                onClick={async () => { await flushAppearance(); await supabase.auth.signOut(); }}
                 aria-label={t("dashboard.signOut")}>
                 <LogOut {...ic} size={18} className="flip-rtl" />
                 <span className="signout-label">{t("dashboard.signOut")}</span>

@@ -10,7 +10,10 @@ import { useSyncExternalStore } from "react";
 
    Persistance :
      - localStorage `cp.palette` et `cp.theme` (try/catch) : application
-       instantanée, sans flash, par le script en ligne d'index.html ;
+       instantanée, sans flash, par le script en ligne d'index.html ; les
+       autres onglets suivent (événement `storage`) ;
+     - `cp.appearance.*` : propriétaire de la préférence, préférence de
+       l'appareil et envoi au compte en attente (appareil partagé, hors ligne) ;
      - compte Supabase (user_metadata) : synchronisation entre appareils,
        cf. lib/appearanceSync.ts.
 
@@ -97,12 +100,44 @@ export function loadPaletteFonts(palette: Palette): Promise<void> {
 
 /* --- Magasin ---------------------------------------------------------------- */
 export type Appearance = { palette: Palette; theme: Theme };
-/** Origine d'un changement : seul un choix de l'utilisateur part vers le compte. */
-export type AppearanceOrigin = "user" | "account";
+/**
+ * Origine d'un changement :
+ *   - "user"     : choix fait ici (seul cas envoyé au compte) ;
+ *   - "account"  : valeur lue dans le compte (persistée localement) ;
+ *   - "external" : autre onglet ou retour à la valeur de l'appareil (appliquée,
+ *                  jamais renvoyée au compte).
+ */
+export type AppearanceOrigin = "user" | "account" | "external";
+
+/* Clés locales complémentaires (appareil PARTAGÉ, envois en attente) :
+   - OWNER_KEY   : à qui appartient la préférence locale (userId, ou "device"
+                   pour un choix fait déconnecté) ;
+   - DEVICE_KEY  : préférence propre à l'appareil, rétablie à la déconnexion ;
+   - PENDING_KEY : { userId, at, palette, theme } — choix pas encore enregistré
+                   dans le compte (posé à chaque choix, effacé quand updateUser
+                   réussit) ; il porte la valeur, qui survit donc à une
+                   déconnexion hors ligne. */
+const OWNER_KEY = "cp.appearance.owner";
+const DEVICE_KEY = "cp.appearance.device";
+const PENDING_KEY = "cp.appearance.pending";
+export const DEVICE_OWNER = "device";
+export type PendingSync = Appearance & { userId: string; at: number };
 
 let state: Appearance = { palette: readPalette(), theme: readTheme() };
+/** Utilisateur connecté (renseigné par lib/appearanceSync.ts), null si déconnecté. */
+let currentUser: string | null = null;
 const listeners = new Set<() => void>();
 const changeListeners = new Set<(a: Appearance, origin: AppearanceOrigin) => void>();
+
+function store(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch { /* stockage indisponible : le choix vaut pour cette visite */ }
+}
+function load(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
 
 function apply({ palette, theme }: Appearance) {
   const root = document.documentElement;
@@ -114,11 +149,28 @@ function apply({ palette, theme }: Appearance) {
 }
 
 function persist({ palette, theme }: Appearance) {
+  store(PALETTE_KEY, palette);
+  store(THEME_KEY, theme);
+  store(LEGACY_THEME_KEY, null);
+}
+
+/** Propriétaire de la préférence locale (absent = ancienne version → appareil). */
+export function localOwner(): string {
+  return load(OWNER_KEY) ?? DEVICE_OWNER;
+}
+
+export function readPending(): PendingSync | null {
   try {
-    localStorage.setItem(PALETTE_KEY, palette);
-    localStorage.setItem(THEME_KEY, theme);
-    localStorage.removeItem(LEGACY_THEME_KEY);
-  } catch { /* stockage indisponible : le choix vaut pour cette visite */ }
+    const v = JSON.parse(load(PENDING_KEY) ?? "null") as Partial<PendingSync> | null;
+    if (!v || typeof v.userId !== "string" || typeof v.at !== "number") return null;
+    if (!isPalette(v.palette) || !isTheme(v.theme)) return null;
+    return { userId: v.userId, at: v.at, palette: v.palette, theme: v.theme };
+  } catch { return null; }
+}
+/** Efface le marqueur s'il n'a pas changé depuis l'envoi (`at` identique). */
+export function clearPending(sent: PendingSync) {
+  const cur = readPending();
+  if (cur && cur.userId === sent.userId && cur.at === sent.at) store(PENDING_KEY, null);
 }
 
 /**
@@ -132,11 +184,37 @@ export function setAppearance(next: Partial<Appearance>, origin: AppearanceOrigi
   };
   const changed = merged.palette !== state.palette || merged.theme !== state.theme;
   state = merged;
-  persist(state);
+  if (origin !== "external") {
+    persist(state);
+    store(OWNER_KEY, currentUser ?? DEVICE_OWNER);
+    if (origin === "user") {
+      if (currentUser) store(PENDING_KEY, JSON.stringify({ userId: currentUser, at: Date.now(), ...state } satisfies PendingSync));
+      else store(DEVICE_KEY, JSON.stringify(state));
+    }
+  }
   apply(state);
   if (!changed) return;
   listeners.forEach((l) => l());
   changeListeners.forEach((l) => l(state, origin));
+}
+
+/** Utilisateur courant (connexion / déconnexion), cf. lib/appearanceSync.ts. */
+export function setAppearanceUser(userId: string | null) { currentUser = userId; }
+
+/**
+ * Déconnexion (ou préférence d'un AUTRE compte sur un appareil partagé) :
+ * retour à la préférence de l'appareil, sinon au défaut.
+ */
+export function restoreDeviceAppearance() {
+  let device: Partial<Appearance> = {};
+  try { device = JSON.parse(load(DEVICE_KEY) ?? "{}") as Partial<Appearance>; } catch { /* défaut */ }
+  const next: Appearance = {
+    palette: isPalette(device.palette) ? device.palette : DEFAULT_PALETTE,
+    theme: isTheme(device.theme) ? device.theme : "system",
+  };
+  setAppearance(next, "external");
+  persist(state);
+  store(OWNER_KEY, DEVICE_OWNER);
 }
 
 export function getAppearance(): Appearance { return state; }
@@ -145,6 +223,15 @@ export function getAppearance(): Appearance { return state; }
 export function onAppearanceChange(fn: (a: Appearance, origin: AppearanceOrigin) => void): () => void {
   changeListeners.add(fn);
   return () => { changeListeners.delete(fn); };
+}
+
+/* Autre onglet : il a déjà écrit le stockage et prévenu le compte ; ici on se
+   contente d'appliquer (valeurs validées), sans rien renvoyer. */
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== PALETTE_KEY && e.key !== THEME_KEY) return;
+    setAppearance({ palette: readPalette(), theme: readTheme() }, "external");
+  });
 }
 
 /** Au démarrage (avant le premier rendu) : attributs, theme-color et polices. */
