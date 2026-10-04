@@ -197,9 +197,9 @@ class SupervisionService : Service() {
                 } catch (_: Exception) {
                 }
             }
-            // Battement de visibilité : après une interruption, la collecte repart
-            // d'ici, sans rattrapage (T2).
-            if (supervisionVisible(this)) runCatching { store.noteSupervisionVisible() }
+            // Constat de visibilité : coupures OBSERVÉES enregistrées puis exclues de
+            // la collecte (VisibilityGaps) — la veille du processeur n'en est pas une.
+            runCatching { store.observeSupervision(supervisionVisible(this)) }
             // Notifications coupées : la collecte est suspendue (supervisionVisible) ;
             // le parent en est informé (perm_notifications=false, au plus 1×/h),
             // hors du chemin critique de l'overlay.

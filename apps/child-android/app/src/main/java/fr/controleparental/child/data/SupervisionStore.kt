@@ -6,6 +6,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import fr.controleparental.child.pairing.AuthSession
 import fr.controleparental.child.pairing.PairingProtocol
+import fr.controleparental.child.location.BootClock
 import fr.controleparental.child.service.Unenrollment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,8 +90,11 @@ class SupervisionStore(context: Context) {
             .remove(KEY_FILTER_DESIRED)
             .remove(KEY_STATUS_TS)
             .remove(KEY_MSG_WM)
-            .remove(KEY_VISIBLE_SINCE)
             .remove(KEY_LAST_VISIBLE_AT)
+            .remove(KEY_INVISIBLE_FROM)
+            .remove(KEY_VIS_TOKEN)
+            .remove(KEY_VIS_BOOT)
+            .remove(KEY_INVISIBLE_GAPS)
             .remove(KEY_SOS_LOCAL_ID)
             .remove(KEY_SOS_LOCAL_BOOT)
             .remove(KEY_SOS_LOCAL_ELAPSED)
@@ -223,38 +227,42 @@ class SupervisionStore(context: Context) {
      * Instant de l'appairage (epoch ms) : borne basse de TOUTE collecte
      * (CollectionWindows). 0 = enrôlement antérieur au LOT 12b (pas de borne).
      */
-    val enrolledAt: Long
-        get() {
-            // Dans le futur (horloge corrigée en arrière) : ramené à maintenant et réécrit.
-            val clamp = CollectionWindows.clampEnrolledAt(prefs.getLong(KEY_ENROLLED_AT, 0L), System.currentTimeMillis())
-            clamp.toPersist?.let { prefs.edit().putLong(KEY_ENROLLED_AT, it).apply() }
-            return clamp.effective
-        }
+    val enrolledAt: Long get() = prefs.getLong(KEY_ENROLLED_AT, 0L)
+    // Valeur BRUTE, jamais réécrite (tour 5, U2) : une horloge temporairement en
+    // retard exclut tout (échec fermé) au lieu de faire reculer définitivement la borne.
+
+    private fun visibilityState() = VisibilityGaps.State(
+        lastVisibleAt = prefs.getLong(KEY_LAST_VISIBLE_AT, 0L),
+        invisibleFrom = prefs.getLong(KEY_INVISIBLE_FROM, 0L),
+        processToken = prefs.getString(KEY_VIS_TOKEN, null),
+        boot = prefs.getInt(KEY_VIS_BOOT, -1),
+        gaps = VisibilityGaps.gapsFromJson(prefs.getString(KEY_INVISIBLE_GAPS, null)),
+    )
 
     /**
-     * Dernier retour à la visibilité de la supervision (epoch ms, 0 = jamais) :
-     * borne basse de collecte avec [enrolledAt] (VisibilityWindow, T2).
+     * Constat de visibilité de la supervision (boucle du service, MetricsWorker) :
+     * enregistre les coupures OBSERVÉES (VisibilityGaps) — jamais déduites d'un
+     * écart d'heure murale (veille du processeur ≠ coupure).
      */
-    val visibleSince: Long get() = prefs.getLong(KEY_VISIBLE_SINCE, 0L)
-
-    /**
-     * À appeler quand la notification de supervision est constatée VISIBLE. Après
-     * une interruption, la fenêtre de collecte repart de maintenant et le filigrane
-     * des appels avance : rien de la période sans supervision n'est rattrapé.
-     */
-    fun noteSupervisionVisible(now: Long = System.currentTimeMillis()) {
+    fun observeSupervision(visible: Boolean, now: Long = System.currentTimeMillis()) {
         if (!isEnrolled) return
-        val step = VisibilityWindow.onVisible(
-            VisibilityWindow.State(prefs.getLong(KEY_VISIBLE_SINCE, 0L), prefs.getLong(KEY_LAST_VISIBLE_AT, 0L)),
-            now,
+        val step = VisibilityGaps.observe(
+            visibilityState(), visible, now, PROCESS_TOKEN, BootClock.bootCount(appContext),
         )
         if (!step.persist) return
-        val edit = prefs.edit()
-            .putLong(KEY_VISIBLE_SINCE, step.state.visibleSince)
-            .putLong(KEY_LAST_VISIBLE_AT, step.state.lastVisibleAt)
-        step.resetAt?.let { edit.putLong(KEY_CALL_WM, maxOf(callLogWatermark, it)) }
-        edit.apply()
+        val st = step.state
+        prefs.edit()
+            .putLong(KEY_LAST_VISIBLE_AT, st.lastVisibleAt)
+            .putLong(KEY_INVISIBLE_FROM, st.invisibleFrom)
+            .putString(KEY_VIS_TOKEN, st.processToken)
+            .putInt(KEY_VIS_BOOT, st.boot)
+            .putString(KEY_INVISIBLE_GAPS, VisibilityGaps.gapsToJson(st.gaps))
+            .apply()
     }
+
+    /** Intervalles à EXCLURE de la collecte (coupures closes + coupure en cours). */
+    fun excludedGaps(now: Long = System.currentTimeMillis()): List<VisibilityGaps.Gap> =
+        VisibilityGaps.excluded(visibilityState(), now)
 
     /** SOS déclenché SUR CET APPAREIL (T1) : seul lui peut être diffusé en direct. */
     data class LocalSos(val id: String, val boot: Int, val startedElapsedMs: Long)
@@ -353,8 +361,14 @@ class SupervisionStore(context: Context) {
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_OBTAINED_AT = "obtained_at"
         private const val KEY_ENROLLED_AT = "enrolled_at"
-        private const val KEY_VISIBLE_SINCE = "supervision_visible_since"
         private const val KEY_LAST_VISIBLE_AT = "supervision_last_visible_at"
+        private const val KEY_INVISIBLE_FROM = "supervision_invisible_from"
+        private const val KEY_VIS_TOKEN = "supervision_process_token"
+        private const val KEY_VIS_BOOT = "supervision_boot"
+        private const val KEY_INVISIBLE_GAPS = "supervision_invisible_gaps"
+
+        /** Jeton de CE processus : un processus neuf est une coupure (VisibilityGaps). */
+        private val PROCESS_TOKEN: String = java.util.UUID.randomUUID().toString()
         private const val KEY_SOS_LOCAL_ID = "sos_local_id"
         private const val KEY_SOS_LOCAL_BOOT = "sos_local_boot"
         private const val KEY_SOS_LOCAL_ELAPSED = "sos_local_started_elapsed"

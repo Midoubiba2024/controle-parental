@@ -57,11 +57,13 @@ class UsageStatsCollector(private val context: Context) {
 
     /**
      * Collecte les agrégats des [daysBack] derniers jours (aujourd'hui inclus),
-     * jamais avant [notBefore] (instant d'appairage, LOT 12b ; 0 = sans borne) :
-     * un jour entièrement antérieur est ignoré, le jour de l'appairage ne compte
-     * qu'à partir de l'appairage. Une ligne par (jour, package) réellement utilisé.
+     * jamais avant [notBefore] (instant d'appairage, LOT 12b ; 0 = sans borne) et
+     * HORS des coupures de supervision [gaps] : chaque jour est la somme de ses
+     * sous-fenêtres visibles (CollectionWindows.visibleWindows) — rien n'est
+     * rattrapé, une coupure sous-estime le jour (échec fermé). Une ligne par
+     * (jour, package) réellement utilisé.
      */
-    fun collect(daysBack: Int = 3, notBefore: Long = 0L): List<UsageRow> {
+    fun collect(daysBack: Int = 3, notBefore: Long = 0L, gaps: List<VisibilityGaps.Gap> = emptyList()): List<UsageRow> {
         if (!hasUsageAccess()) return emptyList()
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val pm = context.packageManager
@@ -69,35 +71,39 @@ class UsageStatsCollector(private val context: Context) {
 
         for (offset in 0 until daysBack) {
             val (dayStart, dayEnd, dayLabel) = dayBounds(offset)
-            val (start, end) = CollectionWindows.usageWindow(dayStart, dayEnd, notBefore) ?: continue
-            // Agrégation à partir des évènements (durée de premier plan + lancements).
+            val windows = CollectionWindows.visibleWindows(dayStart, dayEnd, notBefore, gaps)
+            if (windows.isEmpty()) continue
+            // Agrégation à partir des évènements (durée de premier plan + lancements),
+            // sous-fenêtre visible par sous-fenêtre visible.
             val agg = HashMap<String, Agg>()
-            val events = usm.queryEvents(start, end)
-            val ev = UsageEvents.Event()
-            val resumedAt = HashMap<String, Long>()
-            while (events.getNextEvent(ev)) {
-                val pkg = ev.packageName ?: continue
-                when (ev.eventType) {
-                    UsageEvents.Event.ACTIVITY_RESUMED,
-                    UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-                        resumedAt[pkg] = ev.timeStamp
-                        val a = agg.getOrPut(pkg) { Agg() }
-                        a.launches++
-                        if (ev.timeStamp > a.lastUsed) a.lastUsed = ev.timeStamp
-                    }
-                    UsageEvents.Event.ACTIVITY_PAUSED,
-                    UsageEvents.Event.MOVE_TO_BACKGROUND -> {
-                        val startedAt = resumedAt.remove(pkg) ?: continue
-                        val a = agg.getOrPut(pkg) { Agg() }
-                        a.foregroundMs += (ev.timeStamp - startedAt).coerceAtLeast(0)
-                        if (ev.timeStamp > a.lastUsed) a.lastUsed = ev.timeStamp
+            for ((start, end) in windows) {
+                val events = usm.queryEvents(start, end)
+                val ev = UsageEvents.Event()
+                val resumedAt = HashMap<String, Long>()
+                while (events.getNextEvent(ev)) {
+                    val pkg = ev.packageName ?: continue
+                    when (ev.eventType) {
+                        UsageEvents.Event.ACTIVITY_RESUMED,
+                        UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                            resumedAt[pkg] = ev.timeStamp
+                            val a = agg.getOrPut(pkg) { Agg() }
+                            a.launches++
+                            if (ev.timeStamp > a.lastUsed) a.lastUsed = ev.timeStamp
+                        }
+                        UsageEvents.Event.ACTIVITY_PAUSED,
+                        UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                            val startedAt = resumedAt.remove(pkg) ?: continue
+                            val a = agg.getOrPut(pkg) { Agg() }
+                            a.foregroundMs += (ev.timeStamp - startedAt).coerceAtLeast(0)
+                            if (ev.timeStamp > a.lastUsed) a.lastUsed = ev.timeStamp
+                        }
                     }
                 }
-            }
-            // Fermer les sessions encore ouvertes à la fin de la fenêtre.
-            for ((pkg, startedAt) in resumedAt) {
-                val a = agg.getOrPut(pkg) { Agg() }
-                a.foregroundMs += (end - startedAt).coerceAtLeast(0)
+                // Fermer les sessions encore ouvertes à la fin de la sous-fenêtre.
+                for ((pkg, startedAt) in resumedAt) {
+                    val a = agg.getOrPut(pkg) { Agg() }
+                    a.foregroundMs += (end - startedAt).coerceAtLeast(0)
+                }
             }
 
             for ((pkg, a) in agg) {
