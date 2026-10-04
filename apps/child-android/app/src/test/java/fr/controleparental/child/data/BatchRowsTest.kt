@@ -17,25 +17,29 @@ class BatchRowsTest {
 
     private val ids = BatchRows.base("famille-test", "enfant-test", "appareil-test")
 
-    @Test fun usageRowsKeepTheSameKeysWhenLabelOrCategoryIsMissing() {
+    @Test fun unknownLabelOrCategoryIsDroppedSoAKnownValueIsNotOverwritten() {
         val rows = listOf(
             UsageStatsCollector.UsageRow("2026-01-15", "org.exemple.jeu", "Jeu", "game", 60_000, 3, 1_000L),
             UsageStatsCollector.UsageRow("2026-01-15", "org.exemple.inconnu", null, null, 1_000, 1, 2_000L),
+            UsageStatsCollector.UsageRow("2026-01-16", "org.exemple.jeu", "Jeu", "game", 5_000, 1, 3_000L),
         ).map { BatchRows.usage(ids, it) }
-        assertTrue(BatchRows.haveSameKeys(rows))
-        assertTrue(rows[1].containsKey("app_label"))
-        assertNull(rows[1]["app_label"])
-        assertNull(rows[1]["category"])
+        assertFalse(rows[1].containsKey("app_label"))
+        assertFalse(rows[1].containsKey("category"))
+        // Un upsert par jeu de clés : chaque sous-lot est homogène (PGRST102).
+        val groups = BatchRows.groupByKeys(rows)
+        assertEquals(2, groups.size)
+        assertEquals(listOf(2, 1), groups.map { it.size })
+        assertTrue(groups.all { BatchRows.haveSameKeys(it) })
     }
 
-    @Test fun inventoryRowsKeepTheSameKeysWhenInstallDateIsMissing() {
+    @Test fun inventoryNeverDropsRemovedAtAndDropsUnknownInstallDate() {
         val rows = listOf(
             AppInventoryCollector.AppRow("org.exemple.dessin", "Dessin", "image", false, 1_700_000_000_000L),
             AppInventoryCollector.AppRow("org.exemple.systeme", null, null, true, null),
         ).map { BatchRows.inventory(ids, it, seenAtMs = 1_700_000_100_000L) }
-        assertTrue(BatchRows.haveSameKeys(rows))
-        assertNull(rows[1]["installed_at"])
+        assertFalse(rows[1].containsKey("installed_at"))
         assertTrue(rows.all { it.containsKey("removed_at") && it["removed_at"] == null })
+        assertTrue(BatchRows.groupByKeys(rows).all { BatchRows.haveSameKeys(it) })
     }
 
     @Test fun anonymousCallKeepsTheCounterpartyKeyWithNull() {
@@ -69,6 +73,19 @@ class BatchRowsTest {
         val row = BatchRows.call(ids, CallLogCollector.CallRow("outgoing", null, 0, 0L))
         assertEquals(listOf("family_id", "child_id", "device_id"), row.keys.take(3))
         assertEquals("enfant-test", row["child_id"])
+    }
+
+    @Test fun nullBecomesJsonNullAndTheKeyStaysPresent() {
+        val arr = BatchRows.toJsonArray(listOf(BatchRows.call(ids, CallLogCollector.CallRow("missed", null, 0, 0L))))
+        val o = arr.getJSONObject(0)
+        assertTrue(o.has("counterparty_hash"))
+        assertTrue(o.isNull("counterparty_hash"))
+        assertEquals(org.json.JSONObject.NULL, o.get("counterparty_hash"))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun heterogeneousBatchIsRefused() {
+        BatchRows.toJsonArray(listOf(mapOf("a" to 1, "b" to null), mapOf("a" to 2)))
     }
 
     @Test fun heterogeneousBatchIsDetected() {

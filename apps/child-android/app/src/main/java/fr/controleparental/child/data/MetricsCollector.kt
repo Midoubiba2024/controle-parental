@@ -30,26 +30,34 @@ class MetricsCollector(private val context: Context) {
         // 1) Temps d'écran (agrégat par app/jour).
         val usage = UsageStatsCollector(context).collect(daysBack = 3)
         val ids = BatchRows.base(e.familyId, e.childId, e.deviceId)
-        val usageArr = BatchRows.toJsonArray(usage.map { BatchRows.usage(ids, it) })
-        when (val res = client.upsert(
-            "usage_daily", usageArr, onConflict = "child_id,device_id,day,package_name",
-        )) { is SupabaseClient.Result.Error -> errors += "usage:${res.code}"; else -> {} }
+        // Un upsert PAR JEU DE CLÉS : une colonne facultative inconnue est retirée
+        // (pas d'écrasement par NULL) sans casser l'homogénéité du lot (PGRST102).
+        for (group in BatchRows.groupByKeys(usage.map { BatchRows.usage(ids, it) })) {
+            val res = client.upsert(
+                "usage_daily", BatchRows.toJsonArray(group), onConflict = "child_id,device_id,day,package_name",
+            )
+            if (res is SupabaseClient.Result.Error) errors += "usage:${res.code}"
+        }
 
         // 2) Inventaire des apps installées.
         val inventory = AppInventoryCollector(context).collect()
         val seenAt = System.currentTimeMillis()
-        val invArr = BatchRows.toJsonArray(inventory.map { BatchRows.inventory(ids, it, seenAt) })
-        val invRes = client.upsert(
-            "app_inventory", invArr, onConflict = "child_id,device_id,package_name",
-        )
-        if (invRes is SupabaseClient.Result.Error) errors += "inventory:${invRes.code}"
+        var inventoryOk = true
+        for (group in BatchRows.groupByKeys(inventory.map { BatchRows.inventory(ids, it, seenAt) })) {
+            val res = client.upsert(
+                "app_inventory", BatchRows.toJsonArray(group), onConflict = "child_id,device_id,package_name",
+            )
+            if (res is SupabaseClient.Result.Error) { errors += "inventory:${res.code}"; inventoryOk = false }
+        }
 
         // Réconciliation : stamper removed_at pour les packages encore en base
         // (non déjà marqués) mais ABSENTS de l'inventaire courant → apps
         // désinstallées. Sinon elles resteraient affichées « à vie » côté parent.
         // On ne le fait qu'après un upsert réussi et si l'inventaire n'est pas
         // vide (une collecte vide, ex. erreur, ne doit pas tout marquer supprimé).
-        if (invRes !is SupabaseClient.Result.Error && inventory.isNotEmpty()) {
+        // TOUS les sous-lots doivent avoir réussi : sinon des apps présentes seraient
+        // marquées désinstallées.
+        if (inventoryOk && inventory.isNotEmpty()) {
             val present = inventory.joinToString(",") { it.packageName }
             val query = "child_id=eq.${e.childId}" +
                 "&device_id=eq.${e.deviceId}" +

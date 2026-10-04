@@ -63,7 +63,8 @@ class GeofenceManager(private val context: Context) {
      */
     @SuppressLint("MissingPermission")
     suspend fun sync(shouldRegister: Boolean, force: Boolean = false) = withContext(Dispatchers.IO) {
-        // Alertes de zones désactivées (ou pas de position précise) : on DÉSENREGISTRE
+        // Alertes de zones désactivées, réglage inconnu ou permissions manquantes
+        // (GeofencePolicy) : on DÉSENREGISTRE
         // tout et on vide le cache, pour qu'aucune transition ne soit plus envoyée.
         if (!shouldRegister) {
             if (names.all.isNotEmpty()) {
@@ -72,7 +73,8 @@ class GeofenceManager(private val context: Context) {
             }
             return@withContext
         }
-        val zones = runCatching { repo.geofences() }.getOrDefault(emptyList())
+        // Erreur réseau : on garde l'état actuel (ne pas confondre avec « aucune zone »).
+        val zones = runCatching { repo.geofencesOrNull() }.getOrNull() ?: return@withContext
 
         val signature = zones.sortedBy { it.id }
             .joinToString("|") { "${it.id}:${it.lat},${it.lng},${it.radiusM},${it.notifyEnter},${it.notifyExit}" }
@@ -81,15 +83,15 @@ class GeofenceManager(private val context: Context) {
         // On repart d'un état propre (retrait par PendingIntent) puis on ré-ajoute.
         runCatching { Tasks.await(client.removeGeofences(pendingIntent())) }
 
-        // Met à jour le cache local id→nom (instantané d'événement côté receiver,
-        // sans appel réseau) + la signature. On repart propre pour oublier les
-        // zones supprimées.
-        val editor = names.edit().clear()
-        zones.forEach { editor.putString(it.id, it.name) }
-        editor.putString(KEY_SIG, signature)
-        editor.apply()
-
-        if (zones.isEmpty()) return@withContext
+        // Le cache local id→nom (instantané d'événement côté receiver, sans appel
+        // réseau) et la signature ne sont écrits qu'APRÈS un enregistrement RÉUSSI :
+        // sinon « mes données » et le receiver croiraient des zones actives alors
+        // qu'Android les a refusées. En cas d'échec, cache vidé → nouvel essai au
+        // prochain sync.
+        if (zones.isEmpty()) {
+            names.edit().clear().putString(KEY_SIG, signature).apply()
+            return@withContext
+        }
 
         val geofences = zones.map { z ->
             var transitions = 0
@@ -110,7 +112,13 @@ class GeofenceManager(private val context: Context) {
             .setInitialTrigger(0)
             .addGeofences(geofences)
             .build()
-        runCatching { Tasks.await(client.addGeofences(request, pendingIntent())) }
+        val added = runCatching { Tasks.await(client.addGeofences(request, pendingIntent())) }.isSuccess
+        val editor = names.edit().clear()
+        if (added) {
+            zones.forEach { editor.putString(it.id, it.name) }
+            editor.putString(KEY_SIG, signature)
+        }
+        editor.apply()
     }
 
     private companion object {

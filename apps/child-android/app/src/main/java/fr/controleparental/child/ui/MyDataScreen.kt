@@ -33,6 +33,7 @@ import fr.controleparental.child.filter.FilterCache
 import fr.controleparental.child.filter.FilterClient
 import fr.controleparental.child.filter.LocalDnsVpnService
 import fr.controleparental.child.location.GeofenceManager
+import fr.controleparental.child.location.GeofencePolicy
 import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.location.LocationCoordinator
 import fr.controleparental.child.location.LocationRepository
@@ -106,17 +107,17 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         ActivityResultContracts.RequestPermission(),
     ) { bgGranted = locationClient.hasBackground() }
 
-    // Réglage de partage actuel (affiché à l'enfant — transparence). Hors ligne,
-    // settings() renvoie le défaut (check-in seulement).
-    var locSettings by remember { mutableStateOf<LocationRepository.Settings?>(null) }
+    // Réglage de partage actuel (affiché à l'enfant — transparence). Hors ligne : le
+    // dernier réglage lu avec succès ; jamais lu → null → texte PRUDENT (rien minimisé).
+    var locSettings by remember { mutableStateOf(locationRepo.cachedSettings()) }
     LaunchedEffect(Unit) {
-        locSettings = runCatching { locationRepo.settings() }.getOrNull()
+        runCatching { locationRepo.settings() }.getOrNull()?.let { locSettings = it }
     }
 
-    // Zones (geofences) : actives si la position précise est accordée ET si les
-    // alertes de zones sont activées, QUEL QUE SOIT le mode de partage de position.
-    // On annonce la ligne s'il existe au moins une zone,
-    // d'après le cache local (hors ligne) OU la base (zones pas encore synchronisées).
+    // Zones (geofences) : actives si position précise + arrière-plan accordées ET
+    // alertes de zones activées (même politique que LocationCoordinator), QUEL QUE
+    // SOIT le mode de partage de position. Une zone « existe » d'après le cache local
+    // (hors ligne) OU la base (zones pas encore synchronisées).
     val geofenceManager = remember { GeofenceManager(context) }
     var zoneCount by remember { mutableStateOf(geofenceManager.registeredZoneCount()) }
     LaunchedEffect(Unit) {
@@ -263,13 +264,21 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         val loc = locSettings
         val locationOff = loc != null && (!loc.enabled || loc.mode == "off")
         val sosMinutes = (LocationCoordinator.MAX_SOS_LIVE_MS / 60_000L).toInt()
+        // Alertes de zones : réglage SÉPARÉ du partage de position (inconnu → inactives).
+        val zonesActive = zoneCount > 0 && GeofencePolicy.shouldRegister(
+            hasFineLocation = fineGranted,
+            hasBackgroundLocation = bgGranted,
+            geofenceAlertsEnabled = loc?.geofenceAlertsEnabled ?: false,
+        )
         listOfNotNull(
             stringResource(R.string.shared_usage),
             stringResource(R.string.shared_inventory),
             stringResource(R.string.shared_device),
             when {
+                loc == null -> stringResource(R.string.shared_location_unknown)
+                locationOff && zonesActive -> stringResource(R.string.shared_location_off_with_zones)
                 locationOff -> stringResource(R.string.shared_location_off)
-                loc != null && loc.mode == "periodic" -> {
+                loc.mode == "periodic" -> {
                     val minutes = LocationCoordinator.periodicIntervalMinutes(loc.periodicIntervalSec)
                     res.getQuantityString(R.plurals.shared_location_periodic, minutes, minutes)
                 }
@@ -277,10 +286,10 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             },
             if (locationOff) null else stringResource(R.string.shared_location_details),
             res.getQuantityString(R.plurals.shared_sos, sosMinutes, sosMinutes),
-            // Alertes de zones : réglage SÉPARÉ du partage de position.
             when {
                 loc?.geofenceAlertsEnabled == false -> stringResource(R.string.shared_zones_disabled)
                 zoneCount == 0 -> null
+                !zonesActive -> stringResource(R.string.shared_zones_inactive)
                 locationOff -> stringResource(R.string.shared_zones_location_off)
                 else -> stringResource(R.string.shared_zones)
             },
@@ -290,7 +299,8 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 else -> stringResource(R.string.shared_call_log_pending)
             },
             if (Config.featureNetworkFilter) stringResource(R.string.shared_filter) else null,
-            if (Config.featureNetworkFilter && filterConfig?.policy?.logAllowed == true)
+            // Journal de TOUS les sites : seulement quand le filtrage tourne vraiment.
+            if (Config.featureNetworkFilter && filterOn && filterConfig?.policy?.logAllowed == true)
                 stringResource(R.string.shared_filter_log_allowed)
             else null,
             if (showSafety && analysisEnabled && listenerEnabled && !pauseActive)
@@ -300,6 +310,8 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             else null,
             stringResource(R.string.shared_requests),
             stringResource(R.string.shared_messages),
+            stringResource(R.string.shared_export),
+            stringResource(R.string.shared_history_retention),
         ).forEach {
             Text(stringResource(R.string.mydata_list_item, it), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))

@@ -11,17 +11,24 @@ import org.junit.Test
  */
 class GeofencePolicyTest {
 
-    @Test fun registersOnlyWithFineLocationAndAlertsEnabled() {
-        assertTrue(GeofencePolicy.shouldRegister(hasFineLocation = true, geofenceAlertsEnabled = true))
+    private fun decide(fine: Boolean, background: Boolean, alerts: Boolean) =
+        GeofencePolicy.shouldRegister(
+            hasFineLocation = fine, hasBackgroundLocation = background, geofenceAlertsEnabled = alerts,
+        )
+
+    @Test fun registersOnlyWithBothPermissionsAndAlertsEnabled() {
+        assertTrue(decide(fine = true, background = true, alerts = true))
     }
 
-    @Test fun alertsDisabledUnregistersEvenWithPermission() {
-        assertFalse(GeofencePolicy.shouldRegister(hasFineLocation = true, geofenceAlertsEnabled = false))
+    @Test fun alertsDisabledOrUnknownUnregistersEvenWithPermissions() {
+        // Réglage inconnu (hors ligne, jamais lu) : l'appelant passe false → échec fermé.
+        assertFalse(decide(fine = true, background = true, alerts = false))
     }
 
-    @Test fun noFineLocationMeansNoZones() {
-        assertFalse(GeofencePolicy.shouldRegister(hasFineLocation = false, geofenceAlertsEnabled = true))
-        assertFalse(GeofencePolicy.shouldRegister(hasFineLocation = false, geofenceAlertsEnabled = false))
+    @Test fun missingPermissionMeansNoZones() {
+        assertFalse(decide(fine = false, background = true, alerts = true))
+        assertFalse(decide(fine = true, background = false, alerts = true))   // Android 10+ sans arrière-plan
+        assertFalse(decide(fine = false, background = false, alerts = false))
     }
 
     @Test fun defaultSettingsKeepZoneAlertsOn() {

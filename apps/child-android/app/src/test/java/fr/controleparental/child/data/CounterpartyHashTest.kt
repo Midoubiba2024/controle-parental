@@ -53,9 +53,10 @@ class CounterpartyHashTest {
     }
 
     @Test fun hashFormatIsUnchangedForExistingGroupings() {
-        // Même format que l'ancien CallLogCollector.hash() : sha256("poivre:numéro").
+        // Constante calculée INDÉPENDAMMENT : sha256("poivre-de-test:+33199001234"),
+        // même format que l'ancien CallLogCollector.hash() (regroupements conservés).
         assertEquals(
-            CounterpartyHash.raw(fakeNumber, pepper),
+            "22ef77955e38208a8154d9760931a55cc459d726d7d87693e1422b87dc693df9",
             CounterpartyHash.of(fakeNumber, allowed, pepper),
         )
     }

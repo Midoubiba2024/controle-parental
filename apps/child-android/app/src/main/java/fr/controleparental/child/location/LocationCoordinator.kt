@@ -26,7 +26,23 @@ class LocationCoordinator(context: Context) {
     private val repo = LocationRepository(SupervisionStore(appContext))
     private val geofences = GeofenceManager(appContext)
 
-    @Volatile private var settings: LocationRepository.Settings = LocationRepository.Settings.DEFAULT
+    // Dernier réglage CONNU (lu ou mémorisé) ; null = jamais lu. Pour les positions,
+    // on retombe sur DEFAULT (check-in seulement) ; pour les zones, on ÉCHOUE FERMÉ.
+    @Volatile private var known: LocationRepository.Settings? = null
+    private val settings: LocationRepository.Settings
+        get() = known ?: LocationRepository.Settings.DEFAULT
+
+    private suspend fun refreshSettings(): LocationRepository.Settings {
+        known = runCatching { repo.settings() }.getOrNull() ?: known ?: repo.cachedSettings()
+        return settings
+    }
+
+    /** Les zones doivent-elles être enregistrées ? (réglage inconnu → non). */
+    private fun shouldRegisterZones(): Boolean = GeofencePolicy.shouldRegister(
+        hasFineLocation = client.hasFine(),
+        hasBackgroundLocation = client.hasBackground(),
+        geofenceAlertsEnabled = known?.geofenceAlertsEnabled ?: false,
+    )
 
     private var lastPeriodicMs = 0L
     private var lastSosPollMs = 0L
@@ -37,19 +53,17 @@ class LocationCoordinator(context: Context) {
 
     /** Rafraîchit le réglage de partage + ré-enregistre les geofences si besoin. */
     suspend fun onSync() {
-        settings = runCatching { repo.settings() }.getOrDefault(LocationRepository.Settings.DEFAULT)
+        refreshSettings()
         // Re-register seulement si les zones ont changé ; tout retirer si les alertes
         // de zones sont désactivées (réglage séparé du partage de position).
-        runCatching { geofences.sync(GeofencePolicy.shouldRegister(client.hasFine(), settings.geofenceAlertsEnabled)) }
+        runCatching { geofences.sync(shouldRegisterZones()) }
     }
 
     /** Ré-enregistrement COMPLET des geofences après reboot (les geofences OS ne
      *  survivent pas au redémarrage). Appelé par BootReceiver (borné). */
     suspend fun registerGeofencesAfterBoot() {
-        settings = runCatching { repo.settings() }.getOrDefault(settings)
-        runCatching {
-            geofences.sync(GeofencePolicy.shouldRegister(client.hasFine(), settings.geofenceAlertsEnabled), force = true)
-        }
+        refreshSettings()
+        runCatching { geofences.sync(shouldRegisterZones(), force = true) }
     }
 
     /** Appelé à chaque tick de la boucle (~3 s). Gère SOS live + relevé périodique. */
@@ -101,8 +115,7 @@ class LocationCoordinator(context: Context) {
         // AUCUNE position — cohérent avec l'écran « mes données » qui dit alors
         // « partage désactivé ». Le SOS enfant (child-initiated) reste, lui,
         // toujours autorisé par un autre chemin.
-        val s = runCatching { repo.settings() }.getOrDefault(settings)
-        settings = s
+        val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return false
         val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return false
         return repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
@@ -111,8 +124,7 @@ class LocationCoordinator(context: Context) {
     /** Batterie faible (D7) : remonte la dernière position + une alerte. Respecte
      *  le réglage de partage (pas de position si désactivé). */
     suspend fun onBatteryLow() {
-        val s = runCatching { repo.settings() }.getOrDefault(settings)
-        settings = s
+        val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return
         val battery = batteryLevel()
         val loc = client.lastKnown() ?: client.currentFix(highAccuracy = false)

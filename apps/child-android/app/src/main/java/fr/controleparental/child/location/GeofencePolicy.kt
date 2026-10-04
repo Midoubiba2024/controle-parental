@@ -6,10 +6,20 @@ package fr.controleparental.child.location
  *
  * Les alertes de zones sont un réglage SÉPARÉ du partage de position
  * (location_settings.geofence_alerts_enabled) : elles peuvent rester actives quand
- * la position est sur « off », et inversement. Il faut aussi la permission de
- * position précise, sans laquelle Android refuse l'enregistrement.
+ * la position est sur « off », et inversement. Il faut aussi les permissions de
+ * position précise ET en arrière-plan, sans lesquelles Android refuse
+ * l'enregistrement.
  */
 object GeofencePolicy {
-    fun shouldRegister(hasFineLocation: Boolean, geofenceAlertsEnabled: Boolean): Boolean =
-        hasFineLocation && geofenceAlertsEnabled
+    /**
+     * [hasBackgroundLocation] : ACCESS_BACKGROUND_LOCATION, exigée par Android 10+
+     * pour les geofences (true sous Android 10, où elle n'existe pas).
+     * [geofenceAlertsEnabled] : réglage parent ; INCONNU (hors ligne, jamais lu) →
+     * l'appelant passe false (échec fermé).
+     */
+    fun shouldRegister(
+        hasFineLocation: Boolean,
+        hasBackgroundLocation: Boolean,
+        geofenceAlertsEnabled: Boolean,
+    ): Boolean = hasFineLocation && hasBackgroundLocation && geofenceAlertsEnabled
 }

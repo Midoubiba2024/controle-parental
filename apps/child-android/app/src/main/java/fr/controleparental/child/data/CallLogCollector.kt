@@ -63,7 +63,7 @@ class CallLogCollector(private val context: Context) {
             while (c.moveToNext()) {
                 val number = if (iNum >= 0) c.getString(iNum) else null
                 // Lue localement pour reconnaître un appel masqué ; jamais envoyée.
-                val presentation = if (iPres >= 0) c.getInt(iPres) else CounterpartyHash.PRESENTATION_NOT_READ
+                val presentation = if (iPres >= 0 && !c.isNull(iPres)) c.getInt(iPres) else CounterpartyHash.PRESENTATION_NOT_READ
                 val type = if (iType >= 0) c.getInt(iType) else 0
                 val date = if (iDate >= 0) c.getLong(iDate) else continue
                 val durationS = if (iDur >= 0) c.getLong(iDur) else 0
