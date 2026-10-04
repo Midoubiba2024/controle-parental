@@ -141,7 +141,17 @@ class SupervisionService : Service() {
     private suspend fun loop() {
         var tick = 0L
         while (scope.isActive) {
-            if (!SupervisionStore(this).isEnrolled) { withContext(Dispatchers.Main) { overlay.hide() }; delay(TICK_MS); continue }
+            // Plus enrôlé (session perdue ou appareil retiré par le parent, LOT 12) :
+            // plus rien à superviser → on lève l'overlay et on s'arrête (aucune
+            // requête ; la notification disparaît avec le service).
+            if (!SupervisionStore(this).isEnrolled) {
+                withContext(Dispatchers.Main) {
+                    overlay.hide()
+                    loopStarted = false   // un ré-appairage relancera une boucle neuve
+                    stopSelf()
+                }
+                return
+            }
 
             if (tick % SYNC_EVERY == 0L) {
                 runCatching { syncRules() }

@@ -8,8 +8,14 @@ parental est actif (garde-fou anti-stalkerware, cf. `../../docs/02-CONFORMITE.md
 Kotlin + Jetpack Compose (Material3), OkHttp, EncryptedSharedPreferences. AGP 8.7 / Kotlin 2.0.
 
 ## Ce que fait le squelette (LOT 0)
-- **Écran d'appairage** : saisie du code à 8 chiffres → appelle l'Edge Function
-  `pairing-complete` → enrôle l'appareil et stocke la **session enfant chiffrée**.
+- **Écran d'appairage** (refondu au LOT 12, contrat [`../../docs/14-APPAIRAGE.md`](../../docs/14-APPAIRAGE.md)) :
+  saisie du code à **10 caractères** affiché par la console parent (ex. `7KQ2M-X9D4F`,
+  avec ou sans tiret, minuscules acceptées, `O`/`I`/`L` lus `0`/`1`/`1`) → l'appareil
+  ouvre une **session anonyme** Supabase puis appelle la RPC `pairing_complete` ;
+  cette session devient la **session de l'appareil**, stockée chiffrée et rafraîchie
+  (rotation du refresh token). Aucune clé secrète dans l'APK : seule la clé publiable.
+  Si le parent **retire l'appareil** ou si la session est perdue, l'appli efface son
+  enrôlement et revient d'elle-même à cet écran (nouveau code nécessaire).
 - **Service de supervision** : notification de premier plan **persistante** (non balayable),
   relancée au démarrage (`BootReceiver`).
 - **Écran « mes données »** : transparence — ce qui est partagé, niveau de supervision.

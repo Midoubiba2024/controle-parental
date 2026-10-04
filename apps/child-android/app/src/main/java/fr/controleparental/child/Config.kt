@@ -14,7 +14,11 @@ object Config {
     val supabaseUrl: String = BuildConfig.SUPABASE_URL
     val supabaseAnonKey: String = BuildConfig.SUPABASE_ANON_KEY
 
-    val pairingCompleteUrl: String get() = "$supabaseUrl/functions/v1/pairing-complete"
+    /** Inscription ANONYME de l'appareil (GoTrue) — docs/14-APPAIRAGE.md §2. */
+    val anonymousSignupUrl: String get() = "$supabaseUrl/auth/v1/signup"
+
+    /** RPC PostgREST d'appairage `pairing_complete` — docs/14-APPAIRAGE.md §3. */
+    val pairingCompleteRpcUrl: String get() = restUrl("rpc/pairing_complete")
 
     /** Endpoint de rafraîchissement de session (GoTrue). */
     val tokenRefreshUrl: String get() = "$supabaseUrl/auth/v1/token?grant_type=refresh_token"

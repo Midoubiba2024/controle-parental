@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import fr.controleparental.child.pairing.AuthSession
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Stockage CHIFFRÉ de l'état d'enrôlement et de la session enfant.
@@ -31,11 +35,19 @@ class SupervisionStore(context: Context) {
         val mode: String,
         val accessToken: String,
         val refreshToken: String,
+        /** Expiration de [accessToken] en secondes epoch (0 = inconnue). */
+        val expiresAt: Long = 0L,
     )
 
     val isEnrolled: Boolean get() = prefs.contains(KEY_DEVICE_ID)
 
-    fun save(e: Enrollment) {
+    /**
+     * Appairage réussi (LOT 12) : la session anonyme EN ATTENTE devient la session
+     * de l'appareil, et le blocage anti force brute est levé. Écriture synchrone
+     * (`commit`) : jamais d'enrôlement à moitié écrit, ni de session en attente
+     * réutilisée après succès.
+     */
+    fun completeEnrollment(e: Enrollment) {
         prefs.edit()
             .putString(KEY_DEVICE_ID, e.deviceId)
             .putString(KEY_FAMILY_ID, e.familyId)
@@ -43,15 +55,76 @@ class SupervisionStore(context: Context) {
             .putString(KEY_MODE, e.mode)
             .putString(KEY_ACCESS, e.accessToken)
             .putString(KEY_REFRESH, e.refreshToken)
-            .apply()
+            .putLong(KEY_EXPIRES_AT, e.expiresAt)
+            .remove(KEY_PENDING_ACCESS)
+            .remove(KEY_PENDING_REFRESH)
+            .remove(KEY_PENDING_EXPIRES_AT)
+            .remove(KEY_PENDING_USER_ID)
+            .remove(KEY_PAIRING_BLOCKED_UNTIL)
+            .commit()
+        _unenrolled.value = null
     }
 
-    /** Met à jour uniquement les jetons de session (après un refresh GoTrue). */
-    fun updateTokens(accessToken: String, refreshToken: String) {
+    /**
+     * Met à jour les jetons de la session de l'appareil (après un refresh GoTrue).
+     * Les refresh tokens sont À USAGE UNIQUE (rotation) : `commit()` pour que le
+     * nouveau soit écrit AVANT tout usage de l'access token (docs/14-APPAIRAGE.md §4).
+     */
+    fun updateTokens(accessToken: String, refreshToken: String, expiresAt: Long) {
         prefs.edit()
             .putString(KEY_ACCESS, accessToken)
             .putString(KEY_REFRESH, refreshToken)
-            .apply()
+            .putLong(KEY_EXPIRES_AT, expiresAt)
+            .commit()
+    }
+
+    /**
+     * Session ANONYME en attente d'appairage (§5) : créée au premier appui sur
+     * « Associer », RÉUTILISÉE pour les essais suivants (mêmes limites côté
+     * serveur), jetée si le serveur la refuse ou après succès.
+     */
+    fun loadPendingSession(): AuthSession? {
+        val access = prefs.getString(KEY_PENDING_ACCESS, null) ?: return null
+        val refresh = prefs.getString(KEY_PENDING_REFRESH, null) ?: return null
+        val userId = prefs.getString(KEY_PENDING_USER_ID, null) ?: return null
+        return AuthSession(access, refresh, prefs.getLong(KEY_PENDING_EXPIRES_AT, 0L), userId)
+    }
+
+    fun savePendingSession(s: AuthSession) {
+        prefs.edit()
+            .putString(KEY_PENDING_ACCESS, s.accessToken)
+            .putString(KEY_PENDING_REFRESH, s.refreshToken)
+            .putLong(KEY_PENDING_EXPIRES_AT, s.expiresAt)
+            .putString(KEY_PENDING_USER_ID, s.userId)
+            .commit()
+    }
+
+    fun clearPendingSession() {
+        prefs.edit()
+            .remove(KEY_PENDING_ACCESS)
+            .remove(KEY_PENDING_REFRESH)
+            .remove(KEY_PENDING_EXPIRES_AT)
+            .remove(KEY_PENDING_USER_ID)
+            .commit()
+    }
+
+    /**
+     * Fin du blocage `too_many_attempts` (epoch ms, 0 = aucun). Persisté : fermer
+     * et rouvrir l'appli ne contourne pas l'attente demandée par le serveur.
+     */
+    var pairingBlockedUntil: Long
+        get() = prefs.getLong(KEY_PAIRING_BLOCKED_UNTIL, 0L)
+        set(value) { prefs.edit().putLong(KEY_PAIRING_BLOCKED_UNTIL, value).apply() }
+
+    /**
+     * Désenrôlement subi (§4 session perdue, §5 appareil retiré par le parent) :
+     * efface l'enrôlement ET la session locale (tout le stockage de supervision),
+     * puis prévient l'interface pour revenir à l'écran d'appairage. Plus aucune
+     * requête ne part ensuite : tous les clients s'arrêtent sur « non enrôlé ».
+     */
+    fun unenroll(reason: UnenrollReason) {
+        prefs.edit().clear().commit()
+        _unenrolled.value = reason
     }
 
     fun load(): Enrollment? {
@@ -63,6 +136,7 @@ class SupervisionStore(context: Context) {
             mode = prefs.getString(KEY_MODE, "standard")!!,
             accessToken = prefs.getString(KEY_ACCESS, "")!!,
             refreshToken = prefs.getString(KEY_REFRESH, "")!!,
+            expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L),
         )
     }
 
@@ -105,19 +179,36 @@ class SupervisionStore(context: Context) {
         get() = prefs.getString(KEY_LOC_SETTINGS, null)
         set(value) { prefs.edit().putString(KEY_LOC_SETTINGS, value).apply() }
 
-    fun clear() = prefs.edit().clear().apply()
+    /** Pourquoi l'appareil a été désenrôlé (message affiché à l'écran d'appairage). */
+    enum class UnenrollReason { SESSION_LOST, DEVICE_REVOKED }
 
-    private companion object {
-        const val KEY_DEVICE_ID = "device_id"
-        const val KEY_FAMILY_ID = "family_id"
-        const val KEY_CHILD_ID = "child_id"
-        const val KEY_MODE = "mode"
-        const val KEY_ACCESS = "access_token"
-        const val KEY_REFRESH = "refresh_token"
-        const val KEY_CALL_WM = "call_log_watermark"
-        const val KEY_STATUS_TS = "pending_status_captured_at"
-        const val KEY_MSG_WM = "message_watermark"
-        const val KEY_LOC_SETTINGS = "last_location_settings"
-        const val KEY_FILTER_DESIRED = "filter_desired"
+    companion object {
+        /**
+         * Dernier désenrôlement subi dans ce processus (null = aucun). Observé par
+         * MainActivity pour revenir à l'écran d'appairage sans redémarrage.
+         */
+        private val _unenrolled = MutableStateFlow<UnenrollReason?>(null)
+        val unenrolled: StateFlow<UnenrollReason?> = _unenrolled.asStateFlow()
+
+        /** Message affiché : consommé par l'écran d'appairage. */
+        fun acknowledgeUnenrolled() { _unenrolled.value = null }
+
+        private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_FAMILY_ID = "family_id"
+        private const val KEY_CHILD_ID = "child_id"
+        private const val KEY_MODE = "mode"
+        private const val KEY_ACCESS = "access_token"
+        private const val KEY_REFRESH = "refresh_token"
+        private const val KEY_CALL_WM = "call_log_watermark"
+        private const val KEY_STATUS_TS = "pending_status_captured_at"
+        private const val KEY_MSG_WM = "message_watermark"
+        private const val KEY_LOC_SETTINGS = "last_location_settings"
+        private const val KEY_FILTER_DESIRED = "filter_desired"
+        private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_PENDING_ACCESS = "pending_access_token"
+        private const val KEY_PENDING_REFRESH = "pending_refresh_token"
+        private const val KEY_PENDING_EXPIRES_AT = "pending_expires_at"
+        private const val KEY_PENDING_USER_ID = "pending_user_id"
+        private const val KEY_PAIRING_BLOCKED_UNTIL = "pairing_blocked_until"
     }
 }

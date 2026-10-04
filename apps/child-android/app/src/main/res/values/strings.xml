@@ -55,15 +55,26 @@
 
     <!-- Appairage -->
     <string name="pairing_title">Associer cet appareil</string>
-    <string name="pairing_intro">Saisis le code à 8 chiffres affiché par tes parents dans leur application.</string>
+    <string name="pairing_intro">Saisis le code à 10 caractères affiché par tes parents dans leur application (par exemple 7KQ2M-X9D4F).</string>
     <string name="pairing_code_label">Code d\'appairage</string>
+    <string name="pairing_code_hint">10 caractères, avec ou sans tiret</string>
+    <string name="pairing_code_rejected_char">Ce caractère n\'existe pas dans les codes (pas de U). Vérifie la saisie.</string>
     <string name="pairing_submit">Associer</string>
     <string name="pairing_submitting">Association…</string>
     <string name="pairing_transparency">Cette application est visible et t\'informera toujours de ce qui est partagé avec tes parents. Rien n\'est caché.</string>
-    <string name="pairing_error_invalid_format">Le code doit comporter 8 chiffres.</string>
+    <string name="pairing_error_invalid_format">Le code doit comporter 10 caractères (chiffres et lettres), par exemple 7KQ2M-X9D4F.</string>
     <string name="pairing_error_not_found">Code introuvable. Vérifie la saisie.</string>
-    <string name="pairing_error_already_used">Ce code a déjà été utilisé.</string>
+    <string name="pairing_error_already_used">Ce code a déjà été utilisé. Demande un nouveau code à ton parent.</string>
     <string name="pairing_error_expired">Ce code a expiré. Demande-en un nouveau.</string>
+    <string name="pairing_error_too_many_attempts">Trop d\'essais. Réessaie dans %1$d min.</string>
+    <string name="pairing_error_invalid_device">L\'appareil n\'a pas pu être enregistré. Mets l\'application à jour ou réessaie.</string>
+    <string name="pairing_error_device_must_repair">Cet appareil doit être appairé à nouveau : demande un nouveau code à ton parent.</string>
+    <string name="pairing_error_connection_problem">Un problème de connexion est survenu. Réessaie.</string>
+    <string name="pairing_error_unavailable">Connexion impossible pour l\'instant. Réessaie dans un moment.</string>
+    <string name="pairing_error_disabled">L\'appairage n\'est pas encore activé. Préviens ton parent.</string>
+    <string name="pairing_error_network_rate_limited">Trop de tentatives depuis ce réseau. Réessaie dans une heure.</string>
+    <string name="pairing_session_expired">La connexion de cet appareil a expiré : demande un nouveau code à ton parent.</string>
+    <string name="pairing_device_revoked">Cet appareil a été retiré par ton parent. Pour le relier à nouveau, demande un nouveau code.</string>
     <string name="pairing_error_generic">Échec de l\'association (%1$s).</string>
 
     <!-- Mes données — écran de transparence (TEXTES À CONSERVER MOT POUR MOT) -->
