@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
+import { errorMessage, useI18n } from "../i18n";
 
 export function Login() {
+  const { t } = useI18n();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,7 +18,7 @@ export function Login() {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setMsg("Compte créé. Vérifiez vos e-mails si la confirmation est requise, puis connectez-vous.");
+        setMsg(t("login.accountCreated"));
         setMode("signin");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -24,7 +26,7 @@ export function Login() {
         // La session est captée par onAuthStateChange dans App.
       }
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : String(err));
+      setMsg(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -32,28 +34,28 @@ export function Login() {
 
   return (
     <div className="card center">
-      <h1>Console parent</h1>
-      <p className="muted">Contrôle parental transparent</p>
+      <h1>{t("login.title")}</h1>
+      <p className="muted">{t("login.tagline")}</p>
       <form onSubmit={submit}>
-        <label>E-mail
+        <label>{t("login.email")}
           <input type="email" value={email} required
             onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         </label>
-        <label>Mot de passe
+        <label>{t("login.password")}
           <input type="password" value={password} required minLength={8}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete={mode === "signup" ? "new-password" : "current-password"} />
         </label>
         <button disabled={busy} type="submit">
-          {busy ? "…" : mode === "signin" ? "Se connecter" : "Créer un compte"}
+          {busy ? t("common.busy") : mode === "signin" ? t("login.signIn") : t("login.signUp")}
         </button>
       </form>
       <button className="link" onClick={() => setMode(mode === "signin" ? "signup" : "signin")}>
-        {mode === "signin" ? "Créer un compte parent" : "J'ai déjà un compte"}
+        {mode === "signin" ? t("login.switchToSignUp") : t("login.switchToSignIn")}
       </button>
       {msg && <p className="msg">{msg}</p>}
       <p className="muted small">
-        La double authentification (MFA) sera exigée pour les comptes parents (voir SETUP.md).
+        {t("login.mfaNotice")}
       </p>
     </div>
   );

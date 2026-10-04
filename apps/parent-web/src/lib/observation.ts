@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { dayKey } from "./format";
+import { errorMessage } from "../i18n";
 import type {
   AppInventory, CommEvent, Device, DeviceStatus, UsageDaily,
 } from "./types";
@@ -73,7 +74,7 @@ export function useObservation(childId: string | null): ObservationData {
       if (!active) return;   // sélection changée entre-temps → on jette ce résultat
 
       if (u.error) {
-        setError(u.error.message);
+        setError(errorMessage(u.error));
       } else {
         const rows = u.data as UsageDaily[];
         setUsage(rows);

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { t } from "../../i18n";
 
 /* =============================================================================
    Carte Leaflet + tuiles OpenStreetMap (MIT, sans clé API — meilleur choix archi
@@ -23,7 +24,8 @@ export interface MapMarker {
   lat: number;
   lng: number;
   color: string;        // token CSS ("var(--series-1)") ou couleur littérale
-  label: string;        // texte du popup
+  /** Texte BRUT du popup (jamais du HTML : peut contenir une saisie utilisateur). */
+  label: string;
   kind?: "dot" | "position" | "sos";
   radiusPx?: number;
 }
@@ -34,6 +36,7 @@ export interface MapCircle {
   lng: number;
   radiusM: number;
   color: string;
+  /** Texte BRUT du popup (jamais du HTML : peut contenir une saisie utilisateur). */
   label?: string;
   dashed?: boolean;
 }
@@ -85,7 +88,7 @@ export function MapCanvas({
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: "&copy; contributeurs OpenStreetMap",
+      attribution: t("views.map.attribution"),   // lu au montage de la carte
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     map.on("click", (e: L.LeafletMouseEvent) => {
@@ -128,7 +131,7 @@ export function MapCanvas({
         fillOpacity: 0.12,
         dashArray: c.dashed ? "6 6" : undefined,
       }).addTo(group);
-      if (c.label) circle.bindPopup(c.label);
+      if (c.label) circle.bindPopup(textContent(c.label));
       const b = circle.getBounds();
       pts.push(b.getSouthWest(), b.getNorthEast());
     }
@@ -148,7 +151,7 @@ export function MapCanvas({
         weight: m.kind === "sos" ? 3 : 2,
         fillColor: resolveColor(m.color),
         fillOpacity: m.kind === "dot" ? 0.7 : 1,
-      }).addTo(group).bindPopup(m.label);
+      }).addTo(group).bindPopup(textContent(m.label));
       pts.push(L.latLng(m.lat, m.lng));
     }
 
@@ -182,6 +185,17 @@ export function MapCanvas({
       style={{ height, width: "100%", borderRadius: "var(--radius-sm)", overflow: "hidden", zIndex: 0 }}
     />
   );
+}
+
+/**
+ * Contenu de popup SÛR : Leaflet injecte une chaîne via innerHTML, or les libellés
+ * peuvent contenir une saisie libre (nom de zone…) → XSS stockée. On passe donc
+ * toujours un nœud DOM dont le texte est posé via textContent (jamais interprété).
+ */
+function textContent(label: string): HTMLElement {
+  const el = document.createElement("span");
+  el.textContent = label;
+  return el;
 }
 
 function round(v: number): number { return Math.round(v * 1e5) / 1e5; }

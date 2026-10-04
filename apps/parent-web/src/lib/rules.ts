@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { dayKey } from "./format";
+import { errorMessage, labelMap, t } from "../i18n";
 import type {
   AccessPolicy, AccessRequest, AgeProfile, AppRule, ChildSchedule, Command,
   Schedule, ScheduleWindow, ScreenTimeLimit, TimeGrant,
@@ -56,7 +57,7 @@ export function useRules(familyId: string | null, childId: string | null): Rules
         .order("created_at", { ascending: false }).limit(20),
     ]);
 
-    if (pol.error) setError(pol.error.message); else setPolicy((pol.data as AccessPolicy) ?? null);
+    if (pol.error) setError(errorMessage(pol.error)); else setPolicy((pol.data as AccessPolicy) ?? null);
     if (!lim.error) setLimits(lim.data as ScreenTimeLimit[]);
     if (!ar.error) setAppRules(ar.data as AppRule[]);
     if (!cs.error) setChildSchedules(cs.data as ChildSchedule[]);
@@ -87,18 +88,23 @@ export function useRules(familyId: string | null, childId: string | null): Rules
 
 /* --------------------------- Jours de la semaine ------------------------- */
 // Ordre d'affichage lundi→dimanche, mais indices 0=dimanche … 6=samedi (aligné
-// JS Date.getDay() et sur le bitmask dow_mask de schedule_windows).
-export const DOW_LABELS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
-export const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]; // affichage semaine FR
+// JS Date.getDay() et sur le bitmask dow_mask de schedule_windows). Libellés
+// traduits (enums.dowShort.d0…d6), relus à chaque accès.
+const DOW_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
+export const DOW_LABELS: Readonly<Record<number, string>> = labelMap(
+  DOW_INDEXES.map(String) as `${(typeof DOW_INDEXES)[number]}`[],
+  (d) => t(`enums.dowShort.d${d}`),
+);
+export const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]; // affichage semaine FR (lundi d'abord)
 
 export function dowBit(day: number): number { return 1 << day; }
 export function dowMaskHas(mask: number, day: number): boolean { return (mask & dowBit(day)) !== 0; }
 
 export function dowMaskLabel(mask: number): string {
-  if (mask === 127) return "Tous les jours";
-  if (mask === 0b0111110) return "En semaine";      // lun→ven
-  if (mask === 0b1000001) return "Week-end";        // sam+dim
-  return DOW_ORDER.filter((d) => dowMaskHas(mask, d)).map((d) => DOW_LABELS[d]).join(", ");
+  if (mask === 127) return t("enums.dowMask.everyDay");
+  if (mask === 0b0111110) return t("enums.dowMask.weekdays");   // lun→ven
+  if (mask === 0b1000001) return t("enums.dowMask.weekend");    // sam+dim
+  return DOW_ORDER.filter((d) => dowMaskHas(mask, d)).map((d) => DOW_LABELS[d]).join(t("enums.dowMask.separator"));
 }
 
 /* --------------------------- Minutes ↔ HH:MM ----------------------------- */
@@ -114,7 +120,7 @@ export function hhmmToMinutes(hhmm: string): number {
 /* --------------------------- Préréglages par âge (V6) -------------------- */
 // Repères indicatifs d'aide à la décision (A11) — ajustables par le parent.
 export interface AgePreset {
-  label: string;
+  readonly label: string;    // traduit (getter : relu dans la langue active)
   dailyMinutes: number;      // limite quotidienne globale conseillée
   weekendMinutes: number;    // samedi & dimanche
   bedtime: { start: string; end: string }; // Downtime conseillé
@@ -123,7 +129,7 @@ export interface AgePreset {
 
 export const AGE_PRESETS: Record<AgeProfile, AgePreset> = {
   young_child: {
-    label: "Jeune enfant (~6 ans)",
+    get label() { return t("enums.ageProfilePreset.young_child"); },
     dailyMinutes: 45,
     weekendMinutes: 60,
     bedtime: { start: "19:30", end: "07:00" },
@@ -133,7 +139,7 @@ export const AGE_PRESETS: Record<AgeProfile, AgePreset> = {
     ],
   },
   preteen: {
-    label: "Pré-ado (~12 ans)",
+    get label() { return t("enums.ageProfilePreset.preteen"); },
     dailyMinutes: 90,
     weekendMinutes: 150,
     bedtime: { start: "21:00", end: "07:00" },
@@ -144,7 +150,7 @@ export const AGE_PRESETS: Record<AgeProfile, AgePreset> = {
     ],
   },
   teen: {
-    label: "Ado (15 ans+)",
+    get label() { return t("enums.ageProfilePreset.teen"); },
     dailyMinutes: 150,
     weekendMinutes: 240,
     bedtime: { start: "22:30", end: "06:45" },
@@ -198,19 +204,11 @@ export async function sendCommand(
   if (!error) {
     void supabase.functions.invoke("dispatch-push", { body: { child_id: args.childId } }).catch(() => {});
   }
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
-export const SCHEDULE_KIND_LABEL: Record<Schedule["kind"], string> = {
-  downtime: "Downtime / coucher",
-  allowed: "Plages autorisées",
-  blocked: "Plages interdites",
-  school: "Mode École",
-};
+export const SCHEDULE_KIND_LABEL: Readonly<Record<Schedule["kind"], string>> = labelMap(
+  ["downtime", "allowed", "blocked", "school"], (k) => t(`enums.scheduleKind.${k}`));
 
-export const REQUEST_KIND_LABEL: Record<AccessRequest["kind"], string> = {
-  extra_time: "Temps supplémentaire",
-  unblock_app: "Débloquer une app",
-  reward: "Récompense",
-  browse: "Accès à un site (Ask-to-Browse)",
-};
+export const REQUEST_KIND_LABEL: Readonly<Record<AccessRequest["kind"], string>> = labelMap(
+  ["extra_time", "unblock_app", "reward", "browse"], (k) => t(`enums.requestKind.${k}`));

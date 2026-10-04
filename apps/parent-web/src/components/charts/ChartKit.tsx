@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Trans, useI18n } from "../../i18n";
 
 /* =============================================================================
    Boîte à outils de graphiques (SVG, sans dépendance). Couleurs = variables CSS
@@ -15,6 +16,12 @@ export interface Slice {
 }
 
 interface Tip { x: number; y: number; node: ReactNode }
+
+/** Balises des infobulles : <k> = libellé atténué, <v> = valeur. */
+const TIP_TAGS = {
+  k: (c: ReactNode) => <span className="k">{c}</span>,
+  v: (c: ReactNode) => <span className="v">{c}</span>,
+};
 
 function Tooltip({ tip }: { tip: Tip | null }) {
   if (!tip) return null;
@@ -35,6 +42,7 @@ export function Donut({
   center?: { primary: string; secondary?: string };
   fmt: (v: number) => string;
 }) {
+  const { t } = useI18n();
   const [tip, setTip] = useState<Tip | null>(null);
   const total = data.reduce((s, d) => s + d.value, 0);
   const r = (size - thickness) / 2;
@@ -54,7 +62,7 @@ export function Donut({
   return (
     <div style={{ position: "relative", width: size, margin: "0 auto" }}>
       <svg width={size} height={size} className="chart" role="img"
-        aria-label={`Répartition : total ${center?.primary ?? fmt(total)}`}>
+        aria-label={t("views.charts.donutAriaLabel", { total: center?.primary ?? fmt(total) })}>
         <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={thickness} />
         {segs.map((s) => (
           <circle
@@ -66,9 +74,8 @@ export function Donut({
             style={{ cursor: "pointer", transition: "opacity .12s" }}
             onMouseMove={(e) => setTip({
               x: e.clientX, y: e.clientY,
-              node: <><span className="k">{s.d.label} · </span>
-                <span className="v">{fmt(s.d.value)}</span>
-                <span className="k"> ({Math.round((s.d.value / total) * 100)}%)</span></>,
+              node: <Trans k="views.charts.tooltipWithPercent" tags={TIP_TAGS}
+                params={{ label: s.d.label, value: fmt(s.d.value), pct: Math.round((s.d.value / total) * 100) }} />,
             })}
             onMouseLeave={() => setTip(null)}
           />
@@ -107,7 +114,9 @@ export function Bars({
 
   return (
     <div style={{ position: "relative" }}>
-      <div style={{ display: "flex", gap, alignItems: "flex-end", height }}>
+      {/* Axe TEMPOREL : toujours gauche→droite, même en RTL (convention des
+          graphiques chronologiques) ; les libellés gardent leur propre sens. */}
+      <div style={{ display: "flex", gap, alignItems: "flex-end", height, direction: "ltr" }}>
         {data.map((d) => {
           const h = Math.max((d.value / max) * plotH, d.value > 0 ? 3 : 0);
           const hot = d.key === highlightKey;
@@ -121,11 +130,11 @@ export function Bars({
                 }}
                 onMouseMove={(e) => setTip({
                   x: e.clientX, y: e.clientY,
-                  node: <><span className="k">{d.label} · </span><span className="v">{fmt(d.value)}</span></>,
+                  node: <Trans k="views.charts.tooltip" tags={TIP_TAGS} params={{ label: d.label, value: fmt(d.value) }} />,
                 })}
                 onMouseLeave={() => setTip(null)}
               />
-              <div className="tick" style={{ marginTop: 6, height: padB - 6, lineHeight: 1 }}>{d.label}</div>
+              <div className="tick" style={{ marginTop: 6, height: padB - 6, lineHeight: 1, unicodeBidi: "plaintext" }}>{d.label}</div>
             </div>
           );
         })}
@@ -143,6 +152,7 @@ export function HBars({
   fmt: (v: number) => string;
   maxRows?: number;
 }) {
+  const { t } = useI18n();
   const [tip, setTip] = useState<Tip | null>(null);
   const rows = data.slice(0, maxRows);
   const max = Math.max(1, ...rows.map((d) => d.value));
@@ -155,14 +165,14 @@ export function HBars({
             <div
               className="bar"
               style={{ width: `${Math.max((d.value / max) * 100, 2)}%`, height: "100%", borderRadius: 99, background: d.color, cursor: "pointer" }}
-              onMouseMove={(e) => setTip({ x: e.clientX, y: e.clientY, node: <><span className="k">{d.label} · </span><span className="v">{fmt(d.value)}</span></> })}
+              onMouseMove={(e) => setTip({ x: e.clientX, y: e.clientY, node: <Trans k="views.charts.tooltip" tags={TIP_TAGS} params={{ label: d.label, value: fmt(d.value) }} /> })}
               onMouseLeave={() => setTip(null)}
             />
           </div>
-          <div style={{ width: 66, textAlign: "right", fontVariantNumeric: "tabular-nums", fontSize: ".84rem", fontWeight: 600 }}>{fmt(d.value)}</div>
+          <div style={{ width: 66, textAlign: "end", fontVariantNumeric: "tabular-nums", fontSize: ".84rem", fontWeight: 600 }}>{fmt(d.value)}</div>
         </div>
       ))}
-      {rows.length === 0 && <p className="empty">Aucune donnée.</p>}
+      {rows.length === 0 && <p className="empty">{t("views.charts.noData")}</p>}
       <Tooltip tip={tip} />
     </div>
   );

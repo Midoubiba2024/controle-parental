@@ -12,7 +12,13 @@ export default defineConfig({
       output: {
         // Leaflet (carte LOT 3) dans un chunk dédié : meilleur cache et bundle
         // principal allégé (il n'est chargé que pour les vues Localisation/Sécurité).
-        manualChunks: { leaflet: ["leaflet"] },
+        manualChunks: (id) => {
+          if (id.includes("/node_modules/leaflet/")) return "leaflet";
+          // Catalogue français (source + repli, toujours chargé) dans son propre
+          // chunk : les textes évoluent sans invalider le cache du code (LOT 9).
+          if (id.endsWith("/src/i18n/locales/fr.ts")) return "i18n-fr";
+          return undefined;
+        },
       },
     },
   },
