@@ -1,9 +1,11 @@
 /* =============================================================================
+   Données 100 % fictives — n'y ajouter aucune donnée réelle.
+
    Fixtures RÉALISTES pour les captures visuelles (e2e/visual.mjs) — HORS
    production : ces données ne vivent que dans ce script, servies par
    interception réseau (page.route). Aucun mode démo dans l'application.
 
-   Famille « BEN ABDELJELIL », enfant « Nour » (profil jeune enfant), une
+   Famille fictive « DURAND », enfant « Léa » (profil jeune enfant), une
    tablette appairée, 30 jours de temps d'écran, inventaire d'apps, appels,
    journal d'audit, règles, zones… Les dates sont relatives à « maintenant ».
    ============================================================================= */
@@ -36,16 +38,16 @@ const FAM = "f0a1b2c3-0000-4000-8000-000000000001";
 const CHILD = "c0a1b2c3-0000-4000-8000-000000000002";
 const DEV = "d0a1b2c3-0000-4000-8000-000000000003";
 
-const families = [{ id: FAM, name: "BEN ABDELJELIL", created_at: ago(40 * 24 * H) }];
+const families = [{ id: FAM, name: "DURAND", created_at: ago(40 * 24 * H) }];
 
 const children = [{
-  id: CHILD, family_id: FAM, display_name: "Nour", birth_date: "2020-03-14",
+  id: CHILD, family_id: FAM, display_name: "Léa", birth_date: `${new Date().getFullYear() - 6}-03-14`,
   age_profile: "young_child", user_id: null, created_at: ago(39 * 24 * H),
 }];
 
 const devices = [{
   id: DEV, family_id: FAM, child_id: CHILD, platform: "android", mode: "standard",
-  label: "Tablette de Nour", model: "Galaxy Tab A9", enrolled_at: ago(38 * 24 * H),
+  label: "Tablette Android", model: "Tablette Android", enrolled_at: ago(38 * 24 * H),
   last_seen_at: ago(5 * MIN), revoked_at: null,
 }];
 
@@ -144,7 +146,7 @@ const requests = [
   { id: "req-3", family_id: FAM, child_id: CHILD, device_id: DEV, kind: "extra_time", payload: { minutes: 10, scope: "global" }, status: "approved", child_note: null, parent_note: null, decided_by: USER.id, decided_at: ago(27 * H), created_at: ago(27 * H) },
 ];
 const messages = [
-  ["parent", "Coucou Nour, on part au parc à 16 h !", 3 * H, true],
+  ["parent", "Coucou Léa, on part au parc à 16 h !", 3 * H, true],
   ["child", "D'accord ! Je peux prendre mon vélo ?", 3 * H - 4 * MIN, true],
   ["parent", "Oui, n'oublie pas ton casque.", 3 * H - 6 * MIN, true],
 ].map(([sender, body, back, read], i) => ({
@@ -152,7 +154,8 @@ const messages = [
 }));
 
 /* --- Localisation & sécurité ---------------------------------------------- */
-const HOME = [48.8414, 2.3530];
+// Centre d'un grand parc public (aucun sens résidentiel).
+const HOME = [45.7772, 4.8556];
 const location_settings = [{
   id: "ls-1", family_id: FAM, child_id: CHILD, enabled: true, mode: "periodic",
   periodic_interval_sec: 900, retention_days: 30, high_accuracy: false,
@@ -164,11 +167,11 @@ const location_fixes = Array.from({ length: 12 }, (_, i) => ({
 }));
 const geofences = [
   { id: "gf-1", family_id: FAM, child_id: CHILD, name: "Maison", type: "home", center_lat: HOME[0], center_lng: HOME[1], radius_m: 150, enabled: true, notify_enter: true, notify_exit: true, created_at: ago(30 * 24 * H) },
-  { id: "gf-2", family_id: FAM, child_id: CHILD, name: "École Saint-Médard", type: "school", center_lat: HOME[0] + 0.004, center_lng: HOME[1] + 0.006, radius_m: 200, enabled: true, notify_enter: true, notify_exit: false, created_at: ago(30 * 24 * H) },
+  { id: "gf-2", family_id: FAM, child_id: CHILD, name: "École des Tilleuls", type: "school", center_lat: HOME[0] + 0.004, center_lng: HOME[1] + 0.006, radius_m: 200, enabled: true, notify_enter: true, notify_exit: false, created_at: ago(30 * 24 * H) },
 ];
 const geofence_events = [
   { id: "ge-1", child_id: CHILD, device_id: DEV, geofence_id: "gf-1", geofence_name: "Maison", transition: "enter", occurred_at: ago(50 * MIN) },
-  { id: "ge-2", child_id: CHILD, device_id: DEV, geofence_id: "gf-2", geofence_name: "École Saint-Médard", transition: "exit", occurred_at: ago(80 * MIN) },
+  { id: "ge-2", child_id: CHILD, device_id: DEV, geofence_id: "gf-2", geofence_name: "École des Tilleuls", transition: "exit", occurred_at: ago(80 * MIN) },
 ];
 const sos_events = [{
   id: "sos-1", family_id: FAM, child_id: CHILD, device_id: DEV, status: "resolved", message: null,
