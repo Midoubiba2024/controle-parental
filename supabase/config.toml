@@ -4,6 +4,14 @@ project_id = "controle-parental"
 [auth]
 enable_signup = true
 # MFA (TOTP) obligatoire pour les comptes parents — voir SETUP.md.
+# LOT 12 : l'appareil enfant ouvre une session ANONYME puis appelle la RPC
+# public.pairing_complete (code de 10 caractères base32 ; pas de CAPTCHA).
+# Hébergé : Authentication > Sign In / Providers > Allow anonymous sign-ins.
+enable_anonymous_sign_ins = true
+
+# Limite d'inscriptions anonymes par IP et par heure (défaut 30) — SETUP.md, étape b.
+[auth.rate_limit]
+anonymous_users = 10
 
 # Hook de claims : enrichit le JWT avec app_metadata.families + child_id.
 # (À activer aussi dans le dashboard du projet hébergé : Authentication > Hooks.)
@@ -12,6 +20,10 @@ enabled = true
 uri = "pg-functions://postgres/public/custom_access_token_hook"
 
 # verify_jwt par fonction (doit refléter le déploiement hébergé).
+# LOT 12 : create-family, pairing-start et pairing-complete sont RETIRÉES (bouchons
+# qui répondent 410 sans clé ni accès base) au profit des RPC public.create_family,
+# public.pairing_start et public.pairing_complete. À dépublier dès que les clients
+# sont migrés. pairing-complete reste sans JWT : le bouchon ne fait rien.
 [functions.create-family]
 verify_jwt = true
 

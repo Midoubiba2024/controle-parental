@@ -13,6 +13,7 @@ import { errorMessage, Trans, useI18n } from "../../i18n";
 import type {
   AccessPolicy, AgeProfile, Child, CommandStatus, CommandType, RuleAction, Schedule, ScheduleKind,
 } from "../../lib/types";
+import { activeDevicesNewestFirst } from "../../lib/devices";
 
 const CATEGORIES = ["social", "game", "video", "audio", "productivity", "maps", "news", "image"];
 
@@ -231,7 +232,8 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
   run: CardBase["run"]; commands: ReturnType<typeof useRules>["commands"];
 }) {
   const { t } = useI18n();
-  const active = devices.filter((d) => !d.revoked_at);
+  // Appareils actifs, le plus récent d'abord : c'est lui qui est ciblé par défaut.
+  const active = activeDevicesNewestFirst(devices);
   const [deviceId, setDeviceId] = useState<string>(active[0]?.id ?? "");
   const [lockMsg, setLockMsg] = useState("");
 

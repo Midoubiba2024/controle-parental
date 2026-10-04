@@ -205,6 +205,7 @@ const fr = {
     invalidCode: "Code d’appairage invalide.",
     codeExpired: "Code d’appairage expiré.",
     codeAlreadyUsed: "Code d’appairage déjà utilisé.",
+    tooManyActiveCodes: "Trop de codes d’appairage en cours pour cette famille : utilisez-en un ou attendez son expiration (10 min).",
     invalidCredentials: "E-mail ou mot de passe incorrect.",
     emailNotConfirmed: "Adresse e-mail non confirmée : vérifiez vos e-mails.",
     userAlreadyExists: "Un compte existe déjà avec cette adresse e-mail.",
@@ -955,8 +956,14 @@ const fr = {
       summary: "{children} · {devices}",
       age: { one: "{count} an", other: "{count} ans" },
       noDeviceTitle: "Aucun appareil appairé pour l’instant",
-      noDeviceHint: "Installez l’application enfant sur l’appareil de {name}, ouvrez-la, puis saisissez le code d’appairage avant son expiration. L’appareil apparaîtra ici dès qu’il sera relié.",
+      noDeviceHint: "Installez l’application enfant sur l’appareil de {name}, ouvrez-la, puis saisissez le code d’appairage de 10 caractères (par exemple 7KQ2M-X9D4F) avant son expiration. L’appareil apparaîtra ici dès qu’il sera relié.",
       devicesTitle: "Appareils",
+      // Retrait (révocation) d'un appareil par le parent : coupe l'accès immédiatement.
+      deviceRevoke: "Retirer",
+      deviceRevokeLabel: "Retirer l’appareil {name}",
+      deviceRevokeConfirm: "Retirer « {name} » ? Il perdra immédiatement tout accès aux données de {child}. Pour le réutiliser, il faudra l’appairer à nouveau avec un nouveau code.",
+      deviceRevokeConfirmButton: "Retirer l’appareil",
+      deviceRevokeCancel: "Annuler",
       // Mode d'appareil (valeurs de l'enum DeviceMode).
       deviceMode: {
         standard: "Standard",
@@ -982,7 +989,7 @@ const fr = {
         modeReinforced: "Renforcé (appareil dédié)",
         generate: "Générer un code d’appairage",
         title: "Appairage de l’appareil",
-        hint: "Un code à usage unique relie l’appli enfant à cette famille.",
+        hint: "Un code à usage unique de 10 caractères (chiffres et lettres) relie l’appli enfant à cette famille.",
         modeLabel: "Mode",
         kicker: "Code d’appairage",
         // {time} = heure d'expiration (« 10:42 »).
@@ -993,6 +1000,8 @@ const fr = {
         copiedAnnounce: "Code d’appairage copié dans le presse-papiers.",
         copyFallback: "Copie impossible ici : sélectionnez le code pour le copier.",
         expired: "Code expiré — générez-en un nouveau.",
+        // Sous le code : la saisie sur l'appareil enfant est tolérante (normalisée par le serveur).
+        inputHelp: "10 caractères · tiret, espaces et minuscules acceptés à la saisie",
       },
     },
     messages: {
@@ -1187,6 +1196,7 @@ const fr = {
       family_created: "Famille créée",
       pairing_code_created: "Code d’appairage généré",
       device_enrolled: "Appareil appairé",
+      device_revoked: "Appareil retiré",
       rgpd_export: "Export des données (RGPD)",
       rgpd_delete_child: "Suppression d’un profil enfant (RGPD)",
       rgpd_delete_family: "Suppression de la famille (RGPD)",

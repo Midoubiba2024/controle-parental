@@ -18,7 +18,7 @@ export function roleLabel(r: string | null | undefined): string {
 
 // Actions du journal d'audit (« rgpd.delete_child ») → clé audit.actions.rgpd_delete_child.
 const AUDIT_ACTIONS = [
-  "family_created", "pairing_code_created", "device_enrolled",
+  "family_created", "pairing_code_created", "device_enrolled", "device_revoked",
   "rgpd_export", "rgpd_delete_child", "rgpd_delete_family",
 ] as const;
 type AuditAction = (typeof AUDIT_ACTIONS)[number];

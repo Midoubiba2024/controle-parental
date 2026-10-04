@@ -28,6 +28,7 @@ const CODE_KEYS = new Map<string, ErrorKey>(Object.entries({
   code_not_found: "errors.invalidCode",
   code_expired: "errors.codeExpired",
   code_already_used: "errors.codeAlreadyUsed",
+  too_many_active_codes: "errors.tooManyActiveCodes", // plafond de 5 codes actifs par famille (0031)
   // Supabase Auth (AuthError.code)
   invalid_credentials: "errors.invalidCredentials",
   email_not_confirmed: "errors.emailNotConfirmed",

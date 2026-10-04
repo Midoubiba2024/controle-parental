@@ -13,7 +13,8 @@ Suite de **contrôle parental transparent et légal** pour Android, pour deux pr
 docs/                 Cadrage : plan, cahier des charges, conformité, architecture, lots
 supabase/
   migrations/         Schéma SQL + RLS (source de vérité)
-  functions/          Edge Functions (Deno) : create-family, pairing-start, pairing-complete
+  functions/          Edge Functions (Deno) : dispatch-push ; create-family / pairing-start /
+                      pairing-complete = bouchons 410 à supprimer (LOT 12, remplacées par des RPC)
   config.toml         Config Supabase (hook de claims, verify_jwt par fonction)
 apps/
   parent-web/         Console parent (React + Vite + supabase-js)
@@ -26,7 +27,8 @@ SETUP.md              Étapes de mise en route (hook auth, secrets, variables)
 ## Démarrage rapide
 
 1. **Backend** — le projet Supabase est provisionné (voir `SETUP.md` pour l'URL, les clés
-   et les étapes manuelles : activation du hook de claims, secret `PAIRING_PEPPER`).
+   et les étapes manuelles : activation du hook de claims, sessions anonymes pour
+   l'appairage — code de 10 caractères, sans CAPTCHA).
 2. **Console parent** :
    ```bash
    cd apps/parent-web

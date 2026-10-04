@@ -64,6 +64,7 @@ export function auditIcon(action: string): { Icon: LucideIcon; tone: Tone } {
   if (a === "family_created") return { Icon: House, tone: "plum" };
   if (a === "pairing_code_created") return { Icon: KeyRound, tone: "accent" };
   if (a === "device_enrolled") return { Icon: Smartphone, tone: "sage" };
+  if (a === "device_revoked") return { Icon: Smartphone, tone: "danger" };
   if (a === "rgpd_export") return { Icon: Download, tone: "sand" };
   if (a.startsWith("rgpd_delete")) return { Icon: Trash2, tone: "danger" };
   return { Icon: FileText, tone: "neutral" };

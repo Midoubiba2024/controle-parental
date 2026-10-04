@@ -149,10 +149,11 @@ sécurité, ce paramètre n'est pas disponible » apparaît.
 
 1. Sur la **console parent** (ordinateur) : onglet **Famille** → profil de l'enfant →
    laissez le mode sur **Standard** (par défaut ; **Renforcé** seulement si vous avez
-   suivi le §6) → **Générer un code d'appairage** → un **code à 8 chiffres** s'affiche
-   (valable **10 minutes**, usage unique).
-2. Sur le téléphone de l'enfant, ouvrez l'app **Supervision familiale** → saisissez le code →
-   **Valider**. L'app enregistre l'appareil et affiche l'écran **« mes données »**.
+   suivi le §6) → **Générer un code d'appairage** → un **code de 10 caractères** s'affiche,
+   en deux groupes (par exemple `7KQ2M-X9D4F`), valable **10 minutes**, usage unique.
+2. Sur le téléphone de l'enfant, ouvrez l'app **Supervision familiale** → saisissez le code
+   (majuscules ou minuscules, avec ou sans tiret) → **Valider**. L'app enregistre l'appareil
+   et affiche l'écran **« mes données »**.
 3. Une **notification permanente** « supervision parentale active » apparaît : elle doit
    rester visible (c'est volontaire, pour la transparence). Sur **Android 14 et plus**,
    Android permet de la balayer : la supervision **reste active** et l'écran « mes

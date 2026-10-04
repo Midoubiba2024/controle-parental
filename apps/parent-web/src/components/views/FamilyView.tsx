@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Clock3, Copy, FileText, KeyRound, Plus, Smartphone, Users } from "lucide-react";
 import { errorMessage, t as tr, useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
+import { pairingDisplay, pairingGroups, type PairingStartResult } from "../../lib/pairing";
 import { ageProfileFromBirth, type AuditEntry, type Child, type Device, type DeviceMode } from "../../lib/types";
 import { fmtDateTime } from "../../lib/format";
 import { ageProfileLabel, auditActionLabel, roleLabel } from "../../lib/labels";
@@ -64,7 +65,7 @@ export function FamilyView({ familyId, onChildrenChanged }: {
         {children.length === 0 && <EmptyState icon={Users} title={t("views.family.noChildTitle")}
           hint={t("views.family.noChildHint")} />}
         {children.map((ch) => (
-          <ChildCard key={ch.id} child={ch} devices={devices.filter((d) => d.child_id === ch.id)} />
+          <ChildCard key={ch.id} child={ch} devices={devices.filter((d) => d.child_id === ch.id)} onChanged={refresh} />
         ))}
       </section>
 
@@ -145,12 +146,12 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
   );
 }
 
-function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
+function ChildCard({ child, devices, onChanged }: { child: Child; devices: Device[]; onChanged: () => void }) {
   // « Standard » par défaut : le mode Renforcé exige que l'app soit propriétaire de
   // l'appareil (device owner, via adb après réinitialisation) — docs/10-INSTALLATION.md §6.
   const { t } = useI18n();
   const [mode, setMode] = useState<DeviceMode>("standard");
-  const [code, setCode] = useState<{ code: string; expires_at: string } | null>(null);
+  const [code, setCode] = useState<PairingStartResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const age = ageYears(child.birth_date);
@@ -158,14 +159,15 @@ function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
 
   async function genCode() {
     setBusy(true); setErr(null); setCode(null);
-    // RPC SECURITY DEFINER (migration 0028) : remplace l'Edge Function pairing-start,
-    // qui échouait faute de clé service_role fiable côté Edge Functions.
+    // RPC SECURITY DEFINER (0028, redéfinie par 0031) : remplace l'Edge Function
+    // pairing-start, qui échouait faute de clé service_role fiable côté Edge Functions.
+    // LOT 12 : code de 10 caractères base32 Crockford, `code_display` = « 7KQ2M-X9D4F ».
     const { data, error } = await supabase.rpc("pairing_start", {
       p_family_id: child.family_id, p_child_id: child.id, p_mode: mode,
     });
     setBusy(false);
     if (error) { setErr(errorMessage(error)); return; }
-    setCode(data as { code: string; expires_at: string });
+    setCode(data as PairingStartResult);
   }
 
   return (
@@ -202,7 +204,7 @@ function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
         </button>
       </div>
 
-      {code && <PairingTicket code={code.code} expiresAt={code.expires_at} />}
+      {code && <PairingTicket code={pairingDisplay(code)} expiresAt={code.expires_at} />}
       {err && <p className="msg error">{err}</p>}
 
       {devices.length === 0 ? (
@@ -217,14 +219,7 @@ function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
         <div className="stack" style={{ gap: 8 }}>
           <h4 className="sub-title">{t("views.family.devicesTitle")}</h4>
           {devices.map((d) => (
-            <div key={d.id} className="device-item" style={{ opacity: d.revoked_at ? 0.65 : 1 }}>
-              <span className="ic"><Smartphone {...ic} /></span>
-              <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>
-                {t(d.revoked_at ? "views.family.deviceBadgeRevoked" : "views.family.deviceBadge", {
-                  name: d.label ?? d.model ?? d.platform, mode: deviceModeLabel(d.mode),
-                })}
-              </span>
-            </div>
+            <DeviceItem key={d.id} device={d} childName={child.display_name} onRevoked={onChanged} />
           ))}
         </div>
       )}
@@ -232,7 +227,76 @@ function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
   );
 }
 
-/** Code d'appairage en « ticket » : chiffres groupés, expiration, bouton Copier. */
+/**
+ * Appareil appairé + action « Retirer » (révocation). LOT 12 : la révocation
+ * (devices.revoked_at) coupe IMMÉDIATEMENT l'accès de l'appareil côté base
+ * (current_child_id, appartenance supprimée par trigger, audit device.revoked) et
+ * elle est définitive. Sans cette action, un téléphone réinitialisé puis
+ * ré-appairé laissait un appareil fantôme actif, impossible à purger.
+ */
+function DeviceItem({ device: d, childName, onRevoked }: {
+  device: Device; childName: string; onRevoked: () => void;
+}) {
+  const { t } = useI18n();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const name = d.label ?? d.model ?? d.platform;
+  const promptId = `revoke-${d.id}`;
+
+  async function revoke() {
+    setBusy(true); setErr(null);
+    const { error } = await supabase.from("devices")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", d.id).is("revoked_at", null);
+    setBusy(false);
+    if (error) { setErr(errorMessage(error)); return; }
+    setConfirming(false);
+    onRevoked();
+  }
+
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="device-item" style={{ opacity: d.revoked_at ? 0.65 : 1 }}>
+        <span className="ic"><Smartphone {...ic} /></span>
+        {/* isolate : un libellé fourni par l'appareil ne peut pas retourner le texte voisin. */}
+        <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere", flex: "1 1 auto", unicodeBidi: "isolate" }}>
+          {t(d.revoked_at ? "views.family.deviceBadgeRevoked" : "views.family.deviceBadge", {
+            name, mode: deviceModeLabel(d.mode),
+          })}
+        </span>
+        {!d.revoked_at && !confirming && (
+          <button type="button" className="ghost" aria-label={t("views.family.deviceRevokeLabel", { name })}
+            onClick={() => { setConfirming(true); setErr(null); }}>
+            {t("views.family.deviceRevoke")}
+          </button>
+        )}
+      </div>
+      {confirming && !d.revoked_at && (
+        <div className="confirm-box" role="group" aria-describedby={promptId}>
+          <p id={promptId} style={{ margin: 0, unicodeBidi: "isolate" }}>
+            {t("views.family.deviceRevokeConfirm", { name, child: childName })}
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn-danger solid" disabled={busy} onClick={revoke}>
+              {busy ? t("common.busy") : t("views.family.deviceRevokeConfirmButton")}
+            </button>
+            <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)}>
+              {t("views.family.deviceRevokeCancel")}
+            </button>
+          </div>
+        </div>
+      )}
+      {err && <p className="msg error">{err}</p>}
+    </div>
+  );
+}
+
+/**
+ * Code d'appairage en « ticket » : 2 groupes de 5 caractères (« 7KQ2M-X9D4F »),
+ * expiration, bouton Copier. `code` est la forme GROUPÉE : c'est elle qui est
+ * affichée et copiée (l'appli enfant accepte tiret, espaces et minuscules).
+ */
 function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string }) {
   const { t, fmt } = useI18n();
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
@@ -253,8 +317,9 @@ function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  // Groupes de 4 (« 5338 1539 ») ; le code copié reste brut.
-  const groups = code.replace(/\s+/g, "").match(/.{1,4}/g) ?? [code];
+  // Groupes de 5 séparés par un tiret (« 7KQ2M-X9D4F ») ; le code copié est la
+  // même forme groupée, exactement comme affichée.
+  const groups = pairingGroups(code);
 
   async function copy() {
     let ok = false;
@@ -287,9 +352,15 @@ function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string })
     <div className={`ticket${expired ? " expired" : ""}`}>
       <div style={{ minWidth: 0 }}>
         <p className="kicker">{t("views.family.pairing.kicker")}</p>
-        <p className="digits" ref={digitsRef}>
-          {groups.map((g, i) => <span key={i} className="grp">{g}</span>)}
+        <p className="digits" ref={digitsRef} translate="no">
+          {groups.map((g, i) => (
+            <span key={i}>
+              {i > 0 && <span className="sep" aria-hidden="true">-</span>}
+              <span className="grp">{g}</span>
+            </span>
+          ))}
         </p>
+        <p className="exp">{t("views.family.pairing.inputHelp")}</p>
         <p className="exp">
           <Clock3 {...icSm} size={15} />
           {expired ? t("views.family.pairing.expired")
