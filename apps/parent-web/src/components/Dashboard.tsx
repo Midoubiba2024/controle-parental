@@ -135,12 +135,20 @@ export function Dashboard({ session }: { session: Session }) {
 
       <main className="content">
         <div className="topbar">
-          <div>
-            <h1>{VIEW_TITLE[view]}</h1>
-            <div className="sub">
-              {currentFamily ? `Famille ${currentFamily.name}` : ""}
-              {currentChild ? ` · ${currentChild.display_name}` : ""}
-            </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+            <h1 style={{ margin: 0 }}>{VIEW_TITLE[view]}</h1>
+            {currentFamily && (
+              <span
+                title="Famille"
+                style={{
+                  fontSize: "1.3rem", fontWeight: 800, color: "var(--primary)",
+                  background: "color-mix(in srgb, var(--primary) 12%, transparent)",
+                  padding: "2px 14px", borderRadius: 999, lineHeight: 1.5,
+                }}
+              >
+                {currentFamily.name}
+              </span>
+            )}
           </div>
           <span className="spacer" />
 
