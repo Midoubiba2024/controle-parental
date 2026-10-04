@@ -2,8 +2,29 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover : le contenu gère lui-même les zones sûres (encoche iPhone). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Console parent — Contrôle parental</title>
+    <meta name="description" content="Console parent du contrôle parental transparent." />
+    <meta name="theme-color" content="#FAF6EF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#170F18" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Écran d'accueil iPhone : « Ajouter à l'écran d'accueil » (chemins RELATIFS, base "./"). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Supervision" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      // Thème appliqué AVANT le premier rendu (pas de flash clair → sombre).
+      // Même clé que src/lib/theme.ts ; stockage indisponible → réglage système.
+      try {
+        var th = localStorage.getItem("cp-theme");
+        if (th === "light" || th === "dark") document.documentElement.setAttribute("data-theme", th);
+      } catch (e) { /* ignore */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

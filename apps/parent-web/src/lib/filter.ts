@@ -65,19 +65,18 @@ export function useFilter(familyId: string | null, childId: string | null): Filt
 
 /* --------------------------- Catalogue de catégories --------------------- */
 // Chaque catégorie porte son identité par le LIBELLÉ + l'icône (jamais la
-// couleur seule → CVD-safe). Le point coloré n'est que décoratif. Libellé et
-// aide sont traduits (enums.filterCategory.*) et relus à chaque accès (getters).
-export interface FilterCategoryInfo { key: FilterCategory; icon: string; readonly label: string; readonly hint: string }
+// couleur seule → CVD-safe ; icône : components/icons.tsx). Le point coloré n'est
+// que décoratif. Libellé et aide sont traduits (enums.filterCategory.*) et relus
+// à chaque accès (getters).
+export interface FilterCategoryInfo { key: FilterCategory; readonly label: string; readonly hint: string }
 
-const FILTER_CATEGORY_ICONS: [FilterCategory, string][] = [
-  ["adult", "🔞"], ["violence", "⚔️"], ["gambling", "🎰"], ["drugs", "💊"],
-  ["weapons", "🔫"], ["hate", "🚫"], ["dating", "💘"], ["social", "💬"],
-  ["piracy", "🏴‍☠️"], ["malware", "🦠"], ["ads_trackers", "📊"],
+const FILTER_CATEGORY_KEYS: FilterCategory[] = [
+  "adult", "violence", "gambling", "drugs", "weapons", "hate",
+  "dating", "social", "piracy", "malware", "ads_trackers",
 ];
 
-export const FILTER_CATEGORIES: FilterCategoryInfo[] = FILTER_CATEGORY_ICONS.map(([key, icon]) => ({
+export const FILTER_CATEGORIES: FilterCategoryInfo[] = FILTER_CATEGORY_KEYS.map((key) => ({
   key,
-  icon,
   get label() { return t(`enums.filterCategory.${key}.label`); },
   get hint() { return t(`enums.filterCategory.${key}.hint`); },
 }));

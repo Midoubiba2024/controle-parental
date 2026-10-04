@@ -86,6 +86,45 @@ export function useRules(familyId: string | null, childId: string | null): Rules
   };
 }
 
+/* --------------------------- Limites quotidiennes (lecture seule) -------- */
+// LOT 10 — lecture STRICTEMENT nécessaire à l'histogramme de la Vue d'ensemble
+// (ligne de limite) : mêmes tables/RLS que useRules, deux colonnes seulement.
+// Renvoie la limite DE BASE d'un jour (limite du jour de semaine, sinon défaut
+// global), en minutes, ou null s'il n'y a aucune limite. Les bonus ne sont pas
+// inclus (ils ne sont connus que pour aujourd'hui).
+export function useDailyLimits(childId: string | null): { limitFor: (day: string) => number | null; ready: boolean } {
+  const [global, setGlobal] = useState<number | null>(null);
+  const [perDay, setPerDay] = useState<Map<number, number>>(new Map());
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setReady(false); setGlobal(null); setPerDay(new Map());
+    if (!childId) return;
+    void (async () => {
+      const [pol, lim] = await Promise.all([
+        supabase.from("access_policies").select("daily_limit_minutes").eq("child_id", childId).maybeSingle(),
+        supabase.from("screen_time_limits").select("day_of_week,limit_minutes").eq("child_id", childId),
+      ]);
+      if (!active) return;   // sélection changée → on jette ce résultat
+      if (!pol.error) setGlobal((pol.data as { daily_limit_minutes: number | null } | null)?.daily_limit_minutes ?? null);
+      if (!lim.error) {
+        setPerDay(new Map((lim.data as { day_of_week: number; limit_minutes: number }[])
+          .map((l) => [l.day_of_week, l.limit_minutes])));
+      }
+      setReady(true);
+    })();
+    return () => { active = false; };
+  }, [childId]);
+
+  const limitFor = useCallback((day: string) => {
+    const dow = new Date(day + "T00:00:00").getDay();
+    return perDay.get(dow) ?? global;
+  }, [perDay, global]);
+
+  return { limitFor, ready };
+}
+
 /* --------------------------- Jours de la semaine ------------------------- */
 // Ordre d'affichage lundi→dimanche, mais indices 0=dimanche … 6=samedi (aligné
 // JS Date.getDay() et sur le bitmask dow_mask de schedule_windows). Libellés

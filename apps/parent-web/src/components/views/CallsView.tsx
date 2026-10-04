@@ -1,7 +1,9 @@
 import { labelMap, t, Trans, useI18n } from "../../i18n";
 import type { ObservationData } from "../../lib/observation";
 import { fmtDateTime, fmtDuration } from "../../lib/format";
+import { Info, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Timer } from "lucide-react";
 import { Tile, EmptyState } from "../Ui";
+import { ic } from "../icons";
 import type { CommDirection, CommEvent } from "../../lib/types";
 
 const DIR_LABEL: Readonly<Record<CommDirection, string>> = labelMap(
@@ -27,36 +29,35 @@ export function CallsView({ obs }: { obs: ObservationData }) {
   const connected = (c: CommEvent) => c.direction === "incoming" || c.direction === "outgoing";
 
   return (
-    <div className="grid" style={{ gap: 18 }}>
-      <div className="card" style={{ borderInlineStart: "3px solid var(--primary)" }}>
-        <Trans k="views.calls.notice" tags={{
-          b: (c) => <strong>{c}</strong>,
-          muted: (c) => <span className="muted">{c}</span>,
-        }} />
+    <div className="stack" style={{ gap: 20 }}>
+      <div className="banner info">
+        <span className="banner-ic"><Info {...ic} /></span>
+        <div style={{ paddingTop: 8 }}>
+          <Trans k="views.calls.notice" tags={{
+            b: (c) => <strong>{c}</strong>,
+            muted: (c) => <span className="muted">{c}</span>,
+          }} />
+        </div>
       </div>
 
       {comms.length === 0 ? (
         <div className="card">
-          <EmptyState icon="📞" title={t("views.calls.emptyTitle")}
+          <EmptyState icon={Phone} title={t("views.calls.emptyTitle")}
             hint={t("views.calls.emptyHint")} />
         </div>
       ) : (
         <>
           <div className="grid cols-4">
-            <Tile label={t("views.calls.tiles.incoming")} value={counts.in} icon="📥"
-              iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)" />
-            <Tile label={t("views.calls.tiles.outgoing")} value={counts.out} icon="📤"
-              iconBg="color-mix(in srgb, var(--series-1) 18%, transparent)" />
-            <Tile label={t("views.calls.tiles.unanswered")} value={counts.unanswered} icon="📵"
-              iconBg="color-mix(in srgb, var(--danger) 16%, transparent)" />
-            <Tile label={t("views.calls.tiles.totalDuration")} value={fmtDuration(counts.duration)} icon="⏱"
-              iconBg="color-mix(in srgb, var(--series-4) 20%, transparent)" />
+            <Tile label={t("views.calls.tiles.incoming")} value={counts.in} icon={PhoneIncoming} tone="sage" />
+            <Tile label={t("views.calls.tiles.outgoing")} value={counts.out} icon={PhoneOutgoing} tone="plum" />
+            <Tile label={t("views.calls.tiles.unanswered")} value={counts.unanswered} icon={PhoneMissed} tone="danger" />
+            <Tile label={t("views.calls.tiles.totalDuration")} value={fmtDuration(counts.duration)} icon={Timer} tone="sand" />
           </div>
 
           <div className="card">
             <h2><Trans k="views.calls.logTitle" params={{ total: counts.total }}
               tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
-            <table className="tbl">
+            <div className="tbl-wrap"><table className="tbl">
               <thead>
                 <tr>
                   <th>{t("views.calls.columns.direction")}</th>
@@ -75,7 +76,7 @@ export function CallsView({ obs }: { obs: ObservationData }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}

@@ -4,7 +4,9 @@ import {
   ackSos, resolveSos, acknowledgeAlert, GEOFENCE_TYPE_LABEL, geofenceColor,
 } from "../../lib/location";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
+import { BatteryLow, Check, House, LifeBuoy, Plus, Siren } from "lucide-react";
 import { EmptyState } from "../Ui";
+import { ic } from "../icons";
 import { useI18n, t as tr } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
 import type { Child, Geofence, GeofenceType, LocationMode, SosEvent } from "../../lib/types";
@@ -31,7 +33,7 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
   const openSos = loc.sos.filter((s) => s.status !== "resolved");
 
   return (
-    <div className="grid" style={{ gap: 18 }}>
+    <div className="stack" style={{ gap: 20 }}>
       {loc.error && <p className="msg error">{loc.error}</p>}
       {msg && <p className="msg error">{msg}</p>}
 
@@ -46,10 +48,10 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
       <div className="card">
         <h2>{t("views.security.history.title")}</h2>
         {loc.sos.length === 0 ? (
-          <EmptyState icon="🆘" title={t("views.security.history.emptyTitle")}
+          <EmptyState icon={LifeBuoy} title={t("views.security.history.emptyTitle")}
             hint={t("views.security.history.emptyHint")} />
         ) : (
-          <table className="tbl">
+          <div className="tbl-wrap"><table className="tbl">
             <thead><tr><th>{t("views.security.history.colStatus")}</th><th>{t("views.security.history.colStart")}</th><th>{t("views.security.history.colEnd")}</th></tr></thead>
             <tbody>
               {loc.sos.map((s) => (
@@ -60,7 +62,7 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </div>
@@ -101,9 +103,9 @@ function SosBanner({ sos, loc, run }: {
   const path = liveFixes.map((f) => ({ lat: f.latitude, lng: f.longitude }));
 
   return (
-    <div className="card sos-banner">
+    <div className="card sos-banner" role="alert">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <div><span className="dot-pulse" /><strong style={{ fontSize: "1.05rem" }}>{t("views.security.banner.title", { status: sosStatusLabel(sos) })}</strong>
+        <div><Siren {...ic} style={{ color: "var(--c-danger)", verticalAlign: "middle", marginInlineEnd: 8 }} /><span className="dot-pulse" /><strong style={{ fontSize: "1.05rem" }}>{t("views.security.banner.title", { status: sosStatusLabel(sos) })}</strong>
           <div className="muted small">{sos.message
             ? t("views.security.banner.triggeredWithMessage", { ago: fmtAgo(sos.started_at), date: fmtDateTime(sos.started_at), message: sos.message })
             : t("views.security.banner.triggered", { ago: fmtAgo(sos.started_at), date: fmtDateTime(sos.started_at) })}</div>
@@ -111,7 +113,7 @@ function SosBanner({ sos, loc, run }: {
         <div className="row" style={{ gap: 8 }}>
           {sos.status === "active" && (
             <button onClick={() => run(() => ackSos(sos.id))} title={t("views.security.banner.ackTitle")}>
-              {t("views.security.banner.ackButton")}
+              <Check {...ic} size={18} />{t("views.security.banner.ackButton")}
             </button>
           )}
           <button className="ghost" onClick={() => run(() => resolveSos(sos.id))}>{t("views.security.banner.resolveButton")}</button>
@@ -119,7 +121,7 @@ function SosBanner({ sos, loc, run }: {
       </div>
       {head ? (
         <div style={{ marginTop: 12 }}>
-          <MapCanvas markers={markers} path={path} height={300} />
+          <div className="map-frame"><MapCanvas markers={markers} path={path} height={300} /></div>
           <p className="muted small" style={{ marginBottom: 0 }}>
             {isLive
               ? t(loc.live ? "views.security.banner.liveCaptionStreaming" : "views.security.banner.liveCaption",
@@ -216,7 +218,7 @@ function ZonesCard({ familyId, child, loc, run }: {
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>{t("views.security.zones.title")} <span className="muted small">{t("views.security.zones.titleHint")}</span></h2>
-        {editing === null && <button onClick={() => setEditing("new")}>{t("views.security.zones.addButton")}</button>}
+        {editing === null && <button onClick={() => setEditing("new")}><Plus {...ic} size={18} strokeWidth={2} />{t("views.security.zones.addButton")}</button>}
       </div>
 
       {editing !== null ? (
@@ -227,7 +229,7 @@ function ZonesCard({ familyId, child, loc, run }: {
           onCancel={() => setEditing(null)}
         />
       ) : loc.geofences.length === 0 ? (
-        <EmptyState icon="🏠" title={t("views.security.zones.emptyTitle")}
+        <EmptyState icon={House} title={t("views.security.zones.emptyTitle")}
           hint={t("views.security.zones.emptyHint")} />
       ) : (
         <div>
@@ -237,7 +239,7 @@ function ZonesCard({ familyId, child, loc, run }: {
                 <span className="zone-sw" style={{ background: geofenceColor(g.type) }} />
                 {GEOFENCE_TYPE_LABEL[g.type]}
               </span>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>{g.name}</div>
                 <div className="muted small">
                   {t(g.enabled ? "views.security.zones.summary" : "views.security.zones.summaryDisabled", {
@@ -306,8 +308,8 @@ function ZoneForm({ familyId, child, loc, zone, onDone, onCancel }: {
       <p className="muted small" style={{ marginTop: 0 }}>
         {t("views.security.zoneForm.mapHint")}
       </p>
-      <MapCanvas markers={markers} circles={circles} height={300}
-        onClick={(la, ln) => { setLat(Number(la.toFixed(6))); setLng(Number(ln.toFixed(6))); }} />
+      <div className="map-frame"><MapCanvas markers={markers} circles={circles} height={300}
+        onClick={(la, ln) => { setLat(Number(la.toFixed(6))); setLng(Number(ln.toFixed(6))); }} /></div>
       <div className="row" style={{ gap: 14, marginTop: 14, alignItems: "flex-end" }}>
         <label className="fld" style={{ flex: 1, minWidth: 160 }}>
           {t("views.security.zoneForm.nameLabel")}
@@ -360,12 +362,12 @@ function AlertsCard({ loc, run }: {
   return (
     <div className="card">
       <h2>{t("views.security.alerts.title")} <span className="muted small">{t("views.security.alerts.unseen", { count: unseen.length })}</span></h2>
-      <table className="tbl">
+      <div className="tbl-wrap"><table className="tbl">
         <thead><tr><th>{t("views.security.alerts.colAlert")}</th><th>{t("views.security.alerts.colWhen")}</th><th></th></tr></thead>
         <tbody>
           {loc.alerts.slice(0, 20).map((a) => (
             <tr key={a.id}>
-              <td>{a.battery_level != null ? t("views.security.alerts.lowBatteryLevel", { level: a.battery_level }) : t("views.security.alerts.lowBattery")}</td>
+              <td><BatteryLow {...ic} size={18} style={{ verticalAlign: "middle", marginInlineEnd: 8, color: "var(--c-warning)" }} />{a.battery_level != null ? t("views.security.alerts.lowBatteryLevel", { level: a.battery_level }) : t("views.security.alerts.lowBattery")}</td>
               <td className="muted">{fmtDateTime(a.created_at)} · {fmtAgo(a.created_at)}</td>
               <td>{a.acknowledged_at
                 ? <span className="muted small">{t("views.security.alerts.seen")}</span>
@@ -374,7 +376,7 @@ function AlertsCard({ loc, run }: {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

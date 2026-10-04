@@ -2,11 +2,14 @@ import { useMemo, useState } from "react";
 import { byApp, dailyTotals, totalInRange, type ObservationData } from "../../lib/observation";
 import {
   appInitials, appLabelOf, categoryColor, categoryLabel, fmtDayLabel,
-  fmtDuration, shiftDay,
+  fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { Trans, useI18n } from "../../i18n";
 import { Bars, type Slice } from "../charts/ChartKit";
+import type { CSSProperties } from "react";
+import { LayoutGrid, Search } from "lucide-react";
 import { EmptyState } from "../Ui";
+import { icSm } from "../icons";
 import type { AppInventory } from "../../lib/types";
 
 // Équivalents de toLocaleDateString() / toLocaleString() (date seule / date + heure).
@@ -44,26 +47,29 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
   const current = apps.find((a) => a.package_name === selected) ?? apps[0] ?? null;
 
   if (inventory.length === 0) {
-    return <div className="card"><EmptyState icon="📱"
+    return <div className="card"><EmptyState icon={LayoutGrid}
       title={t("views.applications.emptyTitle")}
       hint={t("views.applications.emptyHint")} /></div>;
   }
 
   return (
-    <div className="grid dash" style={{ gap: 18 }}>
+    <div className="grid dash">
       <div className="card">
         <h2><Trans k="views.applications.listTitle" params={{ count: apps.length }}
           tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
-        <input placeholder={t("views.applications.searchPlaceholder")} value={query}
-          onChange={(e) => setQuery(e.target.value)} style={{ width: "100%", marginBottom: 10 }} />
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <Search {...icSm} size={18} style={{ position: "absolute", insetInlineStart: 14, insetBlockStart: 14, color: "var(--c-muted)" }} />
+          <input type="search" aria-label={t("views.applications.searchPlaceholder")} placeholder={t("views.applications.searchPlaceholder")} value={query}
+            onChange={(e) => setQuery(e.target.value)} style={{ width: "100%", paddingInlineStart: 42 }} />
+        </div>
         <div className="scroll">
           {apps.map((a) => {
             const ms = usageByPkg.get(a.package_name) ?? 0;
             const active = current?.package_name === a.package_name;
             return (
-              <button key={a.id} className={`app-row ${active ? "active" : ""}`}
-                onClick={() => setSelected(a.package_name)}>
-                <span className="app-ic" style={{ background: categoryColor(a.category) }}>
+              <button key={a.id} type="button" className={`app-row ${active ? "active" : ""}`}
+                aria-pressed={active} onClick={() => setSelected(a.package_name)}>
+                <span className="app-ic sm" style={{ "--ic-color": categoryColor(a.category) } as CSSProperties}>
                   {appInitials(a.app_label, a.package_name)}
                 </span>
                 <span style={{ minWidth: 0 }}>
@@ -96,7 +102,7 @@ function AppDetail({ app, usage, anchorDay }: { app: AppInventory; usage: Observ
   const pkgUsage = useMemo(() => usage.filter((u) => u.package_name === app.package_name), [usage, app.package_name]);
   const days = Array.from({ length: 7 }, (_, i) => shiftDay(anchorDay, -(6 - i)));
   const totals = dailyTotals(pkgUsage, days);
-  const bars: Slice[] = days.map((d, i) => ({ key: d, label: fmtDayLabel(d), value: totals[i], color: categoryColor(app.category) }));
+  const bars: Slice[] = days.map((d, i) => ({ key: d, label: fmtDayLabel(d), value: totals[i], color: "var(--chart-bar)" }));
   const total7 = totalInRange(pkgUsage, from7, to);
   const launches7 = pkgUsage.filter((u) => u.day >= from7).reduce((s, u) => s + u.launch_count, 0);
   const lastUsedList = pkgUsage.map((u) => u.last_used_at).filter(Boolean).sort();
@@ -105,28 +111,28 @@ function AppDetail({ app, usage, anchorDay }: { app: AppInventory; usage: Observ
   return (
     <div className="card">
       <div className="row" style={{ gap: 14 }}>
-        <span className="app-ic" style={{ background: categoryColor(app.category), width: 48, height: 48, fontSize: "1.1rem" }}>
+        <span className="app-ic lg" style={{ "--ic-color": categoryColor(app.category) } as CSSProperties}>
           {appInitials(app.app_label, app.package_name)}
         </span>
         <div>
-          <h2 style={{ marginBottom: 2 }}>{appLabelOf(app.app_label, app.package_name)}</h2>
-          <div className="muted small">{app.package_name}</div>
+          <h2 style={{ marginBottom: 2, overflowWrap: "anywhere" }}>{appLabelOf(app.app_label, app.package_name)}</h2>
+          <div className="muted small" style={{ overflowWrap: "anywhere" }}>{app.package_name}</div>
         </div>
       </div>
 
       <div className="row" style={{ gap: 8, margin: "14px 0 4px" }}>
-        <span className="badge" style={{ color: categoryColor(app.category) }}>{categoryLabel(app.category)}</span>
+        <span className="badge"><span className="sw" style={{ background: categoryColor(app.category) }} />{categoryLabel(app.category)}</span>
         {app.is_system && <span className="badge">{t("views.applications.detail.systemApp")}</span>}
         {app.installed_at && <span className="badge">{t("views.applications.detail.installedOn", { date: fmt.date(app.installed_at, DATE_NUMERIC) })}</span>}
       </div>
 
       <div className="grid cols-2" style={{ margin: "14px 0" }}>
-        <div><div className="muted small">{t("views.applications.detail.time7d")}</div><div style={{ fontSize: "1.3rem", fontWeight: 700 }}>{fmtDuration(total7)}</div></div>
-        <div><div className="muted small">{t("views.applications.detail.launches7d")}</div><div style={{ fontSize: "1.3rem", fontWeight: 700 }}>{launches7 || t("common.none")}</div></div>
+        <div className="panel"><div className="tile-label">{t("views.applications.detail.time7d")}</div><div className="tile-value" style={{ fontSize: 26, marginTop: 6 }}>{fmtDuration(total7)}</div></div>
+        <div className="panel"><div className="tile-label">{t("views.applications.detail.launches7d")}</div><div className="tile-value" style={{ fontSize: 26, marginTop: 6 }}>{launches7 || t("common.none")}</div></div>
       </div>
 
       <h3>{t("views.applications.detail.usage7d")}</h3>
-      {total7 > 0 ? <Bars data={bars} fmt={fmtDuration} height={150} highlightKey={to} />
+      {total7 > 0 ? <Bars data={bars} fmt={fmtDuration} valueFmt={fmtDurationShort} height={160} highlightKey={to} />
         : <EmptyState title={t("views.applications.detail.noUsage")} />}
 
       {lastUsed && <p className="muted small" style={{ marginTop: 12 }}>

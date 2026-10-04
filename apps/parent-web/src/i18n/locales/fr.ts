@@ -40,6 +40,7 @@ const fr = {
 
   dashboard: {
     brand: "Supervision",
+    brandSub: "Console parent",
     footerTagline: "Contrôle parental transparent.",
     footerPrivacy: "Métadonnées & agrégats seulement — jamais le contenu.",
     viewTitle: {
@@ -62,8 +63,25 @@ const fr = {
     loadingData: "Chargement des données…",
     familyBadgeTitle: "Famille",
     deviceStatusTitle: "État de l'appareil (dernier relevé)",
-    // Badge d'état : batterie (%) · stockage libre (précédés d'icônes dans le code).
-    deviceStatus: "{battery}% · 💾 {storage}",
+    // Infobulle de la pastille d'appareil : batterie (%) · stockage libre.
+    deviceStatus: "Batterie {battery} % · stockage libre {storage}",
+    // Pastille d'état : {name} = prénom, {ago} = temps relatif (« il y a 5 min »).
+    deviceFreshness: "Appareil de {name} · relevé {ago}",
+    // Ligne au-dessus des commandes : {date} = date du jour en toutes lettres.
+    headerDate: "{date}",
+    headerDateWithProfile: "{date} · Profil « {profile} »",
+    childLabel: "Enfant",
+    familyLabel: "Famille",
+    navLabel: "Navigation principale",
+    navSections: {
+      follow: "Suivi",
+      protect: "Protection",
+      exchange: "Échanges",
+      account: "Compte",
+    },
+    openMenu: "Ouvrir le menu",
+    closeMenu: "Fermer le menu",
+    loadingView: "Chargement de la vue…",
     theme: {
       light: "Thème clair",
       dark: "Thème sombre",
@@ -72,7 +90,7 @@ const fr = {
     signOut: "Déconnexion",
     noChild: "Ajoutez un enfant dans l'onglet <b>Famille</b> pour voir ses données.",
     protection: {
-      title: "⚠️ Une protection est désactivée",
+      title: "Une protection est désactivée",
       body: "Sur l'appareil : <b>{labels}</b>. Une autorisation nécessaire a été retirée. Demandez à l'enfant de la réactiver depuis son écran « Mes données » (rien n'est caché — l'app reste visible et transparente).",
       separator: " · ",
     },
@@ -94,6 +112,18 @@ const fr = {
     switchToSignIn: "J'ai déjà un compte",
     accountCreated: "Compte créé. Vérifiez vos e-mails si la confirmation est requise, puis connectez-vous.",
     mfaNotice: "La double authentification (MFA) sera exigée pour les comptes parents (voir SETUP.md).",
+    // Panneau de marque (écran de connexion)
+    headline: "Veiller sur eux, en toute transparence.",
+    lead: "Un contrôle parental visible et bienveillant : votre enfant voit à tout moment ce qui est partagé avec vous.",
+    points: {
+      visible: "Toujours visible sur l'appareil de l'enfant, jamais caché.",
+      metadata: "Métadonnées et agrégats seulement — jamais le contenu.",
+      audit: "Chaque action est tracée dans un journal d'audit.",
+    },
+    signInSubtitle: "Connectez-vous à votre espace parent.",
+    signUpSubtitle: "Créez votre compte parent.",
+    showPassword: "Afficher le mot de passe",
+    hidePassword: "Masquer le mot de passe",
   },
 
   ui: {
@@ -315,10 +345,10 @@ const fr = {
         intro: "Action <b>visible</b> par l'enfant, réversible. L'appel d'urgence (112) n'est jamais bloqué.",
         noDeviceTitle: "Aucun appareil appairé",
         noDeviceHint: "Appairez un appareil dans l'onglet Famille.",
-        pause: "⏸ Pause",
-        resume: "▶ Reprendre",
-        lock: "🔒 Verrouiller",
-        ring: "🔔 Faire sonner",
+        pause: "Pause",
+        resume: "Reprendre",
+        lock: "Verrouiller",
+        ring: "Faire sonner",
         messagePlaceholder: "Message sur l'écran (ex. « À table ! »)",
         send: "Envoyer",
         recentCommands: "Dernières commandes",
@@ -374,7 +404,7 @@ const fr = {
         title: "Plannings <note>(réutilisables entre enfants)</note>",
         intro: "Horaires autorisés/interdits (A4), Downtime/coucher (A5), mode École (A6). Assignez un planning à cet enfant via la case ; les fenêtres horaires s'éditent ci-dessous.",
         namePlaceholder: "Nom (ex. Nuit en semaine)",
-        addSchedule: "+ Planning",
+        addSchedule: "Planning",
         emptyTitle: "Aucun planning",
         emptyHint: "Créez un premier planning (ex. Downtime du soir) puis assignez-le.",
         assigned: "Appliqué à cet enfant",
@@ -382,7 +412,11 @@ const fr = {
         // {days} = jours (ex. « Lun–Ven »), {start}/{end} = heures HH:MM.
         window: "{days} · {start}→{end}",
         rangeArrow: "→",
-        addWindow: "+ Fenêtre",
+        removeWindow: "Supprimer ce créneau",
+        kindLabel: "Type de planning",
+        startLabel: "Début du créneau",
+        endLabel: "Fin du créneau",
+        addWindow: "Fenêtre",
       },
     },
     requests: {
@@ -433,9 +467,9 @@ const fr = {
         protectionTitle: "État de la protection",
         noDevice: "Aucun appareil n'a encore signalé l'état du filtrage. Il apparaîtra ici une fois le filtrage autorisé sur l'appareil enfant.",
         device: "Appareil",
-        badgeDisabled: "⚠️ désactivé",
-        badgeUncertain: "⚠️ état incertain",
-        badgeActive: "🛡️ actif",
+        badgeDisabled: "désactivé",
+        badgeUncertain: "état incertain",
+        badgeActive: "actif",
         // {ago} = temps relatif (« il y a 5 min »), {when} = date/heure courte
         cutAgo: "coupé {ago}",
         silentSince: "silencieux depuis {ago}",
@@ -489,7 +523,7 @@ const fr = {
         domainPlaceholder: "exemple.com",
         actionBlock: "Bloquer (liste noire)",
         actionAllow: "Autoriser (liste blanche)",
-        addButton: "+ Ajouter",
+        addButton: "Ajouter",
         invalidDomain: "Domaine invalide (ex. exemple.com).",
         allowTitle: "Liste blanche",
         allowEmpty: "Aucun domaine explicitement autorisé.",
@@ -498,6 +532,8 @@ const fr = {
         count: "({count})",
         // Règle créée suite à une demande Ask-to-Browse
         requested: "demandé",
+        // Bouton icône (accessible) de retrait d'un domaine.
+        remove: "Retirer {domain}",
       },
 
       // Journal des domaines (métadonnées)
@@ -535,15 +571,15 @@ const fr = {
         enableHint: "Désactivée par défaut (privacy by default). L'analyse ne tourne que si l'ado accorde aussi l'accès aux notifications sur son appareil.",
         mutualToggle: "<b>Visibilité mutuelle</b> (mode ado, K6) — l'ado voit ce que vous voyez",
         // {name} = prénom de l'ado ; {ago} = temps relatif (« il y a 5 min »)
-        pauseNoticeSince: "<b>⏸ Pause de confidentialité active.</b> {name} a suspendu l'analyse (depuis {ago}). Vous voyez qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.",
-        pauseNotice: "<b>⏸ Pause de confidentialité active.</b> {name} a suspendu l'analyse. Vous voyez qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.",
+        pauseNoticeSince: "<b>Pause de confidentialité active.</b> {name} a suspendu l'analyse (depuis {ago}). Vous voyez qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.",
+        pauseNotice: "<b>Pause de confidentialité active.</b> {name} a suspendu l'analyse. Vous voyez qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.",
         statusTitle: "État de l'analyse",
         noDevice: "Aucun appareil n'a encore signalé l'état de l'analyse. Il apparaîtra ici une fois l'accès aux notifications accordé sur l'appareil de l'ado.",
         device: "Appareil",
         // Badges au féminin : « l'analyse »
-        badgeInactive: "⏸ inactive",
-        badgeUncertain: "⚠️ état incertain",
-        badgeActive: "🫶 active",
+        badgeInactive: "inactive",
+        badgeUncertain: "état incertain",
+        badgeActive: "active",
         cutAgo: "coupée {ago}",
         silentSince: "silencieuse depuis {ago}",
         lastSeen: "dernière nouvelle {when}",
@@ -580,7 +616,7 @@ const fr = {
       resources: {
         title: "Ressources d'aide",
         intro: "En cas de difficulté, ces services d'écoute et de signalement peuvent aider — vous et l'ado.",
-        open: "ouvrir ↗",
+        open: "Ouvrir le site",
       },
     },
     security: {
@@ -603,7 +639,7 @@ const fr = {
         triggered: "Déclenché {ago} · {date}",
         triggeredWithMessage: "Déclenché {ago} · {date} · « {message} »",
         ackTitle: "Prévenir l'enfant que l'aide arrive",
-        ackButton: "✅ Aide en route",
+        ackButton: "Aide en route",
         resolveButton: "Clôturer",
         // Popups de carte
         sosPositionLabel: "Position SOS · {date}",
@@ -638,7 +674,7 @@ const fr = {
       zones: {
         title: "Zones de sécurité",
         titleHint: "(maison, école…)",
-        addButton: "+ Ajouter une zone",
+        addButton: "Ajouter une zone",
         emptyTitle: "Aucune zone définie",
         emptyHint: "Ajoutez la maison et l'école pour recevoir une alerte « bien arrivé » lors des trajets.",
         // {alerts} = une des valeurs notify* ci-dessous (ou vide)
@@ -675,8 +711,8 @@ const fr = {
         unseen: { one: "({count} non vue)", other: "({count} non vues)" },
         colAlert: "Alerte",
         colWhen: "Quand",
-        lowBattery: "🔋 Batterie faible",
-        lowBatteryLevel: "🔋 Batterie faible ({level}%)",
+        lowBattery: "Batterie faible",
+        lowBatteryLevel: "Batterie faible ({level}%)",
         seen: "vue",
         markSeen: "Marquer vue",
       },
@@ -711,7 +747,7 @@ const fr = {
         title: "Carte",
         realtime: "temps réel",
         noDevice: "Aucun appareil appairé",
-        requestCheckIn: "📍 Demander un check-in",
+        requestCheckIn: "Demander un check-in",
         emptyTitle: "Aucune position pour l'instant",
         emptyHint: "Dès que l'appareil enfant partage une position (périodique ou à la demande), elle apparaît ici. Les zones de sécurité se dessinent même sans position.",
         recent: "Récent",
@@ -747,7 +783,7 @@ const fr = {
         title: "Exporter les données de {name} <muted>(droit d'accès)</muted>",
         intro: "Télécharge au format JSON toutes les données enregistrées pour cet enfant (métadonnées et agrégats — jamais le contenu de tiers). L'export est journalisé dans l'audit, visible de l'enfant.",
         preparing: "Préparation…",
-        button: "⬇ Télécharger l'export JSON",
+        button: "Télécharger l'export JSON",
         done: "Export téléchargé.",
       },
 
@@ -802,8 +838,18 @@ const fr = {
       noChildHint: "Ajoutez un profil, puis générez un code d'appairage pour son appareil.",
       noDevice: "Aucun appareil appairé.",
       // Badge d'un appareil appairé : {name} = nom/modèle, {mode} = libellé du mode.
-      deviceBadge: "📱 {name} · {mode}",
-      deviceBadgeRevoked: "📱 {name} · {mode} (révoqué)",
+      deviceBadge: "{name} · {mode}",
+      deviceBadgeRevoked: "{name} · {mode} (révoqué)",
+      childrenSubtitle: "Profils et appareils reliés à votre famille",
+      childrenCount: { one: "{count} enfant", other: "{count} enfants" },
+      devicesCount: { one: "{count} appareil appairé", other: "{count} appareils appairés" },
+      noDevicePaired: "aucun appareil appairé",
+      // {a} · {b} : résumé « 1 enfant · aucun appareil appairé »
+      summary: "{children} · {devices}",
+      age: { one: "{count} an", other: "{count} ans" },
+      noDeviceTitle: "Aucun appareil appairé pour l'instant",
+      noDeviceHint: "Installez l'application enfant sur l'appareil de {name}, ouvrez-la, puis saisissez le code d'appairage avant son expiration. L'appareil apparaîtra ici dès qu'il sera relié.",
+      devicesTitle: "Appareils",
       // Mode d'appareil (valeurs de l'enum DeviceMode).
       deviceMode: {
         standard: "Standard",
@@ -811,16 +857,16 @@ const fr = {
       },
 
       // Journal d'audit : <muted>…</muted> = précision atténuée.
-      auditTitle: "Journal d'audit <muted>(transparence)</muted>",
+      auditTitle: "Journal d'audit",
+      auditSubtitle: "Transparence : chaque action est tracée",
       auditEmpty: "Aucune activité.",
-      // Suite d'une ligne du journal, après le libellé de l'action (espace initiale voulue).
-      auditMeta: " · {role} · {date}",
 
       addChild: {
         nameLabel: "Prénom de l'enfant",
         namePlaceholder: "Prénom",
         birthLabel: "Date de naissance",
-        submit: "+ Enfant",
+        submit: "Ajouter l'enfant",
+        title: "Ajouter un enfant",
         birthHint: "La date de naissance adapte automatiquement les protections à l'âge de l'enfant (profil « jeune enfant » / « préado » / « ado »). Elle est facultative.",
       },
 
@@ -828,9 +874,17 @@ const fr = {
         modeStandard: "Standard",
         modeReinforced: "Renforcé (appareil dédié)",
         generate: "Générer un code d'appairage",
-        code: "Code : <b>{code}</b>",
-        // Suite de la ligne du code (espace initiale voulue) ; {time} = heure d'expiration.
-        expires: " · expire {time}",
+        title: "Appairage de l'appareil",
+        hint: "Un code à usage unique relie l'appli enfant à cette famille.",
+        modeLabel: "Mode",
+        kicker: "Code d'appairage",
+        // {time} = heure d'expiration (« 10:42 »).
+        expiresAt: "Expire à {time} · usage unique",
+        copy: "Copier",
+        copied: "Copié",
+        copyAria: "Copier le code d'appairage",
+        copiedAnnounce: "Code d'appairage copié dans le presse-papiers.",
+        copyFallback: "Copie impossible ici : sélectionnez le code pour le copier.",
       },
     },
     messages: {
@@ -852,6 +906,10 @@ const fr = {
         // Niveau de batterie en pourcentage.
         batteryValue: "{level}%",
         freeStorage: "Stockage libre",
+        charging: "En charge",
+        notCharging: "Pas en charge",
+        // {app} = nom de l'application ; {date} = date courte.
+        lastInstalled: "Dernière installée : {app} · {date}",
       },
       last7Days: "7 derniers jours",
       noScreenTimeTitle: "Pas encore de données de temps d'écran",
@@ -861,6 +919,50 @@ const fr = {
       donutToday: "aujourd'hui",
       noActivityToday: "Aucune activité aujourd'hui",
       topAppsToday: "Applications les plus utilisées aujourd'hui",
+      tilesLabel: "Indicateurs du jour",
+      topAppsSubtitle: "Durées cumulées, sans aucun contenu consulté",
+      seeAllApps: "Toutes les applications",
+      categorySubtitle: "Répartition du temps d'écran",
+      donutTotal: "au total",
+      // {avg} = durée moyenne formatée (« 2 h 06 »)
+      averagePerDay: "Temps d'écran quotidien · moyenne {avg} par jour",
+      legend: {
+        today: "Aujourd'hui",
+        previousDays: "Jours précédents",
+        overLimit: "Limite dépassée",
+        dailyLimit: "Limite quotidienne",
+      },
+      // {value} = limite formatée (« 2 h 30 ») ; affichée à côté de la ligne.
+      // <l>…</l> = mot mis sur sa propre ligne, au-dessus de la valeur.
+      limitLabel: "<l>Limite</l> {value}",
+      limitExceeded: {
+        one: "Limite dépassée {count} fois sur ces 7 jours.",
+        other: "Limite dépassée {count} fois sur ces 7 jours.",
+      },
+      limitNeverExceeded: "Limite quotidienne respectée sur ces 7 jours.",
+      // Tendance par rapport à la veille ({duration} = écart formaté).
+      trend: {
+        less: "−{duration} vs hier",
+        more: "+{duration} vs hier",
+        same: "Comme hier",
+      },
+      transparency: {
+        title: "Supervision active et visible sur l'appareil de {name}",
+        titleNoDevice: "Aucun appareil relié pour {name} : rien n'est collecté",
+        subtitle: "{name} voit à tout moment ce qui est partagé avec vous.",
+        youSee: "Vous voyez",
+        youNeverSee: "Vous ne voyez jamais",
+        see: {
+          usage: "Les durées d'utilisation par application et par catégorie",
+          device: "L'état de l'appareil : batterie, stockage",
+          calls: "Les appels : sens et durée — jamais le numéro en clair",
+        },
+        never: {
+          content: "Le contenu des messages, des appels et des notifications",
+          files: "Les photos, fichiers et saisies de {name}",
+        },
+        link: "Voir la page Confidentialité",
+      },
       storage: {
         title: "Stockage de l'appareil",
         // {used}, {total}, {free} = tailles déjà formatées (« 12 Go »).
@@ -941,6 +1043,9 @@ const fr = {
       tooltip: "<k>{label} · </k><v>{value}</v>",
       tooltipWithPercent: "<k>{label} · </k><v>{value}</v><k> ({pct}%)</k>",
       noData: "Aucune donnée.",
+      // Description accessible d'un histogramme : liste « libellé : valeur ».
+      point: "{label} : {value}",
+      pointSeparator: " ; ",
     },
   },
 

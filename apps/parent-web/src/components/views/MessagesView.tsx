@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, Trans, useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { fmtDateTime } from "../../lib/format";
+import { MessageCircle, Send } from "lucide-react";
 import { EmptyState } from "../Ui";
+import { ic } from "../icons";
 import type { Child, Message } from "../../lib/types";
 
 /* =============================================================================
@@ -80,26 +82,22 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
   }
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", maxWidth: 720 }}>
+    <div className="card" style={{ display: "flex", flexDirection: "column", maxWidth: 760 }}>
       <h2><Trans k="views.messages.title" params={{ name: child.display_name }}
         tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
         {t("views.messages.intro")}
       </p>
 
-      <div className="scroll" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 2px", maxHeight: 460 }}>
-        {messages.length === 0 && !err && <EmptyState icon="💬" title={t("views.messages.emptyTitle")}
+      <div className="scroll thread" style={{ maxHeight: "min(460px, 60dvh)" }} aria-live="polite">
+        {messages.length === 0 && !err && <EmptyState icon={MessageCircle} title={t("views.messages.emptyTitle")}
           hint={t("views.messages.emptyHint")} />}
         {messages.map((m) => {
           const mine = m.sender === "parent";
           return (
-            <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%" }}>
-              <div style={{
-                background: mine ? "var(--primary)" : "var(--surface-2)",
-                color: mine ? "var(--primary-ink)" : "var(--text-primary)",
-                borderRadius: 14, padding: "8px 12px", fontSize: ".92rem", wordBreak: "break-word",
-              }}>{m.body}</div>
-              <div className="muted small" style={{ textAlign: mine ? "end" : "start", marginTop: 2 }}>
+            <div key={m.id} className={`bubble-wrap ${mine ? "mine" : "theirs"}`}>
+              <div className="bubble">{m.body}</div>
+              <div className="bubble-meta">
                 {mine && m.read_at
                   ? t("views.messages.sentAtRead", { date: fmtDateTime(m.created_at) })
                   : fmtDateTime(m.created_at)}
@@ -111,10 +109,10 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
       </div>
 
       {err && <p className="msg error">{err}</p>}
-      <form onSubmit={send} className="inline" style={{ marginTop: 10 }}>
-        <input placeholder={t("views.messages.placeholder")} value={body} maxLength={2000}
-          onChange={(e) => setBody(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-        <button type="submit" disabled={busy || !body.trim()}>{busy ? t("common.busy") : t("views.messages.send")}</button>
+      <form onSubmit={send} className="inline" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--c-divider)", flexWrap: "nowrap", alignItems: "center" }}>
+        <input aria-label={t("views.messages.placeholder")} placeholder={t("views.messages.placeholder")} value={body} maxLength={2000}
+          onChange={(e) => setBody(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+        <button type="submit" disabled={busy || !body.trim()}><Send {...ic} size={18} />{busy ? t("common.busy") : t("views.messages.send")}</button>
       </form>
     </div>
   );

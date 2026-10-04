@@ -96,18 +96,16 @@ export function toSafetySettingsUpsert(s: SafetySettings | null, familyId: strin
 }
 
 /* --------------------------- Catalogue de catégories --------------------- */
-// Chaque catégorie porte son identité par le LIBELLÉ + l'icône, et une couleur
-// CVD-safe via les variables --series-N (jamais rouge/vert seuls). Libellé et
-// aide traduits (enums.safetyCategory.*), relus à chaque accès (getters).
-export interface SafetyCatInfo { key: SafetyCategory; icon: string; readonly label: string; readonly hint: string; }
+// Chaque catégorie porte son identité par le LIBELLÉ + l'icône (components/
+// icons.tsx), et une couleur CVD-safe via les variables --series-N (jamais
+// rouge/vert seuls). Libellé et aide traduits (enums.safetyCategory.*), relus à
+// chaque accès (getters).
+export interface SafetyCatInfo { key: SafetyCategory; readonly label: string; readonly hint: string; }
 
-const SAFETY_CATEGORY_ICONS: [SafetyCategory, string][] = [
-  ["harassment", "💢"], ["grooming", "🕵"], ["sexual_content", "🔞"], ["self_harm", "🫂"], ["drugs", "🚫"],
-];
+const SAFETY_CATEGORY_KEYS: SafetyCategory[] = ["harassment", "grooming", "sexual_content", "self_harm", "drugs"];
 
-export const SAFETY_CATEGORIES: SafetyCatInfo[] = SAFETY_CATEGORY_ICONS.map(([key, icon]) => ({
+export const SAFETY_CATEGORIES: SafetyCatInfo[] = SAFETY_CATEGORY_KEYS.map((key) => ({
   key,
-  icon,
   get label() { return t(`enums.safetyCategory.${key}.label`); },
   get hint() { return t(`enums.safetyCategory.${key}.hint`); },
 }));

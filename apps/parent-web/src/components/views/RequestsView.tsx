@@ -3,7 +3,9 @@ import { supabase } from "../../lib/supabase";
 import { REQUEST_KIND_LABEL } from "../../lib/rules";
 import { fmtDateTime } from "../../lib/format";
 import { errorMessage, t, Trans, useI18n } from "../../i18n";
+import { Check, Gift, Hand, X } from "lucide-react";
 import { EmptyState } from "../Ui";
+import { ic } from "../icons";
 import type { AccessRequest, Child } from "../../lib/types";
 
 /* =============================================================================
@@ -76,39 +78,39 @@ export function RequestsView({ familyId, children }: { familyId: string; childre
   const history = requests.filter((r) => r.status !== "pending");
 
   return (
-    <div className="grid dash" style={{ gap: 18 }}>
+    <div className="grid dash">
       <div className="card">
         <h2><Trans k="views.requests.pendingTitle" params={{ count: pending.length }}
           tags={{ count: (c) => <span className="muted small">{c}</span> }} /></h2>
         {err && <p className="msg error">{err}</p>}
-        {pending.length === 0 && <EmptyState icon="🙌" title={t("views.requests.emptyPendingTitle")}
+        {pending.length === 0 && <EmptyState icon={Hand} title={t("views.requests.emptyPendingTitle")}
           hint={t("views.requests.emptyPendingHint")} />}
         {pending.map((req) => (
-          <div key={req.id} style={{ borderTop: "1px solid var(--border)", padding: "12px 0" }}>
+          <div key={req.id} className="row-line">
             <div className="row" style={{ justifyContent: "space-between" }}>
               <strong>{childName(req.child_id)}</strong>
-              <span className="badge">{REQUEST_KIND_LABEL[req.kind]}</span>
+              <span className="badge sand">{REQUEST_KIND_LABEL[req.kind]}</span>
             </div>
             <p className="small" style={{ margin: "6px 0" }}>{describe(req)}</p>
             {req.child_note && <p className="muted small" style={{ margin: "4px 0" }}>{t("views.requests.childNote", { note: req.child_note })}</p>}
             <div className="muted small">{fmtDateTime(req.created_at)}</div>
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
-              <button disabled={busy} onClick={() => decide(req, true)}>{t("views.requests.approve")}</button>
-              <button className="ghost" disabled={busy} onClick={() => decide(req, false)}>{t("views.requests.deny")}</button>
+              <button disabled={busy} onClick={() => decide(req, true)}><Check {...ic} size={18} />{t("views.requests.approve")}</button>
+              <button className="ghost" disabled={busy} onClick={() => decide(req, false)}><X {...ic} size={18} />{t("views.requests.deny")}</button>
             </div>
           </div>
         ))}
       </div>
 
-      <div>
+      <div className="stack">
         <GrantBonusCard familyId={familyId} children={children} onDone={refresh} />
-        <div className="card" style={{ marginTop: 18 }}>
+        <div className="card">
           <h2>{t("views.requests.historyTitle")}</h2>
           {history.length === 0 && <EmptyState title={t("views.requests.emptyHistory")} />}
           <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {history.map((req) => (
-              <li key={req.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: ".88rem" }}>
-                <span className="pill" style={{ marginInlineEnd: 8 }}>{statusLabel(req.status)}</span>
+              <li key={req.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--c-divider)", fontSize: 14 }}>
+                <span className={`pill ${req.status === "approved" ? "in" : req.status === "denied" ? "blocked" : ""}`} style={{ marginInlineEnd: 8 }}>{statusLabel(req.status)}</span>
                 <b>{childName(req.child_id)}</b> · {REQUEST_KIND_LABEL[req.kind]} · {describe(req)}
                 <div className="muted small">{req.decided_at ? fmtDateTime(req.decided_at) : fmtDateTime(req.created_at)}</div>
               </li>
@@ -143,16 +145,16 @@ function GrantBonusCard({ familyId, children, onDone }: {
   if (children.length === 0) return null;
   return (
     <div className="card">
-      <h2>{t("views.requests.grantBonus.title")}</h2>
+      <h2 className="row" style={{ gap: 10 }}><span className="tile-ic tone-accent"><Gift {...ic} size={18} /></span>{t("views.requests.grantBonus.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>{t("views.requests.grantBonus.hint")}</p>
       <form className="inline" onSubmit={grant}>
         {children.length > 1 && (
-          <select value={childId} onChange={(e) => setChildId(e.target.value)}>
+          <select aria-label={t("dashboard.childLabel")} value={childId} onChange={(e) => setChildId(e.target.value)}>
             {children.map((c) => <option key={c.id} value={c.id}>{c.display_name}</option>)}
           </select>
         )}
-        <input type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} style={{ width: 90 }} />
-        <span className="muted small">{t("views.requests.grantBonus.unit")}</span>
+        <input type="number" inputMode="numeric" min={0} aria-label={t("views.requests.grantBonus.unit")} value={minutes} onChange={(e) => setMinutes(e.target.value)} style={{ width: 96 }} />
+        <span className="muted small" style={{ alignSelf: "center" }}>{t("views.requests.grantBonus.unit")}</span>
         <button disabled={busy} type="submit">{t("views.requests.grantBonus.submit")}</button>
       </form>
       {err && <p className="msg error">{err}</p>}

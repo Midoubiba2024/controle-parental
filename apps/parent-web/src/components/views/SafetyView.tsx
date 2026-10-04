@@ -2,10 +2,13 @@ import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import {
   HELP_RESOURCES, SAFETY_CATEGORIES, SEVERITY_LABEL, SEVERITY_ORDER,
-  safetyCategoryColor, safetyCategoryLabel, severityColor, toSafetySettingsUpsert, useSafety,
+  safetyCategoryColor, safetyCategoryLabel, toSafetySettingsUpsert, useSafety,
 } from "../../lib/safety";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
+import type { CSSProperties } from "react";
+import { CirclePause, CloudSun, ExternalLink, FolderOpen, HeartHandshake, TriangleAlert } from "lucide-react";
 import { EmptyState } from "../Ui";
+import { ic, icSm, safetyCategoryIcon } from "../icons";
 import { Trans, errorMessage, useI18n } from "../../i18n";
 import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
 
@@ -57,7 +60,7 @@ export function SafetyView({ familyId, child }: { familyId: string; child: Child
   }
 
   return (
-    <div className="grid dash" style={{ gap: 18 }}>
+    <div className="grid dash">
       {s.error && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{s.error}</p>}
       {msg && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{msg}</p>}
 
@@ -120,11 +123,14 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
       </label>
 
       {s.openPauses.length > 0 && (
-        <div className="msg" style={{ marginTop: 14, borderInlineStart: "3px solid var(--warning)", paddingInlineStart: 10 }}>
+        <div className="note warn" role="status" style={{ marginTop: 14 }}>
+          <CirclePause {...ic} />
+          <div>
           {s.openPauses[0].started_at
             ? <Trans k="views.wellbeing.settings.pauseNoticeSince" tags={{ b: (c) => <b>{c}</b> }}
                 params={{ name: child.display_name, ago: fmtAgo(s.openPauses[0].started_at) }} />
             : <Trans k="views.wellbeing.settings.pauseNotice" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />}
+          </div>
         </div>
       )}
 
@@ -142,11 +148,11 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
                 <span className="small">{t("views.wellbeing.settings.device")}</span>
                 <span>
                   {!st.analysis_active ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.wellbeing.settings.badgeInactive")}</span>
+                    <span className="badge warn"><CirclePause {...icSm} size={14} />{t("views.wellbeing.settings.badgeInactive")}</span>
                   ) : stale ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.wellbeing.settings.badgeUncertain")}</span>
+                    <span className="badge warn"><TriangleAlert {...icSm} size={14} />{t("views.wellbeing.settings.badgeUncertain")}</span>
                   ) : (
-                    <span className="badge" style={{ color: "var(--good)" }}>{t("views.wellbeing.settings.badgeActive")}</span>
+                    <span className="badge good"><HeartHandshake {...icSm} size={14} />{t("views.wellbeing.settings.badgeActive")}</span>
                   )}
                   <span className="muted small" style={{ marginInlineStart: 8 }}>
                     {!st.analysis_active
@@ -188,26 +194,27 @@ function CategoriesCard({ s }: { s: SafetyHook }) {
         <Trans k="views.wellbeing.categories.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {!anySignal ? (
-        <EmptyState icon="🌤" title={t("views.wellbeing.categories.emptyTitle")}
+        <EmptyState icon={CloudSun} title={t("views.wellbeing.categories.emptyTitle")}
           hint={t("views.wellbeing.categories.emptyHint")} />
       ) : (
         <div style={{ marginTop: 8 }}>
           {SAFETY_CATEGORIES.map((c) => {
             const a = agg.get(c.key);
+            const Icon = safetyCategoryIcon(c.key);
             return (
               <div key={c.key} className="row"
-                style={{ gap: 10, padding: "8px 4px", borderBottom: "1px solid var(--border)", alignItems: "center" }}>
-                <span className="app-ic" style={{ background: safetyCategoryColor(c.key), width: 28, height: 28, fontSize: ".9rem" }}>
-                  {c.icon}
+                style={{ gap: 12, padding: "10px 4px", borderBottom: "1px solid var(--c-divider)", alignItems: "center" }}>
+                <span className="app-ic sm" style={{ "--ic-color": safetyCategoryColor(c.key) } as CSSProperties}>
+                  <Icon {...ic} size={18} />
                 </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>{c.label}</div>
                   <div className="muted small">{c.hint}</div>
                 </span>
                 <span className="row" style={{ gap: 6 }}>
                   {SEVERITY_ORDER.map((sev) =>
                     a && a[sev] > 0 ? (
-                      <span key={sev} className="badge" style={{ color: severityColor(sev) }}>
+                      <span key={sev} className={`badge ${sev === "high" ? "danger" : sev === "medium" ? "warn" : "good"}`}>
                         {SEVERITY_LABEL[sev]} · {a[sev]}
                       </span>
                     ) : null,
@@ -235,9 +242,9 @@ function SignalsCard({ s, busy, run, acknowledge }: {
         <Trans k="views.wellbeing.signals.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {s.signals.length === 0 ? (
-        <EmptyState icon="🗂" title={t("views.wellbeing.signals.emptyTitle")} hint={t("views.wellbeing.signals.emptyHint")} />
+        <EmptyState icon={FolderOpen} title={t("views.wellbeing.signals.emptyTitle")} hint={t("views.wellbeing.signals.emptyHint")} />
       ) : (
-        <table className="tbl">
+        <div className="tbl-wrap"><table className="tbl">
           <thead><tr>
             <th>{t("views.wellbeing.signals.colCategory")}</th><th>{t("views.wellbeing.signals.colSeverity")}</th>
             <th>{t("views.wellbeing.signals.colApp")}</th><th>{t("views.wellbeing.signals.colOccurrences")}</th>
@@ -247,11 +254,11 @@ function SignalsCard({ s, busy, run, acknowledge }: {
             {s.signals.map((sig) => (
               <tr key={sig.id} style={{ opacity: sig.acknowledged_at ? 0.55 : 1 }}>
                 <td>
-                  <span className="badge" style={{ color: safetyCategoryColor(sig.category) }}>
-                    {safetyCategoryLabel(sig.category)}
+                  <span className="badge">
+                    <span className="sw" style={{ background: safetyCategoryColor(sig.category) }} />{safetyCategoryLabel(sig.category)}
                   </span>
                 </td>
-                <td><span className="badge" style={{ color: severityColor(sig.severity) }}>
+                <td><span className={`badge ${sig.severity === "high" ? "danger" : sig.severity === "medium" ? "warn" : "good"}`}>
                   {SEVERITY_LABEL[sig.severity]}
                 </span></td>
                 <td className="small"><code>{sig.source_app ?? t("common.none")}</code></td>
@@ -265,7 +272,7 @@ function SignalsCard({ s, busy, run, acknowledge }: {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </div>
   );
@@ -282,10 +289,10 @@ function ResourcesCard() {
       </p>
       <div className="grid cols-2" style={{ gap: 12 }}>
         {HELP_RESOURCES.map((r) => (
-          <div key={r.name} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
+          <div key={r.name} className="panel">
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <strong>{r.name}</strong>
-              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}</a>
+              <strong className="serif" style={{ fontSize: 18 }}>{r.name}</strong>
+              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}<ExternalLink {...icSm} /></a>
             </div>
             <div className="small" style={{ margin: "4px 0" }}>{r.contact}</div>
             <div className="muted small">{r.desc}</div>

@@ -79,7 +79,7 @@ export function durationShort(ms: number): string {
   if (h === 0) return t("units.durationShort.minutes", { m: number(m) });
   return m === 0
     ? t("units.durationShort.hours", { h: number(h) })
-    : t("units.durationShort.hoursMinutes", { h: number(h), m: number(m) });
+    : t("units.durationShort.hoursMinutes", { h: number(h), m: number(m, { minimumIntegerDigits: 2 }) });
 }
 
 /** Taille en octets : « 512 o », « 1,5 Mo », « 12 Go ». null → « — ». */

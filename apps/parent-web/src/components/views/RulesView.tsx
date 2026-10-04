@@ -5,7 +5,10 @@ import { useRules, AGE_PRESETS, DOW_LABELS, DOW_ORDER, SCHEDULE_KIND_LABEL,
   isVacationActive, minutesToHHMM, sendCommand } from "../../lib/rules";
 import { byApp, byCategory, type ObservationData } from "../../lib/observation";
 import { appInitials, appLabelOf, categoryColor, categoryLabel, fmtDuration, shiftDay } from "../../lib/format";
+import type { CSSProperties } from "react";
+import { BellRing, CalendarDays, Lock, Pause, Play, Plus, Send, Smartphone, X } from "lucide-react";
 import { Meter, EmptyState } from "../Ui";
+import { ic } from "../icons";
 import { errorMessage, Trans, useI18n } from "../../i18n";
 import type {
   AccessPolicy, AgeProfile, Child, CommandStatus, RuleAction, Schedule, ScheduleKind,
@@ -56,15 +59,17 @@ export function RulesView({ familyId, child, obs }: {
   }
 
   return (
-    <div className="grid dash" style={{ gap: 18 }}>
+    <div className="grid dash">
       {r.error && <p className="msg error">{r.error}</p>}
       {msg && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{msg}</p>}
 
       <TimeLimitsCard r={r} familyId={familyId} child={child} busy={busy} run={run}
         usageTodayTotal={usageTodayTotal} />
-      <InstantControlCard familyId={familyId} childId={childId} devices={obs.devices}
-        busy={busy} run={run} commands={r.commands} />
-      <GuardsCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
+      <div className="stack">
+        <InstantControlCard familyId={familyId} childId={childId} devices={obs.devices}
+          busy={busy} run={run} commands={r.commands} />
+        <GuardsCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
+      </div>
       <CategoryRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
         usageByCat={usageTodayByCat} />
       <AppRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
@@ -134,13 +139,13 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
         </span>
       </div>
       <Meter value={usageTodayTotal / 60000} max={effLimit ?? Math.max(1, usageTodayTotal / 60000)}
-        color={effLimit != null && usageTodayTotal / 60000 > effLimit ? "var(--danger)" : undefined} />
+        color={effLimit != null && usageTodayTotal / 60000 > effLimit ? "var(--c-danger)" : "var(--c-accent)"} />
       {bonusToday > 0 && <p className="muted small" style={{ marginTop: 6 }}>{t("views.rules.timeLimits.bonusToday", { minutes: bonusToday })}</p>}
 
       <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.presetsTitle")}</h3>
       <div className="row" style={{ gap: 8 }}>
         {(Object.keys(AGE_PRESETS) as AgeProfile[]).map((k) => (
-          <button key={k} className="ghost" disabled={busy}
+          <button key={k} type="button" className="soft" disabled={busy}
             onClick={() => run(() => applyPreset(k))}>{AGE_PRESETS[k].label}</button>
         ))}
       </div>
@@ -150,7 +155,7 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
 
       <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.dailyLimitTitle")}</h3>
       <div className="inline">
-        <input type="number" min={0} placeholder={t("views.rules.timeLimits.dailyLimitPlaceholder")} value={global} style={{ width: 110 }}
+        <input type="number" inputMode="numeric" min={0} aria-label={t("views.rules.timeLimits.dailyLimitTitle")} placeholder={t("views.rules.timeLimits.dailyLimitPlaceholder")} value={global} style={{ width: 120 }}
           onChange={(e) => setGlobal(e.target.value)} />
         <span className="muted small">{t("views.rules.timeLimits.minutesPerDay")}</span>
         <button disabled={busy} onClick={() => run(() =>
@@ -168,7 +173,7 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
       </div>
 
       <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.graceTitle")}</h3>
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.grace_enabled ?? true}
           onChange={(e) => run(() => savePolicy({ grace_enabled: e.target.checked }))} />
         <span>{t("views.rules.timeLimits.graceToggle")}</span>
@@ -195,13 +200,13 @@ function WeekdayLimit({ label, value, busy, onSave }: {
   const { t } = useI18n();
   const [v, setV] = useState(value?.toString() ?? "");
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <span className="muted small">{label}</span>
-      <input type="number" min={0} value={v} placeholder={t("common.none")} disabled={busy}
-        style={{ width: 58, textAlign: "center", padding: "6px 4px" }}
+    <label style={{ alignItems: "center", gap: 4, fontWeight: 500, color: "var(--c-muted)" }}>
+      <span>{label}</span>
+      <input type="number" inputMode="numeric" min={0} value={v} placeholder={t("common.none")} disabled={busy}
+        style={{ width: 64, textAlign: "center", padding: "0 4px" }}
         onChange={(e) => setV(e.target.value)}
         onBlur={() => onSave(v.trim() === "" ? null : Math.max(0, parseInt(v, 10) || 0))} />
-    </div>
+    </label>
   );
 }
 
@@ -227,26 +232,26 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
         <Trans k="views.rules.instantControl.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {active.length === 0 ? (
-        <EmptyState icon="📱" title={t("views.rules.instantControl.noDeviceTitle")}
+        <EmptyState icon={Smartphone} title={t("views.rules.instantControl.noDeviceTitle")}
           hint={t("views.rules.instantControl.noDeviceHint")} />
       ) : (
         <>
           {active.length > 1 && (
-            <select value={deviceId} onChange={(e) => setDeviceId(e.target.value)} style={{ marginBottom: 10 }}>
+            <select aria-label={t("views.rules.instantControl.title")} value={deviceId} onChange={(e) => setDeviceId(e.target.value)} style={{ marginBottom: 10 }}>
               {active.map((d) => <option key={d.id} value={d.id}>{d.label ?? d.model ?? d.platform}</option>)}
             </select>
           )}
           <div className="row" style={{ gap: 8 }}>
-            <button disabled={busy} onClick={() => cmd("pause")}>{t("views.rules.instantControl.pause")}</button>
-            <button className="ghost" disabled={busy} onClick={() => cmd("resume")}>{t("views.rules.instantControl.resume")}</button>
-            <button disabled={busy} onClick={() => cmd("lock_now")}>{t("views.rules.instantControl.lock")}</button>
-            <button className="ghost" disabled={busy} onClick={() => cmd("ring")}>{t("views.rules.instantControl.ring")}</button>
+            <button disabled={busy} onClick={() => cmd("pause")}><Pause {...ic} size={18} />{t("views.rules.instantControl.pause")}</button>
+            <button className="ghost" disabled={busy} onClick={() => cmd("resume")}><Play {...ic} size={18} />{t("views.rules.instantControl.resume")}</button>
+            <button disabled={busy} onClick={() => cmd("lock_now")}><Lock {...ic} size={18} />{t("views.rules.instantControl.lock")}</button>
+            <button className="ghost" disabled={busy} onClick={() => cmd("ring")}><BellRing {...ic} size={18} />{t("views.rules.instantControl.ring")}</button>
           </div>
           <div className="inline" style={{ marginTop: 10 }}>
-            <input placeholder={t("views.rules.instantControl.messagePlaceholder")} value={lockMsg}
+            <input aria-label={t("views.rules.instantControl.messagePlaceholder")} placeholder={t("views.rules.instantControl.messagePlaceholder")} value={lockMsg}
               onChange={(e) => setLockMsg(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
             <button className="ghost" disabled={busy || !lockMsg.trim()}
-              onClick={() => { cmd("message", { message: lockMsg.trim() }); setLockMsg(""); }}>{t("views.rules.instantControl.send")}</button>
+              onClick={() => { cmd("message", { message: lockMsg.trim() }); setLockMsg(""); }}><Send {...ic} size={18} />{t("views.rules.instantControl.send")}</button>
           </div>
         </>
       )}
@@ -255,7 +260,7 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
           <h3 style={{ marginTop: 16 }}>{t("views.rules.instantControl.recentCommands")}</h3>
           <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: 160 }}>
             {commands.slice(0, 8).map((c) => (
-              <li key={c.id} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: ".86rem" }}>
+              <li key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--c-divider)", fontSize: 14 }}>
                 <code>{c.type}</code>
                 <span className="badge" style={{ marginInlineStart: 8 }}>
                   {COMMAND_STATUSES.includes(c.status) ? t(`views.rules.instantControl.commandStatus.${c.status}`) : c.status}
@@ -306,14 +311,14 @@ function GuardsCard({ r, familyId, childId, busy, run }: CardBase) {
       </div>
 
       <h3 style={{ marginTop: 16 }}>{t("views.rules.guards.installTitle")}</h3>
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.block_new_apps ?? false}
           onChange={(e) => run(() => savePolicy({ block_new_apps: e.target.checked }))} />
         <span><Trans k="views.rules.guards.blockNewApps" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
       <h3 style={{ marginTop: 16 }}>{t("views.rules.guards.systemLockTitle")}</h3>
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.lock_system_settings ?? false}
           onChange={(e) => run(() => savePolicy({ lock_system_settings: e.target.checked }))} />
         <span>{t("views.rules.guards.systemLockToggle")}</span>
@@ -322,7 +327,7 @@ function GuardsCard({ r, familyId, childId, busy, run }: CardBase) {
 
       <h3 style={{ marginTop: 16 }}>{t("views.rules.guards.ratingTitle")}</h3>
       <div className="inline">
-        <select defaultValue={policy?.max_content_rating ?? ""}
+        <select aria-label={t("views.rules.guards.ratingTitle")} defaultValue={policy?.max_content_rating ?? ""}
           onChange={(e) => run(() => savePolicy({ max_content_rating: e.target.value || null }))}>
           <option value="">{t("views.rules.guards.ratingNone")}</option>
           <option value="PEGI 3">PEGI 3</option>
@@ -358,9 +363,9 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
   }
 
   return (
-    <div className="card">
+    <div className="card" style={{ gridColumn: "1 / -1" }}>
       <h2>{t("views.rules.categoryRules.title")}</h2>
-      <table className="tbl">
+      <div className="tbl-wrap"><table className="tbl">
         <thead><tr>
           <th>{t("views.rules.categoryRules.colCategory")}</th><th>{t("views.rules.categoryRules.colToday")}</th>
           <th>{t("views.rules.categoryRules.colRule")}</th><th>{t("views.rules.categoryRules.colQuota")}</th>
@@ -371,10 +376,10 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
             const ms = usageByCat.get(cat) ?? 0;
             return (
               <tr key={cat}>
-                <td><span className="badge" style={{ color: categoryColor(cat) }}>{categoryLabel(cat)}</span></td>
+                <td><span className="badge"><span className="sw" style={{ background: categoryColor(cat) }} />{categoryLabel(cat)}</span></td>
                 <td className="muted small">{ms > 0 ? fmtDuration(ms) : t("common.none")}</td>
                 <td>
-                  <select value={rule?.action ?? ""} disabled={busy}
+                  <select aria-label={categoryLabel(cat)} value={rule?.action ?? ""} disabled={busy}
                     onChange={(e) => run(() => setCat(cat, (e.target.value || null) as RuleAction | null, rule?.daily_limit_minutes))}>
                     <option value="">{t("views.rules.ruleAction.free")}</option>
                     <option value="limit">{t("views.rules.ruleAction.limit")}</option>
@@ -384,7 +389,7 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
                 </td>
                 <td>
                   {rule?.action === "limit" && (
-                    <input type="number" min={0} defaultValue={rule.daily_limit_minutes ?? 30} style={{ width: 70 }}
+                    <input type="number" inputMode="numeric" min={0} aria-label={t("views.rules.categoryRules.colQuota")} defaultValue={rule.daily_limit_minutes ?? 30} style={{ width: 80 }}
                       onBlur={(e) => run(() => setCat(cat, "limit", Math.max(0, parseInt(e.target.value, 10) || 0)))} />
                   )}
                 </td>
@@ -392,7 +397,7 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
             );
           })}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }
@@ -437,27 +442,27 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
     <div className="card" style={{ gridColumn: "1 / -1" }}>
       <h2>{t("views.rules.appRules.title")}</h2>
       <div className="inline" style={{ marginBottom: 10 }}>
-        <input placeholder={t("views.rules.appRules.searchPlaceholder")} value={query}
+        <input type="search" aria-label={t("views.rules.appRules.searchPlaceholder")} placeholder={t("views.rules.appRules.searchPlaceholder")} value={query}
           onChange={(e) => setQuery(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-        <label className="row" style={{ gap: 6 }}>
+        <label className="check" style={{ paddingBlock: 0, alignItems: "center" }}>
           <input type="checkbox" checked={onlyRecent} onChange={(e) => setOnlyRecent(e.target.checked)} />
           <span className="small">{newCount > 0
             ? <Trans k="views.rules.appRules.newAppsWithCount" params={{ count: newCount }} tags={{ b: (c) => <b>{c}</b> }} />
             : t("views.rules.appRules.newApps")}</span>
         </label>
       </div>
-      {apps.length === 0 ? <EmptyState icon="📱" title={t("views.rules.appRules.emptyTitle")}
+      {apps.length === 0 ? <EmptyState icon={Smartphone} title={t("views.rules.appRules.emptyTitle")}
         hint={t("views.rules.appRules.emptyHint")} /> : (
         <div className="scroll">
           {apps.map((a) => {
             const rule = ruleFor(a.package_name);
             const ms = usageByPkg.get(a.package_name) ?? 0;
             return (
-              <div key={a.id} className="row" style={{ gap: 10, padding: "8px 4px", borderBottom: "1px solid var(--border)" }}>
-                <span className="app-ic" style={{ background: categoryColor(a.category), width: 30, height: 30, fontSize: ".8rem" }}>
+              <div key={a.id} className="row" style={{ gap: 10, padding: "10px 4px", borderBottom: "1px solid var(--c-divider)" }}>
+                <span className="app-ic sm" style={{ "--ic-color": categoryColor(a.category) } as CSSProperties}>
                   {appInitials(a.app_label, a.package_name)}
                 </span>
-                <span style={{ minWidth: 0, flex: 1 }}>
+                <span style={{ minWidth: 0, flex: "1 1 160px" }}>
                   <div className="nm" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {appLabelOf(a.app_label, a.package_name)}
                   </div>
@@ -466,10 +471,10 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
                     : categoryLabel(a.category)}</div>
                 </span>
                 {rule?.action === "limit" && (
-                  <input type="number" min={0} defaultValue={rule.daily_limit_minutes ?? 30} style={{ width: 64 }}
+                  <input type="number" inputMode="numeric" min={0} aria-label={t("views.rules.categoryRules.colQuota")} defaultValue={rule.daily_limit_minutes ?? 30} style={{ width: 80 }}
                     onBlur={(e) => run(() => setApp(a.package_name, "limit", Math.max(0, parseInt(e.target.value, 10) || 0)))} />
                 )}
-                <select value={rule?.action ?? ""} disabled={busy}
+                <select aria-label={appLabelOf(a.app_label, a.package_name)} value={rule?.action ?? ""} disabled={busy}
                   onChange={(e) => run(() => setApp(a.package_name, (e.target.value || null) as RuleAction | null, rule?.daily_limit_minutes))}>
                   <option value="">{t("views.rules.ruleAction.free")}</option>
                   <option value="limit">{t("views.rules.ruleAction.limit")}</option>
@@ -520,15 +525,15 @@ function SchedulesCard({ r, familyId, childId, busy, run }: CardBase) {
         {t("views.rules.schedules.intro")}
       </p>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); run(createSchedule); }} style={{ marginBottom: 12 }}>
-        <input placeholder={t("views.rules.schedules.namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
-        <select value={kind} onChange={(e) => setKind(e.target.value as ScheduleKind)}>
+        <input aria-label={t("views.rules.schedules.namePlaceholder")} placeholder={t("views.rules.schedules.namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
+        <select aria-label={t("views.rules.schedules.kindLabel")} value={kind} onChange={(e) => setKind(e.target.value as ScheduleKind)}>
           {(Object.keys(SCHEDULE_KIND_LABEL) as ScheduleKind[]).map((k) =>
             <option key={k} value={k}>{SCHEDULE_KIND_LABEL[k]}</option>)}
         </select>
-        <button disabled={busy || !name.trim()} type="submit">{t("views.rules.schedules.addSchedule")}</button>
+        <button disabled={busy || !name.trim()} type="submit"><Plus {...ic} size={18} strokeWidth={2} />{t("views.rules.schedules.addSchedule")}</button>
       </form>
 
-      {r.schedules.length === 0 ? <EmptyState icon="🗓" title={t("views.rules.schedules.emptyTitle")}
+      {r.schedules.length === 0 ? <EmptyState icon={CalendarDays} title={t("views.rules.schedules.emptyTitle")}
         hint={t("views.rules.schedules.emptyHint")} /> : (
         r.schedules.map((s) => (
           <ScheduleRow key={s.id} schedule={s} windows={r.windows.filter((w) => w.schedule_id === s.id)}
@@ -562,13 +567,13 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
   }
 
   return (
-    <div style={{ borderTop: "1px solid var(--border)", padding: "12px 0" }}>
+    <div style={{ borderTop: "1px solid var(--c-divider)", padding: "14px 0" }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
           <strong>{schedule.name}</strong>{" "}
           <span className="badge">{SCHEDULE_KIND_LABEL[schedule.kind]}</span>
         </div>
-        <label className="row" style={{ gap: 6 }}>
+        <label className="check" style={{ paddingBlock: 0, alignItems: "center" }}>
           <input type="checkbox" checked={assigned} disabled={busy} onChange={(e) => onToggle(e.target.checked)} />
           <span className="small">{t("views.rules.schedules.assigned")}</span>
         </label>
@@ -577,12 +582,13 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
       <div className="row" style={{ gap: 6, marginTop: 8 }}>
         {windows.length === 0 && <span className="muted small">{t("views.rules.schedules.noWindows")}</span>}
         {windows.map((w) => (
-          <span key={w.id} className="badge">
+          <span key={w.id} className="badge sand" style={{ paddingInlineEnd: 2 }}>
             {t("views.rules.schedules.window", {
               days: dowMaskLabel(w.dow_mask), start: minutesToHHMM(w.start_minute), end: minutesToHHMM(w.end_minute),
             })}
-            <button className="link" style={{ padding: 0, paddingInlineStart: 6 }} disabled={busy}
-              onClick={() => run(() => delWindow(w.id))}>✕</button>
+            <button type="button" className="icon-btn sm" disabled={busy}
+              aria-label={t("views.rules.schedules.removeWindow")} title={t("views.rules.schedules.removeWindow")}
+              onClick={() => run(() => delWindow(w.id))}><X {...ic} size={16} /></button>
           </span>
         ))}
       </div>
@@ -590,15 +596,16 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
       <div className="inline" style={{ marginTop: 8 }}>
         <div className="row" style={{ gap: 4 }}>
           {DOW_ORDER.map((d) => (
-            <button key={d} type="button" className={dowMaskHas(mask, d) ? "" : "ghost"}
-              style={{ padding: "5px 8px", fontSize: ".78rem" }}
+            <button key={d} type="button" className={dowMaskHas(mask, d) ? "soft on" : "soft"}
+              aria-pressed={dowMaskHas(mask, d)}
+              style={{ padding: "0 10px", fontSize: 13, minWidth: 44 }}
               onClick={() => setMask((m) => m ^ dowBit(d))}>{DOW_LABELS[d]}</button>
           ))}
         </div>
-        <input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
-        <span className="muted">{t("views.rules.schedules.rangeArrow")}</span>
-        <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
-        <button className="ghost" disabled={busy || mask === 0} onClick={() => run(addWindow)}>{t("views.rules.schedules.addWindow")}</button>
+        <input type="time" aria-label={t("views.rules.schedules.startLabel")} value={start} onChange={(e) => setStart(e.target.value)} />
+        <span className="muted" aria-hidden="true" style={{ alignSelf: "center" }}>{t("views.rules.schedules.rangeArrow")}</span>
+        <input type="time" aria-label={t("views.rules.schedules.endLabel")} value={end} onChange={(e) => setEnd(e.target.value)} />
+        <button className="ghost" disabled={busy || mask === 0} onClick={() => run(addWindow)}><Plus {...ic} size={18} strokeWidth={2} />{t("views.rules.schedules.addWindow")}</button>
       </div>
     </div>
   );
