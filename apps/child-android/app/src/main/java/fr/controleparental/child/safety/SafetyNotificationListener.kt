@@ -84,6 +84,11 @@ class SafetyNotificationListener : NotificationListenerService() {
         }
     }
 
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+        sbn?.key?.let { preEnrollmentKeys.remove(it) }
+    }
+
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         // L'ado (ou le système) a retiré l'accès : rendre l'arrêt VISIBLE au parent.
@@ -156,16 +161,24 @@ class SafetyNotificationListener : NotificationListenerService() {
         snapDeviceId = synced
     }
 
-    /** Recense les notifications présentes publiées AVANT l'appairage (T3). */
+    /**
+     * PREMIER recensement d'un enrôlement dans ce processus (connexion de
+     * l'écouteur ou synchro d'un nouvel enrôlement) : TOUTES les notifications
+     * actives hors MessagingStyle sont marquées, quel que soit leur postTime (une
+     * mise à jour le renouvelle). Une clé n'est libérée qu'au retrait de la
+     * notification (onNotificationRemoved) : une publication ultérieure est alors
+     * bien postérieure. MessagingStyle reste filtré par la date des messages.
+     */
     private fun refreshPreEnrollmentKeys(deviceId: String?) {
-        if (deviceId != preEnrollmentKeysFor) {
-            preEnrollmentKeys.clear()
-            preEnrollmentKeysFor = deviceId
-        }
+        if (deviceId == preEnrollmentKeysFor) return
+        preEnrollmentKeys.clear()
+        preEnrollmentKeysFor = deviceId
         if (deviceId == null) return
-        val enrolledAt = snapEnrolledAt
         runCatching { activeNotifications }.getOrNull()?.forEach { sbn ->
-            if (sbn.postTime < enrolledAt) sbn.key?.let { preEnrollmentKeys.add(it) }
+            val messaging = sbn.notification?.let {
+                runCatching { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) }.getOrNull()
+            } != null
+            if (!messaging) sbn.key?.let { preEnrollmentKeys.add(it) }
         }
     }
 

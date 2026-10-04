@@ -45,8 +45,9 @@ class CommandExecutor(
         val deviceId = SupervisionStore.current.value?.deviceId ?: return
         for (c in policyClient.pendingCommands()) {
             // false : état transitoire (notification de supervision pas encore
-            // affichée) → la commande reste en attente, retraitée au tick suivant ;
-            // l'expiration normale s'applique.
+            // affichée) → la commande reste « pending », retraitée au tick suivant.
+            // NB : rien n'applique aujourd'hui commands.expires_at (ni l'appareil ni
+            // le serveur) — suivi LOT 13 « expiration des commandes ».
             if (apply(c, deviceId)) policyClient.ackCommand(c.id, "acked")
         }
     }
