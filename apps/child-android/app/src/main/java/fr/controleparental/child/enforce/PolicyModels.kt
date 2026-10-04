@@ -74,11 +74,14 @@ enum class BlockReason {
     LIMIT_GLOBAL,
 }
 
+/**
+ * Décision du moteur (pur JVM, testable). Le message montré à l'enfant (court,
+ * jamais culpabilisant) est dérivé du [reason] côté Android, depuis les
+ * ressources traduites : voir BlockOverlay.messageRes (LOT 9 — i18n).
+ */
 data class Decision(
     val blocked: Boolean,
     val reason: BlockReason,
-    /** Message court adapté à l'enfant (jamais culpabilisant, toujours clair). */
-    val message: String = "",
 ) {
     companion object {
         val ALLOW = Decision(false, BlockReason.ALLOWED)

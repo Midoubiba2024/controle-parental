@@ -15,11 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import android.net.Uri
+import android.content.res.Resources
 import android.os.Build
 import fr.controleparental.child.Config
+import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.data.UsageStatsCollector
 import fr.controleparental.child.enforce.BlockOverlay
@@ -185,12 +188,10 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
     ) {
-        Text("Mes données", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.mydata_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Tes parents t'accompagnent via cette application. Elle reste visible : " +
-                "tu peux voir ici tout ce qui est partagé. Rien n'est caché, et jamais " +
-                "le contenu de tes messages, appels ou de ce que tu regardes.",
+            stringResource(R.string.mydata_intro),
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(20.dp))
@@ -198,12 +199,10 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         // --- Bouton SOS (déclenché par l'enfant → transparent, E1/E2) --------
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Besoin d'aide ? SOS", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.sos_title), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Envoie une alerte à tes parents avec ta position en direct. " +
-                        "C'est toi qui le déclenches. Les appels d'urgence (112) restent " +
-                        "toujours possibles, séparément.",
+                    stringResource(R.string.sos_intro),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -218,14 +217,10 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                                 if (loc != null) locationRepo.insertFix(loc, source = "sos", batteryLevel = null)
                             }
                             sosBusy = false
-                            sosMsg = if (ok) {
-                                "SOS envoyé. Tes parents sont prévenus et voient ta position en direct."
-                            } else {
-                                "Impossible d'envoyer le SOS (pas de réseau ?). Réessaie ou appelle le 112."
-                            }
+                            sosMsg = context.getString(if (ok) R.string.sos_sent else R.string.sos_failed)
                         }
                     },
-                ) { Text(if (sosBusy) "Envoi…" else "🆘  Envoyer un SOS") }
+                ) { Text(stringResource(if (sosBusy) R.string.sos_sending else R.string.sos_button)) }
                 sosMsg?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall)
@@ -234,90 +229,71 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         }
         Spacer(Modifier.height(16.dp))
 
-        InfoCard("Niveau de supervision") {
+        InfoCard(stringResource(R.string.supervision_level_label)) {
             Text(
-                if (enrollment.mode == "reinforced") "Renforcé" else "Standard",
+                stringResource(
+                    if (enrollment.mode == "reinforced") R.string.supervision_level_reinforced
+                    else R.string.supervision_level_standard,
+                ),
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
         Spacer(Modifier.height(16.dp))
 
-        Text("Ce qui est partagé avec tes parents", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.shared_title), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
         listOf(
-            "Le temps que tu passes sur chaque application (durées seulement).",
-            "La liste des applications installées sur l'appareil.",
-            "Le niveau de batterie et l'espace de stockage de l'appareil.",
+            R.string.shared_usage,
+            R.string.shared_inventory,
+            R.string.shared_device,
             when (locMode) {
-                "off" -> "Ta position : partage désactivé pour l'instant."
-                "periodic" -> "Ta position, de temps en temps et quand tes parents la demandent — " +
-                    "et en direct seulement si tu déclenches un SOS. Jamais en secret."
-                else -> "Ta position quand tes parents la demandent (check-in), " +
-                    "et en direct seulement si tu déclenches un SOS. Jamais en secret."
+                "off" -> R.string.shared_location_off
+                "periodic" -> R.string.shared_location_periodic
+                else -> R.string.shared_location_on_demand
             },
-            if (Config.featureCallLog)
-                "Le journal des appels en métadonnées : qui (sans le numéro en clair), " +
-                    "quand et combien de temps — jamais ce qui a été dit."
-            else null,
-            if (Config.featureNetworkFilter)
-                "Le filtrage du web bloque certains sites. Le journal retient seulement le " +
-                    "nom de domaine (ex. « exemple.com »), sa catégorie et l'heure — " +
-                    "jamais les pages que tu consultes ni leur contenu."
-            else null,
+            if (Config.featureCallLog) R.string.shared_call_log else null,
+            if (Config.featureNetworkFilter) R.string.shared_filter else null,
             if (Config.featureNetworkFilter && filterConfig?.policy?.logAllowed == true)
-                "En ce moment, le nom (pas le contenu) de CHAQUE site que tu visites est " +
-                    "enregistré — pas seulement les sites bloqués. Tes parents ont activé " +
-                    "ce réglage ; tu peux leur demander de le désactiver."
+                R.string.shared_filter_log_allowed
             else null,
             if (showSafety && analysisEnabled && listenerEnabled && !pauseActive)
-                "Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer des " +
-                    "situations de danger (harcèlement, mal-être, contact suspect…). Tes parents " +
-                    "reçoivent seulement une ALERTE de catégorie (ex. « harcèlement ») — JAMAIS " +
-                    "tes messages, jamais le texte. Tu peux l'arrêter ou mettre une pause."
+                R.string.shared_safety_active
             else if (showSafety && analysisEnabled)
-                "Le texte de tes notifications SERA analysé sur cet appareil (pour repérer un " +
-                    "danger) UNIQUEMENT quand tu auras accordé l'accès aux notifications et hors " +
-                    "pause. Même alors, tes parents ne reçoivent qu'une alerte de catégorie — " +
-                    "jamais tes messages."
+                R.string.shared_safety_pending
             else null,
         ).filterNotNull().forEach {
-            Text("•  $it", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.mydata_list_item, stringResource(it)), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Jamais partagé : le contenu de tes messages et appels, le texte de tes notifications, " +
-                "les pages web que tu consultes, tes mots de passe, ni l'image de ton écran, de ta " +
-                "caméra ou de ton micro. Le filtrage regarde seulement le nom du site (DNS), jamais " +
-                "ce qu'il y a dedans ; l'analyse de bien-être reste sur l'appareil et n'en fait sortir " +
-                "qu'une alerte de catégorie.",
+            stringResource(R.string.never_shared),
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
 
-        Text("Mes règles en ce moment", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.rules_title), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
-        val ruleLines = summarizeRules(rules)
-        InfoCard("Règles d'accès définies par mes parents") {
+        val ruleLines = summarizeRules(rules, context.resources)
+        InfoCard(stringResource(R.string.rules_card_label)) {
             if (ruleLines.isEmpty()) {
-                Text("Aucune règle particulière pour l'instant.", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.rules_none), style = MaterialTheme.typography.bodyMedium)
             } else {
                 ruleLines.forEach {
-                    Text("•  $it", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.mydata_list_item, it), style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(4.dp))
                 }
             }
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "Tu peux demander plus de temps directement sur l'écran de pause. " +
-                "Les appels d'urgence (112) restent toujours possibles.",
+            stringResource(R.string.rules_footer),
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
 
         if (parentMessages.isNotEmpty()) {
-            Text("Messages de mes parents", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.parent_messages_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             parentMessages.takeLast(20).forEach { m ->
                 Card(Modifier.fillMaxWidth()) {
@@ -328,25 +304,27 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             Spacer(Modifier.height(12.dp))
         }
 
-        Text("Autorisations", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.permissions_title), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
 
         PermissionCard(
-            title = "Accès au temps d'écran",
+            title = stringResource(R.string.permission_usage_title),
             granted = usageGranted,
-            explanation = "Permet de calculer le temps passé par application. " +
-                "À activer dans les réglages du téléphone.",
-            actionLabel = if (usageGranted) "Activé" else "Activer dans les réglages",
+            explanation = stringResource(R.string.permission_usage_explanation),
+            actionLabel = stringResource(
+                if (usageGranted) R.string.permission_enabled else R.string.permission_enable_in_settings,
+            ),
             onAction = { usageSettings.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
         )
 
         Spacer(Modifier.height(12.dp))
         PermissionCard(
-            title = "Affichage de l'écran de pause",
+            title = stringResource(R.string.permission_overlay_title),
             granted = overlayGranted,
-            explanation = "Permet d'afficher l'écran de pause quand une limite est atteinte. " +
-                "Sans cette autorisation, la pause s'affiche moins bien.",
-            actionLabel = if (overlayGranted) "Activé" else "Activer dans les réglages",
+            explanation = stringResource(R.string.permission_overlay_explanation),
+            actionLabel = stringResource(
+                if (overlayGranted) R.string.permission_enabled else R.string.permission_enable_in_settings,
+            ),
             onAction = {
                 val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
@@ -359,12 +337,12 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
 
         Spacer(Modifier.height(12.dp))
         PermissionCard(
-            title = "Localisation",
+            title = stringResource(R.string.permission_location_title),
             granted = fineGranted,
-            explanation = "Permet de partager ta position avec tes parents (check-in, " +
-                "zones « bien arrivé », et SOS). Tu la vois toujours dans cet écran — " +
-                "rien n'est caché.",
-            actionLabel = if (fineGranted) "Activé" else "Autoriser la position",
+            explanation = stringResource(R.string.permission_location_explanation),
+            actionLabel = stringResource(
+                if (fineGranted) R.string.permission_enabled else R.string.permission_location_action,
+            ),
             onAction = {
                 finePermission.launch(
                     arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
@@ -375,12 +353,12 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         if (Config.featureBackgroundLocation && fineGranted) {
             Spacer(Modifier.height(12.dp))
             PermissionCard(
-                title = "Position en arrière-plan",
+                title = stringResource(R.string.permission_bg_location_title),
                 granted = bgGranted,
-                explanation = "Pour que les zones de sécurité fonctionnent même quand l'app " +
-                    "est fermée. Choisis « Toujours autoriser » dans les réglages. " +
-                    "Tu peux refuser : le partage marchera quand l'app est ouverte.",
-                actionLabel = if (bgGranted) "Activé" else "Autoriser en arrière-plan",
+                explanation = stringResource(R.string.permission_bg_location_explanation),
+                actionLabel = stringResource(
+                    if (bgGranted) R.string.permission_enabled else R.string.permission_bg_location_action,
+                ),
                 onAction = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         bgPermission.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -391,22 +369,28 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
 
         if (Config.featureNetworkFilter) {
             Spacer(Modifier.height(12.dp))
-            val filterHint = buildString {
-                append("Bloque les sites inappropriés en filtrant les noms de domaine (DNS), ")
-                append("sur l'appareil. Aucun site n'est espionné : on ne regarde jamais le ")
-                append("contenu des pages.")
-                filterConfig?.policy?.let { p ->
-                    if (p.whitelistOnly) append(" Mode liste blanche : seuls les sites autorisés s'ouvrent.")
-                    else if (p.blockedCategories.isNotEmpty())
-                        append(" ${p.blockedCategories.size} catégorie(s) bloquée(s).")
-                    if (p.safeSearch) append(" Recherche sécurisée activée.")
-                }
-            }
+            // Phrases indépendantes, jointes par une espace (chacune traduite entière).
+            val policy = filterConfig?.policy
+            val filterHint = listOfNotNull(
+                stringResource(R.string.permission_filter_explanation),
+                when {
+                    policy == null -> null
+                    policy.whitelistOnly -> stringResource(R.string.permission_filter_whitelist)
+                    policy.blockedCategories.isNotEmpty() -> context.resources.getQuantityString(
+                        R.plurals.permission_filter_blocked_categories,
+                        policy.blockedCategories.size, policy.blockedCategories.size,
+                    )
+                    else -> null
+                },
+                if (policy?.safeSearch == true) stringResource(R.string.permission_filter_safe_search) else null,
+            ).joinToString(" ")
             PermissionCard(
-                title = "Filtrage du web",
+                title = stringResource(R.string.permission_filter_title),
                 granted = filterOn,
                 explanation = filterHint,
-                actionLabel = if (filterOn) "Activé" else "Activer le filtrage",
+                actionLabel = stringResource(
+                    if (filterOn) R.string.permission_enabled else R.string.permission_filter_action,
+                ),
                 onAction = { enableFilter() },
             )
         }
@@ -414,11 +398,12 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         if (Config.featureCallLog) {
             Spacer(Modifier.height(12.dp))
             PermissionCard(
-                title = "Journal d'appels (métadonnées)",
+                title = stringResource(R.string.permission_call_log_title),
                 granted = callLogGranted,
-                explanation = "Partage qui/quand/durée des appels — jamais le contenu. " +
-                    "Tu peux refuser : cette fonction est facultative.",
-                actionLabel = if (callLogGranted) "Activé" else "Autoriser",
+                explanation = stringResource(R.string.permission_call_log_explanation),
+                actionLabel = stringResource(
+                    if (callLogGranted) R.string.permission_enabled else R.string.permission_call_log_action,
+                ),
                 onAction = { callLogPermission.launch(Manifest.permission.READ_CALL_LOG) },
             )
         }
@@ -432,7 +417,7 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(
-                            "Analyse de bien-être (sur l'appareil)",
+                            stringResource(R.string.safety_title),
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.weight(1f),
                         )
@@ -441,44 +426,42 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                             enabled = false,
                             label = {
                                 Text(
-                                    when {
-                                        !analysisEnabled -> "non activée par tes parents"
-                                        pauseActive -> "en pause"
-                                        listenerEnabled -> "✓ active"
-                                        else -> "accès à accorder"
-                                    },
+                                    stringResource(
+                                        when {
+                                            !analysisEnabled -> R.string.safety_status_not_enabled
+                                            pauseActive -> R.string.safety_status_paused
+                                            listenerEnabled -> R.string.safety_status_active
+                                            else -> R.string.safety_status_needs_access
+                                        },
+                                    ),
                                 )
                             },
                         )
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        if (analysisEnabled && listenerEnabled && !pauseActive)
-                            "Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer " +
-                                "des situations de danger. Tes parents ne reçoivent qu'une alerte de " +
-                                "catégorie — jamais le texte. C'est toi qui gardes la main : tu peux " +
-                                "retirer l'accès aux notifications à tout moment."
-                        else
-                            "Si tu l'actives, le texte de tes notifications SERA analysé SUR CET " +
-                                "APPAREIL pour repérer un danger — tes parents ne recevraient qu'une " +
-                                "alerte de catégorie, jamais le texte. Rien n'est analysé tant que " +
-                                "l'accès n'est pas accordé (et c'est en pause si tu le demandes).",
+                        stringResource(
+                            if (analysisEnabled && listenerEnabled && !pauseActive) R.string.safety_explanation_active
+                            else R.string.safety_explanation_inactive,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {
                         listenerSettings.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                    }) { Text(if (listenerEnabled) "Gérer l'accès aux notifications" else "Activer dans les réglages") }
+                    }) {
+                        Text(
+                            stringResource(
+                                if (listenerEnabled) R.string.safety_manage_access
+                                else R.string.permission_enable_in_settings,
+                            ),
+                        )
+                    }
 
                     if (analysisEnabled) {
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            if (pauseActive)
-                                "Pause active : l'analyse est suspendue. Tes parents voient " +
-                                    "qu'une pause est en cours (pas son contenu)."
-                            else
-                                "Besoin d'une bulle ? Mets l'analyse en pause. Tes parents verront " +
-                                    "qu'une pause est active, jamais ce qu'elle masque.",
+                            stringResource(if (pauseActive) R.string.safety_pause_active else R.string.safety_pause_hint),
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -493,7 +476,7 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                                     safetyBusy = false
                                 }
                             },
-                        ) { Text(if (pauseActive) "Reprendre l'analyse" else "Mettre en pause") }
+                        ) { Text(stringResource(if (pauseActive) R.string.safety_resume else R.string.safety_pause)) }
                     }
                 }
             }
@@ -502,19 +485,21 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             // catégorie + gravité + date). Jamais de contenu (il n'existe pas en base).
             if (mutualVisibility && mySignals.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                InfoCard("Ce que tes parents voient de ton côté (visibilité mutuelle)") {
+                InfoCard(stringResource(R.string.safety_mutual_title)) {
                     Spacer(Modifier.height(4.dp))
                     mySignals.take(20).forEach { s ->
+                        val category = stringResource(safetyCategoryLabelRes(s.category))
+                        val severity = stringResource(safetySeverityLabelRes(s.severity))
+                        val day = s.occurredAtIso.take(10)
                         Text(
-                            "•  ${safetyCategoryLabelFr(s.category)} — ${safetySeverityLabelFr(s.severity)}" +
-                                (s.occurredAtIso.take(10).let { if (it.isNotBlank()) " · $it" else "" }),
+                            if (day.isNotBlank()) stringResource(R.string.safety_signal_line_dated, category, severity, day)
+                            else stringResource(R.string.safety_signal_line, category, severity),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Spacer(Modifier.height(4.dp))
                     }
                     Text(
-                        "Ce sont les mêmes alertes de catégorie que tes parents reçoivent — " +
-                            "jamais le texte de tes messages.",
+                        stringResource(R.string.safety_mutual_footer),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -523,56 +508,55 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
 
         Spacer(Modifier.height(20.dp))
         Text(
-            "Tu peux à tout moment demander à tes parents de voir ce qui est enregistré, " +
-                "de le corriger ou de l'effacer.",
+            stringResource(R.string.rights_footer),
             style = MaterialTheme.typography.bodySmall,
         )
     }
 }
 
-/** Libellé FR d'une catégorie de signal (wire enum app.safety_category). */
-private fun safetyCategoryLabelFr(wire: String): String = when (wire) {
-    "harassment" -> "Harcèlement"
-    "grooming" -> "Contact suspect"
-    "sexual_content" -> "Contenu sexuel"
-    "self_harm" -> "Mal-être"
-    "drugs" -> "Drogues"
-    else -> "Autre"
+/** Libellé traduit d'une catégorie de signal (wire enum app.safety_category). */
+private fun safetyCategoryLabelRes(wire: String): Int = when (wire) {
+    "harassment" -> R.string.safety_category_harassment
+    "grooming" -> R.string.safety_category_grooming
+    "sexual_content" -> R.string.safety_category_sexual_content
+    "self_harm" -> R.string.safety_category_self_harm
+    "drugs" -> R.string.safety_category_drugs
+    else -> R.string.safety_category_other
 }
 
-/** Libellé FR d'une gravité de signal (wire enum app.safety_severity). */
-private fun safetySeverityLabelFr(wire: String): String = when (wire) {
-    "high" -> "gravité élevée"
-    "medium" -> "gravité moyenne"
-    else -> "gravité faible"
+/** Libellé traduit d'une gravité de signal (wire enum app.safety_severity). */
+private fun safetySeverityLabelRes(wire: String): Int = when (wire) {
+    "high" -> R.string.safety_severity_high
+    "medium" -> R.string.safety_severity_medium
+    else -> R.string.safety_severity_low
 }
 
 /** Résume le jeu de règles en phrases claires et non culpabilisantes (K2). */
-private fun summarizeRules(rules: RuleSet?): List<String> {
+private fun summarizeRules(rules: RuleSet?, res: Resources): List<String> {
     if (rules == null) return emptyList()
     val lines = mutableListOf<String>()
     val p = rules.policy
 
-    p?.dailyLimitMinutes?.let { lines += "Temps d'écran : $it min par jour (hors bonus)." }
-    if (rules.weekdayLimits.isNotEmpty()) lines += "Des limites différentes selon les jours de la semaine."
+    p?.dailyLimitMinutes?.let { lines += res.getString(R.string.rule_daily_limit, it) }
+    if (rules.weekdayLimits.isNotEmpty()) lines += res.getString(R.string.rule_weekday_limits)
 
     val blocked = rules.appRules.count { it.action == "block" }
     val limited = rules.appRules.count { it.action == "limit" }
     val always = rules.appRules.count { it.action == "always_allow" }
-    if (blocked > 0) lines += "$blocked élément(s) mis en pause (apps ou catégories)."
-    if (limited > 0) lines += "$limited élément(s) avec un temps limité par jour."
-    if (always > 0) lines += "$always application(s) toujours autorisées (dont l'essentiel)."
+    if (blocked > 0) lines += res.getQuantityString(R.plurals.rule_blocked_count, blocked, blocked)
+    if (limited > 0) lines += res.getQuantityString(R.plurals.rule_limited_count, limited, limited)
+    if (always > 0) lines += res.getQuantityString(R.plurals.rule_always_allowed_count, always, always)
 
     val kinds = rules.schedules.map { it.kind }.toSet()
-    if ("downtime" in kinds) lines += "Une heure du coucher (pause le soir)."
-    if ("blocked" in kinds) lines += "Des créneaux réservés (devoirs, repas…)."
-    if ("allowed" in kinds) lines += "Des plages d'utilisation autorisées."
-    if ("school" in kinds) lines += "Un mode École (seules les apps pour apprendre)."
+    if ("downtime" in kinds) lines += res.getString(R.string.rule_downtime)
+    if ("blocked" in kinds) lines += res.getString(R.string.rule_blocked_slots)
+    if ("allowed" in kinds) lines += res.getString(R.string.rule_allowed_slots)
+    if ("school" in kinds) lines += res.getString(R.string.rule_school_mode)
 
     if (p?.vacationFrom != null && p.vacationUntil != null)
-        lines += "Un mode vacances est programmé (du ${p.vacationFrom} au ${p.vacationUntil})."
-    if (p?.blockNewApps == true) lines += "Les nouvelles applications attendent l'accord de tes parents."
-    if (p?.lockSystemSettings == true) lines += "Certains réglages du téléphone sont verrouillés."
+        lines += res.getString(R.string.rule_vacation, p.vacationFrom, p.vacationUntil)
+    if (p?.blockNewApps == true) lines += res.getString(R.string.rule_block_new_apps)
+    if (p?.lockSystemSettings == true) lines += res.getString(R.string.rule_lock_settings)
 
     return lines
 }
@@ -602,7 +586,9 @@ private fun PermissionCard(
                 AssistChip(
                     onClick = {},
                     enabled = false,
-                    label = { Text(if (granted) "✓ accordé" else "non accordé") },
+                    label = {
+                        Text(stringResource(if (granted) R.string.permission_granted else R.string.permission_not_granted))
+                    },
                 )
             }
             Spacer(Modifier.height(6.dp))

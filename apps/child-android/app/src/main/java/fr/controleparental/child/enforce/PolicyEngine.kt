@@ -77,12 +77,12 @@ object PolicyEngine {
 
         // 3) Blocage explicite de l'app (B1).
         if (appRule?.action == "block") {
-            return Decision(true, BlockReason.BLOCK_APP, "Cette application est mise en pause par tes parents.")
+            return Decision(true, BlockReason.BLOCK_APP)
         }
 
         // 4) Pause instantanée (A8).
         if (pauseActive) {
-            return Decision(true, BlockReason.PAUSED, "Petite pause demandée par tes parents.")
+            return Decision(true, BlockReason.PAUSED)
         }
 
         val appExplicitlyAllowed = appRule?.action == "allow"
@@ -93,10 +93,10 @@ object PolicyEngine {
             for (s in rules.schedules) {
                 when (s.kind) {
                     "downtime" -> if (anyWindowActive(s.windows, clock)) {
-                        return Decision(true, BlockReason.SCHEDULE_DOWNTIME, "C'est l'heure de se reposer. À demain !")
+                        return Decision(true, BlockReason.SCHEDULE_DOWNTIME)
                     }
                     "blocked" -> if (anyWindowActive(s.windows, clock)) {
-                        return Decision(true, BlockReason.SCHEDULE_BLOCKED, "Ce créneau est réservé (devoirs, repas…).")
+                        return Decision(true, BlockReason.SCHEDULE_BLOCKED)
                     }
                 }
             }
@@ -105,26 +105,26 @@ object PolicyEngine {
             if (allowedSchedules.isNotEmpty() && !appExplicitlyAllowed) {
                 val inside = allowedSchedules.any { anyWindowActive(it.windows, clock) }
                 if (!inside) {
-                    return Decision(true, BlockReason.OUTSIDE_ALLOWED_WINDOW, "En dehors des plages autorisées.")
+                    return Decision(true, BlockReason.OUTSIDE_ALLOWED_WINDOW)
                 }
             }
             // Mode École : pendant les fenêtres, seules les apps autorisées passent.
             val schoolActive = rules.schedules.any { it.kind == "school" && anyWindowActive(it.windows, clock) }
             if (schoolActive && !appExplicitlyAllowed) {
-                return Decision(true, BlockReason.SCHOOL_MODE, "Mode École : seules les apps pour apprendre sont ouvertes.")
+                return Decision(true, BlockReason.SCHOOL_MODE)
             }
         }
 
         // 6) Blocage de catégorie (sauf si l'app est explicitement autorisée).
         if (!appExplicitlyAllowed && catRule?.action == "block") {
-            return Decision(true, BlockReason.BLOCK_CATEGORY, "Cette catégorie d'applications est en pause.")
+            return Decision(true, BlockReason.BLOCK_CATEGORY)
         }
 
         // 7) Validation d'installation (B2) : nouvelle app non approuvée.
         if (rules.policy?.blockNewApps == true && approvedPackages != null &&
             !appExplicitlyAllowed && pkg !in approvedPackages
         ) {
-            return Decision(true, BlockReason.NEW_APP_PENDING, "Nouvelle application : en attente d'accord de tes parents.")
+            return Decision(true, BlockReason.NEW_APP_PENDING)
         }
 
         // 8) Quotas de temps (bonus du jour inclus). always_allow déjà sorti.
@@ -134,14 +134,14 @@ object PolicyEngine {
                 val bonus = rules.grantsToday.filter { it.scopePackage == pkg }.sumOf { it.bonusMinutes }
                 val limitMs = (appRule.dailyLimitMinutes + bonus).toLong() * 60_000L
                 if (usagePkgMs >= limitMs) {
-                    return Decision(true, BlockReason.LIMIT_APP, "Temps atteint pour cette application aujourd'hui.")
+                    return Decision(true, BlockReason.LIMIT_APP)
                 }
             }
             // b) Quota par catégorie.
             if (catRule?.action == "limit" && catRule.dailyLimitMinutes != null) {
                 val limitMs = catRule.dailyLimitMinutes.toLong() * 60_000L
                 if (usageCatMs >= limitMs) {
-                    return Decision(true, BlockReason.LIMIT_CATEGORY, "Temps atteint pour cette catégorie aujourd'hui.")
+                    return Decision(true, BlockReason.LIMIT_CATEGORY)
                 }
             }
         }
@@ -150,7 +150,7 @@ object PolicyEngine {
         val globalLimit = effectiveGlobalLimitMinutes(rules, clock.dayOfWeek)
         if (globalLimit != null) {
             if (usageTotalMs >= globalLimit.toLong() * 60_000L) {
-                return Decision(true, BlockReason.LIMIT_GLOBAL, "Temps d'écran du jour atteint.")
+                return Decision(true, BlockReason.LIMIT_GLOBAL)
             }
         }
 

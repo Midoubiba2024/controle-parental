@@ -1,4 +1,174 @@
-<resources>
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LOT 9 — Textes de l'app enfant (français = langue par défaut).
+  Ajouter une langue : copier ce fichier dans res/values-<code>/strings.xml, traduire
+  les valeurs (jamais les name=, garder %1$s / %1$d), puis ajouter <code> dans
+  res/xml/locales_config.xml. Voir docs/13-I18N.md.
+  RÈGLE : plus jamais de texte visible en dur dans le code Kotlin.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Application -->
     <string name="app_name">Supervision familiale</string>
+
+    <!-- Notification de supervision (TRANSPARENCE : texte à conserver mot pour mot) -->
     <string name="supervision_channel">Supervision active</string>
+    <string name="supervision_channel_description">Indique que la supervision parentale est active.</string>
+    <string name="supervision_notification_title">Supervision parentale active</string>
+    <string name="supervision_notification_text">Tes parents t\'accompagnent. Touche pour voir tes données.</string>
+    <string name="extra_time_request_sent">Demande envoyée à tes parents.</string>
+    <string name="extra_time_request_failed">Demande impossible (hors ligne ?).</string>
+
+    <!-- Messages des parents (notification) -->
+    <string name="parent_messages_channel">Messages des parents</string>
+    <string name="parent_message_title">Message de tes parents</string>
+    <string name="parent_message_default">Message de tes parents.</string>
+
+    <!-- Filtrage du web (VPN local, notifications) -->
+    <string name="filter_vpn_session">Filtrage parental</string>
+    <string name="filter_channel">Filtrage du web</string>
+    <string name="filter_channel_description">Indique que le filtrage web parental est actif.</string>
+    <string name="filter_notification_title">Filtrage du web actif</string>
+    <string name="filter_notification_text">Les sites inappropriés sont filtrés. Touche pour en savoir plus.</string>
+    <string name="filter_disabled_channel">Filtrage désactivé</string>
+    <string name="filter_disabled_title">Filtrage du web désactivé</string>
+    <string name="filter_disabled_text">Le filtrage a été coupé. Tes parents en sont informés (rien n\'est caché).</string>
+
+    <!-- Écran de pause (overlay) -->
+    <string name="block_title">Pause</string>
+    <string name="block_default">Cette application est momentanément en pause.</string>
+    <string name="block_request_more_time">Demander plus de temps</string>
+    <string name="block_go_home">Retour à l\'accueil</string>
+    <string name="block_emergency_call">Appel d\'urgence (112)</string>
+    <string name="block_reason_block_app">Cette application est mise en pause par tes parents.</string>
+    <string name="block_reason_paused">Petite pause demandée par tes parents.</string>
+    <string name="block_reason_schedule_downtime">C\'est l\'heure de se reposer. À demain !</string>
+    <string name="block_reason_schedule_blocked">Ce créneau est réservé (devoirs, repas…).</string>
+    <string name="block_reason_outside_allowed_window">En dehors des plages autorisées.</string>
+    <string name="block_reason_school_mode">Mode École : seules les apps pour apprendre sont ouvertes.</string>
+    <string name="block_reason_block_category">Cette catégorie d\'applications est en pause.</string>
+    <string name="block_reason_new_app_pending">Nouvelle application : en attente d\'accord de tes parents.</string>
+    <string name="block_reason_limit_app">Temps atteint pour cette application aujourd\'hui.</string>
+    <string name="block_reason_limit_category">Temps atteint pour cette catégorie aujourd\'hui.</string>
+    <string name="block_reason_limit_global">Temps d\'écran du jour atteint.</string>
+
+    <!-- Appairage -->
+    <string name="pairing_title">Associer cet appareil</string>
+    <string name="pairing_intro">Saisis le code à 8 chiffres affiché par tes parents dans leur application.</string>
+    <string name="pairing_code_label">Code d\'appairage</string>
+    <string name="pairing_submit">Associer</string>
+    <string name="pairing_submitting">Association…</string>
+    <string name="pairing_transparency">Cette application est visible et t\'informera toujours de ce qui est partagé avec tes parents. Rien n\'est caché.</string>
+    <string name="pairing_error_invalid_format">Le code doit comporter 8 chiffres.</string>
+    <string name="pairing_error_not_found">Code introuvable. Vérifie la saisie.</string>
+    <string name="pairing_error_already_used">Ce code a déjà été utilisé.</string>
+    <string name="pairing_error_expired">Ce code a expiré. Demande-en un nouveau.</string>
+    <string name="pairing_error_generic">Échec de l\'association (%1$s).</string>
+
+    <!-- Mes données — écran de transparence (TEXTES À CONSERVER MOT POUR MOT) -->
+    <string name="mydata_title">Mes données</string>
+    <string name="mydata_intro">Tes parents t\'accompagnent via cette application. Elle reste visible : tu peux voir ici tout ce qui est partagé. Rien n\'est caché, et jamais le contenu de tes messages, appels ou de ce que tu regardes.</string>
+    <string name="mydata_list_item">"•  %1$s"</string>
+    <string name="sos_title">Besoin d\'aide ? SOS</string>
+    <string name="sos_intro">Envoie une alerte à tes parents avec ta position en direct. C\'est toi qui le déclenches. Les appels d\'urgence (112) restent toujours possibles, séparément.</string>
+    <string name="sos_button">"🆘  Envoyer un SOS"</string>
+    <string name="sos_sending">Envoi…</string>
+    <string name="sos_sent">SOS envoyé. Tes parents sont prévenus et voient ta position en direct.</string>
+    <string name="sos_failed">Impossible d\'envoyer le SOS (pas de réseau ?). Réessaie ou appelle le 112.</string>
+    <string name="supervision_level_label">Niveau de supervision</string>
+    <string name="supervision_level_reinforced">Renforcé</string>
+    <string name="supervision_level_standard">Standard</string>
+    <string name="shared_title">Ce qui est partagé avec tes parents</string>
+    <string name="shared_usage">Le temps que tu passes sur chaque application (durées seulement).</string>
+    <string name="shared_inventory">La liste des applications installées sur l\'appareil.</string>
+    <string name="shared_device">Le niveau de batterie et l\'espace de stockage de l\'appareil.</string>
+    <string name="shared_location_off">Ta position : partage désactivé pour l\'instant.</string>
+    <string name="shared_location_periodic">Ta position, de temps en temps et quand tes parents la demandent — et en direct seulement si tu déclenches un SOS. Jamais en secret.</string>
+    <string name="shared_location_on_demand">Ta position quand tes parents la demandent (check-in), et en direct seulement si tu déclenches un SOS. Jamais en secret.</string>
+    <string name="shared_call_log">Le journal des appels en métadonnées : qui (sans le numéro en clair), quand et combien de temps — jamais ce qui a été dit.</string>
+    <string name="shared_filter">Le filtrage du web bloque certains sites. Le journal retient seulement le nom de domaine (ex. « exemple.com »), sa catégorie et l\'heure — jamais les pages que tu consultes ni leur contenu.</string>
+    <string name="shared_filter_log_allowed">En ce moment, le nom (pas le contenu) de CHAQUE site que tu visites est enregistré — pas seulement les sites bloqués. Tes parents ont activé ce réglage ; tu peux leur demander de le désactiver.</string>
+    <string name="shared_safety_active">Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer des situations de danger (harcèlement, mal-être, contact suspect…). Tes parents reçoivent seulement une ALERTE de catégorie (ex. « harcèlement ») — JAMAIS tes messages, jamais le texte. Tu peux l\'arrêter ou mettre une pause.</string>
+    <string name="shared_safety_pending">Le texte de tes notifications SERA analysé sur cet appareil (pour repérer un danger) UNIQUEMENT quand tu auras accordé l\'accès aux notifications et hors pause. Même alors, tes parents ne reçoivent qu\'une alerte de catégorie — jamais tes messages.</string>
+    <string name="never_shared">Jamais partagé : le contenu de tes messages et appels, le texte de tes notifications, les pages web que tu consultes, tes mots de passe, ni l\'image de ton écran, de ta caméra ou de ton micro. Le filtrage regarde seulement le nom du site (DNS), jamais ce qu\'il y a dedans ; l\'analyse de bien-être reste sur l\'appareil et n\'en fait sortir qu\'une alerte de catégorie.</string>
+    <string name="rules_title">Mes règles en ce moment</string>
+    <string name="rules_card_label">Règles d\'accès définies par mes parents</string>
+    <string name="rules_none">Aucune règle particulière pour l\'instant.</string>
+    <string name="rules_footer">Tu peux demander plus de temps directement sur l\'écran de pause. Les appels d\'urgence (112) restent toujours possibles.</string>
+    <string name="parent_messages_title">Messages de mes parents</string>
+    <string name="permissions_title">Autorisations</string>
+    <string name="permission_granted">✓ accordé</string>
+    <string name="permission_not_granted">non accordé</string>
+    <string name="permission_enabled">Activé</string>
+    <string name="permission_enable_in_settings">Activer dans les réglages</string>
+    <string name="permission_usage_title">Accès au temps d\'écran</string>
+    <string name="permission_usage_explanation">Permet de calculer le temps passé par application. À activer dans les réglages du téléphone.</string>
+    <string name="permission_overlay_title">Affichage de l\'écran de pause</string>
+    <string name="permission_overlay_explanation">Permet d\'afficher l\'écran de pause quand une limite est atteinte. Sans cette autorisation, la pause s\'affiche moins bien.</string>
+    <string name="permission_location_title">Localisation</string>
+    <string name="permission_location_explanation">Permet de partager ta position avec tes parents (check-in, zones « bien arrivé », et SOS). Tu la vois toujours dans cet écran — rien n\'est caché.</string>
+    <string name="permission_location_action">Autoriser la position</string>
+    <string name="permission_bg_location_title">Position en arrière-plan</string>
+    <string name="permission_bg_location_explanation">Pour que les zones de sécurité fonctionnent même quand l\'app est fermée. Choisis « Toujours autoriser » dans les réglages. Tu peux refuser : le partage marchera quand l\'app est ouverte.</string>
+    <string name="permission_bg_location_action">Autoriser en arrière-plan</string>
+    <string name="permission_filter_title">Filtrage du web</string>
+    <string name="permission_filter_explanation">Bloque les sites inappropriés en filtrant les noms de domaine (DNS), sur l\'appareil. Aucun site n\'est espionné : on ne regarde jamais le contenu des pages.</string>
+    <string name="permission_filter_whitelist">Mode liste blanche : seuls les sites autorisés s\'ouvrent.</string>
+    <plurals name="permission_filter_blocked_categories">
+        <item quantity="one">%1$d catégorie(s) bloquée(s).</item>
+        <item quantity="other">%1$d catégorie(s) bloquée(s).</item>
+    </plurals>
+    <string name="permission_filter_safe_search">Recherche sécurisée activée.</string>
+    <string name="permission_filter_action">Activer le filtrage</string>
+    <string name="permission_call_log_title">Journal d\'appels (métadonnées)</string>
+    <string name="permission_call_log_explanation">Partage qui/quand/durée des appels — jamais le contenu. Tu peux refuser : cette fonction est facultative.</string>
+    <string name="permission_call_log_action">Autoriser</string>
+    <string name="safety_title">Analyse de bien-être (sur l\'appareil)</string>
+    <string name="safety_status_not_enabled">non activée par tes parents</string>
+    <string name="safety_status_paused">en pause</string>
+    <string name="safety_status_active">✓ active</string>
+    <string name="safety_status_needs_access">accès à accorder</string>
+    <string name="safety_explanation_active">Le texte de tes notifications EST analysé SUR CET APPAREIL pour repérer des situations de danger. Tes parents ne reçoivent qu\'une alerte de catégorie — jamais le texte. C\'est toi qui gardes la main : tu peux retirer l\'accès aux notifications à tout moment.</string>
+    <string name="safety_explanation_inactive">Si tu l\'actives, le texte de tes notifications SERA analysé SUR CET APPAREIL pour repérer un danger — tes parents ne recevraient qu\'une alerte de catégorie, jamais le texte. Rien n\'est analysé tant que l\'accès n\'est pas accordé (et c\'est en pause si tu le demandes).</string>
+    <string name="safety_manage_access">Gérer l\'accès aux notifications</string>
+    <string name="safety_pause_active">Pause active : l\'analyse est suspendue. Tes parents voient qu\'une pause est en cours (pas son contenu).</string>
+    <string name="safety_pause_hint">Besoin d\'une bulle ? Mets l\'analyse en pause. Tes parents verront qu\'une pause est active, jamais ce qu\'elle masque.</string>
+    <string name="safety_resume">Reprendre l\'analyse</string>
+    <string name="safety_pause">Mettre en pause</string>
+    <string name="safety_mutual_title">Ce que tes parents voient de ton côté (visibilité mutuelle)</string>
+    <string name="safety_signal_line">"•  %1$s — %2$s"</string>
+    <string name="safety_signal_line_dated">"•  %1$s — %2$s · %3$s"</string>
+    <string name="safety_mutual_footer">Ce sont les mêmes alertes de catégorie que tes parents reçoivent — jamais le texte de tes messages.</string>
+    <string name="safety_category_harassment">Harcèlement</string>
+    <string name="safety_category_grooming">Contact suspect</string>
+    <string name="safety_category_sexual_content">Contenu sexuel</string>
+    <string name="safety_category_self_harm">Mal-être</string>
+    <string name="safety_category_drugs">Drogues</string>
+    <string name="safety_category_other">Autre</string>
+    <string name="safety_severity_high">gravité élevée</string>
+    <string name="safety_severity_medium">gravité moyenne</string>
+    <string name="safety_severity_low">gravité faible</string>
+    <string name="rights_footer">Tu peux à tout moment demander à tes parents de voir ce qui est enregistré, de le corriger ou de l\'effacer.</string>
+
+    <!-- Résumé des règles (Mes données) -->
+    <string name="rule_daily_limit">Temps d\'écran : %1$d min par jour (hors bonus).</string>
+    <string name="rule_weekday_limits">Des limites différentes selon les jours de la semaine.</string>
+    <plurals name="rule_blocked_count">
+        <item quantity="one">%1$d élément(s) mis en pause (apps ou catégories).</item>
+        <item quantity="other">%1$d élément(s) mis en pause (apps ou catégories).</item>
+    </plurals>
+    <plurals name="rule_limited_count">
+        <item quantity="one">%1$d élément(s) avec un temps limité par jour.</item>
+        <item quantity="other">%1$d élément(s) avec un temps limité par jour.</item>
+    </plurals>
+    <plurals name="rule_always_allowed_count">
+        <item quantity="one">%1$d application(s) toujours autorisées (dont l\'essentiel).</item>
+        <item quantity="other">%1$d application(s) toujours autorisées (dont l\'essentiel).</item>
+    </plurals>
+    <string name="rule_downtime">Une heure du coucher (pause le soir).</string>
+    <string name="rule_blocked_slots">Des créneaux réservés (devoirs, repas…).</string>
+    <string name="rule_allowed_slots">Des plages d\'utilisation autorisées.</string>
+    <string name="rule_school_mode">Un mode École (seules les apps pour apprendre).</string>
+    <string name="rule_vacation">Un mode vacances est programmé (du %1$s au %2$s).</string>
+    <string name="rule_block_new_apps">Les nouvelles applications attendent l\'accord de tes parents.</string>
+    <string name="rule_lock_settings">Certains réglages du téléphone sont verrouillés.</string>
 </resources>

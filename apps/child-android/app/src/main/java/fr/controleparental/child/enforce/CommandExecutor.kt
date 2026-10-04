@@ -10,6 +10,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.location.LocationCoordinator
 
@@ -87,7 +88,7 @@ class CommandExecutor(
             "resume" -> cache.pauseActive = false
             "lock_now" -> if (!reinforced.lockNow()) cache.pauseActive = true
             "ring" -> ring()
-            "message" -> notifyMessage(c.payload.optString("message").ifBlank { "Message de tes parents." }, CMD_MSG_NOTIF_ID)
+            "message" -> notifyMessage(c.payload.optString("message").ifBlank { context.getString(R.string.parent_message_default) }, CMD_MSG_NOTIF_ID)
             "locate" -> location?.checkInOnDemand()
         }
     }
@@ -115,11 +116,11 @@ class CommandExecutor(
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Messages des parents", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(CHANNEL, context.getString(R.string.parent_messages_channel), NotificationManager.IMPORTANCE_HIGH),
             )
         }
         val n = NotificationCompat.Builder(context, CHANNEL)
-            .setContentTitle("Message de tes parents")
+            .setContentTitle(context.getString(R.string.parent_message_title))
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setSmallIcon(android.R.drawable.ic_dialog_email)
