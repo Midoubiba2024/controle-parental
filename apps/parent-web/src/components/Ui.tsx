@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useI18n } from "../i18n";
 
 export function Tile({
   label, value, icon, iconBg, delta,
@@ -9,6 +10,7 @@ export function Tile({
   iconBg?: string;
   delta?: { pct: number | null; invert?: boolean; label?: string };
 }) {
+  const { t } = useI18n();
   return (
     <div className="card tile">
       <div className="label">
@@ -19,7 +21,7 @@ export function Tile({
       {delta && delta.pct != null && (
         // pct === 0 : état NEUTRE (ni hausse ni baisse) — pas de flèche rouge trompeuse.
         <div className={`delta ${delta.pct === 0 ? "flat" : (delta.invert ? -delta.pct : delta.pct) > 0 ? "up" : "down"}`}>
-          {delta.pct > 0 ? "▲" : delta.pct < 0 ? "▼" : "■"} {Math.abs(delta.pct)}% {delta.label ?? "vs période précédente"}
+          {delta.pct > 0 ? "▲" : delta.pct < 0 ? "▼" : "■"} {t("ui.tile.deltaPct", { pct: Math.abs(delta.pct) })} {delta.label ?? t("ui.tile.vsPrevious")}
         </div>
       )}
     </div>

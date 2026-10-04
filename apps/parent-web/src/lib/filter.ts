@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { errorMessage, labelMap, t } from "../i18n";
 import type {
   AccessRequest, AgeProfile, DomainEvent, FilterCategory, FilterPolicy,
   FilterRule, FilterStatus, YoutubeMode,
@@ -48,7 +49,7 @@ export function useFilter(familyId: string | null, childId: string | null): Filt
         .eq("kind", "browse").eq("status", "pending").order("created_at", { ascending: false }),
     ]);
 
-    if (pol.error) setError(pol.error.message); else setPolicy((pol.data as FilterPolicy) ?? null);
+    if (pol.error) setError(errorMessage(pol.error)); else setPolicy((pol.data as FilterPolicy) ?? null);
     if (!fr.error) setRules(fr.data as FilterRule[]);
     if (!ev.error) setEvents(ev.data as DomainEvent[]);
     if (!st.error) setStatus(st.data as FilterStatus[]);
@@ -64,23 +65,25 @@ export function useFilter(familyId: string | null, childId: string | null): Filt
 
 /* --------------------------- Catalogue de catégories --------------------- */
 // Chaque catégorie porte son identité par le LIBELLÉ + l'icône (jamais la
-// couleur seule → CVD-safe). Le point coloré n'est que décoratif.
-export const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: string; hint: string }[] = [
-  { key: "adult",        label: "Contenu adulte",       icon: "🔞", hint: "Pornographie et contenu explicite (C7)." },
-  { key: "violence",     label: "Violence",             icon: "⚔️", hint: "Sites violents ou choquants." },
-  { key: "gambling",     label: "Jeux d'argent",        icon: "🎰", hint: "Paris, casinos, loteries." },
-  { key: "drugs",        label: "Drogues",              icon: "💊", hint: "Vente / promotion de stupéfiants." },
-  { key: "weapons",      label: "Armes",                icon: "🔫", hint: "Vente d'armes." },
-  { key: "hate",         label: "Haine",                icon: "🚫", hint: "Discours de haine, extrémisme." },
-  { key: "dating",       label: "Rencontres",           icon: "💘", hint: "Sites et applications de rencontre." },
-  { key: "social",       label: "Réseaux sociaux",      icon: "💬", hint: "Plateformes sociales (médiation par âge)." },
-  { key: "piracy",       label: "Piratage",             icon: "🏴‍☠️", hint: "Téléchargement illégal, torrents." },
-  { key: "malware",      label: "Sites malveillants",   icon: "🦠", hint: "Hameçonnage, logiciels malveillants." },
-  { key: "ads_trackers", label: "Pubs & traceurs",      icon: "📊", hint: "Publicités et pisteurs." },
+// couleur seule → CVD-safe). Le point coloré n'est que décoratif. Libellé et
+// aide sont traduits (enums.filterCategory.*) et relus à chaque accès (getters).
+export interface FilterCategoryInfo { key: FilterCategory; icon: string; readonly label: string; readonly hint: string }
+
+const FILTER_CATEGORY_ICONS: [FilterCategory, string][] = [
+  ["adult", "🔞"], ["violence", "⚔️"], ["gambling", "🎰"], ["drugs", "💊"],
+  ["weapons", "🔫"], ["hate", "🚫"], ["dating", "💘"], ["social", "💬"],
+  ["piracy", "🏴‍☠️"], ["malware", "🦠"], ["ads_trackers", "📊"],
 ];
 
+export const FILTER_CATEGORIES: FilterCategoryInfo[] = FILTER_CATEGORY_ICONS.map(([key, icon]) => ({
+  key,
+  icon,
+  get label() { return t(`enums.filterCategory.${key}.label`); },
+  get hint() { return t(`enums.filterCategory.${key}.hint`); },
+}));
+
 export function categoryLabel(cat: FilterCategory | null): string {
-  if (!cat) return "Liste noire";
+  if (!cat) return t("enums.filterCategory.blacklist");
   return FILTER_CATEGORIES.find((c) => c.key === cat)?.label ?? cat;
 }
 
@@ -96,7 +99,7 @@ export function filterCategoryColor(cat: FilterCategory | null): string {
 // adult (C7) est 'must' dans TOUS les presets. Graduation par âge :
 //   jeune enfant → liste blanche stricte ; (pré)ado → catégories + Ask-to-Browse.
 export interface FilterPreset {
-  label: string;
+  readonly label: string;    // traduit (getter : relu dans la langue active)
   blocked_categories: FilterCategory[];
   safe_search: boolean;
   youtube_restriction: YoutubeMode;
@@ -106,7 +109,7 @@ export interface FilterPreset {
 
 export const FILTER_PRESETS: Record<AgeProfile, FilterPreset> = {
   young_child: {
-    label: "Jeune enfant (~6 ans)",
+    get label() { return t("enums.ageProfilePreset.young_child"); },
     blocked_categories: [
       "adult", "violence", "gambling", "drugs", "weapons", "hate",
       "dating", "piracy", "malware", "ads_trackers",
@@ -117,7 +120,7 @@ export const FILTER_PRESETS: Record<AgeProfile, FilterPreset> = {
     ask_to_browse: false,
   },
   preteen: {
-    label: "Pré-ado (~12 ans)",
+    get label() { return t("enums.ageProfilePreset.preteen"); },
     // 'dating' et 'social' bloqués par défaut (paramètres protecteurs K5 ; décision
     // du propriétaire pour ~12 ans). Le parent peut rouvrir chaque catégorie.
     blocked_categories: [
@@ -130,7 +133,7 @@ export const FILTER_PRESETS: Record<AgeProfile, FilterPreset> = {
     ask_to_browse: true,    // co-régulation
   },
   teen: {
-    label: "Ado (15 ans+)",
+    get label() { return t("enums.ageProfilePreset.teen"); },
     blocked_categories: ["adult", "gambling", "malware"],
     safe_search: false,
     youtube_restriction: "off",
@@ -139,17 +142,11 @@ export const FILTER_PRESETS: Record<AgeProfile, FilterPreset> = {
   },
 };
 
-export const YOUTUBE_MODE_LABEL: Record<YoutubeMode, string> = {
-  off: "Désactivé",
-  moderate: "Modéré",
-  strict: "Strict",
-};
+export const YOUTUBE_MODE_LABEL: Readonly<Record<YoutubeMode, string>> = labelMap(
+  ["off", "moderate", "strict"], (k) => t(`enums.youtubeMode.${k}`));
 
-export const DOMAIN_ACTION_LABEL: Record<DomainEvent["action"], string> = {
-  blocked: "Bloqué",
-  allowed: "Autorisé",
-  rewritten: "Réécrit (SafeSearch)",
-};
+export const DOMAIN_ACTION_LABEL: Readonly<Record<DomainEvent["action"], string>> = labelMap(
+  ["blocked", "allowed", "rewritten"], (k) => t(`enums.domainAction.${k}`));
 
 /* --------------------------- Normalisation de domaine -------------------- */
 // Hostname nu, minuscules, sans schéma/chemin/port. Renvoie null si invalide.
