@@ -816,7 +816,7 @@ declare
   -- marques bidi (LRM/RLM/ALM, LRE…RLO, LRI…PDI), largeur nulle, séparateurs de
   -- ligne/paragraphe, BOM, ancres d'annotation (revue L12 #8).
   v_strip      constant text :=
-    '[[:cntrl:]­؜᠎​-‏ -‮⁠-⁯﻿￹-￻]';
+    '[[:cntrl:]\u00AD\u061C\u180E\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB]';
   v_window     interval := interval '15 minutes';
   v_max_user   integer := coalesce(nullif(current_setting('app.pairing_max_failures_user', true), '')::integer, 5);
   v_max_global integer := coalesce(nullif(current_setting('app.pairing_max_failures_global', true), '')::integer, 100);
