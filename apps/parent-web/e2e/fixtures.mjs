@@ -213,5 +213,6 @@ export const TABLES = {
 };
 
 export const RPC = {
-  pairing_start: () => ({ code: "53381539", expires_at: iso(now + 10 * MIN) }),
+  // Code FICTIF au format LOT 12 : 10 caractères base32 Crockford, groupé 5+5.
+  pairing_start: () => ({ code: "7KQ2MX9D4F", code_display: "7KQ2M-X9D4F", expires_at: iso(now + 10 * MIN), mode: "standard" }),
 };

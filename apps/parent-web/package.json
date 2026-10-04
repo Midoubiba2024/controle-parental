@@ -12,6 +12,7 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:theme": "node scripts/check-theme-colors.mjs",
     "check:fonts": "node scripts/check-lazy-fonts.mjs",
+    "check:devices": "node scripts/check-devices.mjs",
     "e2e:visual": "node e2e/visual.mjs"
   },
   "dependencies": {

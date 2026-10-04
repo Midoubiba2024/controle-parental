@@ -66,8 +66,10 @@ Toutes les tables métier portent `family_id` pour l'isolation RLS.
 - **Chiffrement** : au repos par défaut ; secrets (FCM/APNs) dans **Vault** (jamais en clair) ;
   Storage privé + URLs signées à TTL court ; pour les données ultra-sensibles, **chiffrement applicatif
   côté client** (clé non détenue par le serveur). **Ne jamais déchiffrer le HTTPS de l'enfant.**
-- **Appairage** : code court (6–8 chiffres) ou QR généré par le parent via Edge Function, **TTL ~5 min,
-  usage unique, stocké haché**. L'appareil enfant échange le code contre un token d'enrôlement.
+- **Appairage** (LOT 12) : code de **10 caractères base32 Crockford** (`7KQ2M-X9D4F`, ≈ 10^15
+  combinaisons) généré par le parent via la RPC `pairing_start`, **TTL 10 min, usage unique, stocké
+  haché**. L'appareil enfant ouvre une **session anonyme** Supabase puis appelle la RPC
+  `pairing_complete` (limites anti force brute en base) ; sa session devient celle de l'appareil.
 - **Audit** : `audit_log` **append-only** (trigger refusant UPDATE/DELETE) ; `pgAudit` niveau base.
 - **Advisors Supabase** (sécurité/perf) suivis en continu.
 

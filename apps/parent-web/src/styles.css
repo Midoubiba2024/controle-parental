@@ -834,12 +834,17 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 }
 .ticket.expired .digits { opacity: .45; text-decoration: line-through; text-decoration-thickness: 2px; }
 .ticket .kicker { margin: 0; font-size: var(--fs-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--c-sand-ink); }
+/* Code d'appairage (LOT 12) : 10 caractères base32 Crockford en 2 groupes de 5.
+   Police à chasse fixe (chiffres ET lettres de même largeur, 0 barré) : groupes
+   alignés et caractères proches (8/B, 5/S, 2/Z) mieux distingués. Retour à la
+   ligne seulement ENTRE les groupes. */
 .ticket .digits {
-  margin: 4px 0 0; font-family: var(--font-body); font-size: 40px; font-weight: 600; line-height: 1.15;
-  letter-spacing: 0.14em; font-variant-numeric: tabular-nums lining-nums; direction: ltr; unicode-bidi: isolate;
-  overflow-wrap: anywhere;
+  margin: 4px 0 0; font-family: var(--font-mono); font-size: 36px; font-weight: 600; line-height: 1.2;
+  letter-spacing: 0.08em; font-variant-numeric: tabular-nums lining-nums slashed-zero; direction: ltr; unicode-bidi: isolate;
+  display: flex; flex-wrap: wrap; align-items: baseline;
 }
-.ticket .digits .grp + .grp { margin-inline-start: .35em; }
+.ticket .digits .grp { white-space: nowrap; }
+.ticket .digits .sep { margin-inline: .12em; opacity: .55; font-weight: 500; }
 .ticket .exp { margin: 6px 0 0; display: flex; align-items: center; gap: 6px; font-size: var(--fs-small); color: var(--c-sand-ink); }
 .ticket .copy {
   min-height: 48px; border-radius: var(--r-lg); background: var(--c-surface); color: var(--c-ink);
@@ -1092,7 +1097,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
   .tile-value { font-size: 26px; }
   .transparency { padding: 18px 16px; }
   .app-list .bar-track { display: none; }
-  .ticket .digits { font-size: 34px; letter-spacing: .1em; }
+  .ticket .digits { font-size: 28px; letter-spacing: .06em; }
   /* Tiroir : sections resserrées + ombre de défilement en bas si le pied déborde. */
   .sidebar { gap: 16px; }
   .nav { gap: 12px; }

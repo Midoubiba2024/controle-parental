@@ -172,6 +172,8 @@ jobs:
       - run: npm run typecheck
       # LOT 9 : catalogues de traduction cohérents (clés, paramètres, pluriels).
       - run: npm run check:i18n
+      # LOT 12 : « Localiser » / commandes visent l'appareil ACTIF le plus récent.
+      - run: npm run check:devices
       # LOT 10/11 : identités visuelles cohérentes (fonds, mêmes jetons partout, blocs sombres, contrastes WCAG).
       - run: npm run check:theme
       - run: npm run build

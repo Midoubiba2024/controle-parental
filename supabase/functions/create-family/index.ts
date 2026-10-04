@@ -1,74 +1,26 @@
-// Edge Function : create-family
-// Crée un foyer et l'appartenance "owner" du parent appelant, de façon atomique
-// (via service_role, car la RLS interdit l'INSERT direct sur families/owner).
+// Edge Function : create-family — RETIRÉE (LOT 12). Ne fait plus RIEN : répond 410.
 //
-// Entrée  : { name: string }   (JWT parent requis dans Authorization)
-// Sortie  : { family: {...} }
+// La console parent appelle supabase.rpc('create_family', { p_name }).
+// Remplacée par la RPC SECURITY DEFINER public.create_family (migrations 0027/0028/0031).
+//
+// POURQUOI un bouchon plutôt que l'ancien code : l'ancienne version utilisait la
+// clé service_role et, pour pairing-complete, répondait SANS JWT et SANS limite de
+// tentatives (404/409/410/500 distincts) — un oracle de codes d'appairage qui
+// contournait l'anti force brute de la RPC (revue de sécurité L12 #4). Ce bouchon
+// n'utilise AUCUNE clé ni AUCUN secret et ne touche pas à la base.
+// À dépublier (supabase functions delete create-family) une fois les clients migrés ;
+// retirer aussi le secret PAIRING_PEPPER des Edge Functions s'il est défini.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// CORS (voir supabase/functions/_shared/cors.ts pour la version de référence).
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 
-Deno.serve(async (req) => {
+Deno.serve((req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
-
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-  const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) return json({ error: "unauthenticated" }, 401);
-
-  // Client "utilisateur" pour identifier l'appelant depuis son JWT.
-  const userClient = createClient(SUPABASE_URL, ANON, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: "unauthenticated" }, 401);
-  const user = userData.user;
-
-  let body: { name?: string };
-  try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
-  const name = (body.name ?? "").trim();
-  if (name.length < 1 || name.length > 120) return json({ error: "invalid_name" }, 400);
-
-  // Client privilégié : insertions atomiques (RLS contournée côté serveur).
-  const admin = createClient(SUPABASE_URL, SERVICE, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const { data: family, error: famErr } = await admin
-    .from("families")
-    .insert({ name, created_by: user.id })
-    .select()
-    .single();
-  if (famErr) return json({ error: "family_insert_failed", detail: famErr.message }, 500);
-
-  const { error: memErr } = await admin
-    .from("memberships")
-    .insert({ family_id: family.id, user_id: user.id, role: "owner" });
-  if (memErr) {
-    // Compensation : éviter une famille orpheline sans owner.
-    await admin.from("families").delete().eq("id", family.id);
-    return json({ error: "membership_insert_failed", detail: memErr.message }, 500);
-  }
-
-  await admin.from("audit_log").insert({
-    family_id: family.id, actor_id: user.id, actor_role: "owner",
-    action: "family.created", target_table: "families", target_id: family.id,
-    detail: { name },
-  });
-
-  return json({ family });
+  return new Response(
+    JSON.stringify({ error: "endpoint_gone", use_rpc: "create_family" }),
+    { status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 });

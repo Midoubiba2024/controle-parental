@@ -9,6 +9,7 @@ import { ic } from "../icons";
 import { useI18n, Trans } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
 import type { Child, LocationFix } from "../../lib/types";
+import { latestActiveDevice } from "../../lib/devices";
 
 /* =============================================================================
    LOT 3 — Vue « Localisation » : carte (Leaflet + OpenStreetMap), dernière
@@ -80,7 +81,9 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
 
   const path = useMemo(() => shown.map((f) => ({ lat: f.latitude, lng: f.longitude })), [shown]);
 
-  const device = loc.devices.find((d) => !d.revoked_at) ?? loc.devices[0] ?? null;
+  // Appareil ACTIF le plus récent (un ancien appareil non retiré ne doit pas
+  // capter « Localiser maintenant »).
+  const device = latestActiveDevice(loc.devices) ?? loc.devices[0] ?? null;
 
   async function doLocate() {
     if (!device) return;
