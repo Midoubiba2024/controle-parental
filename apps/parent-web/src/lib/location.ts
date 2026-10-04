@@ -148,6 +148,23 @@ export async function saveLocationSettings(
   return { error: error ? errorMessage(error) : null };
 }
 
+/**
+ * Alertes d'entrée/sortie de zones (réglage SÉPARÉ du partage de position). Si la
+ * colonne n'existe pas encore (migration 0030 non appliquée : 42703 côté Postgres,
+ * PGRST204 côté PostgREST), on le signale proprement au lieu d'une erreur brute.
+ */
+export async function saveGeofenceAlerts(
+  familyId: string, childId: string, enabled: boolean,
+): Promise<{ error: string | null; unavailable?: boolean }> {
+  const { error } = await supabase.from("location_settings").upsert(
+    { family_id: familyId, child_id: childId, geofence_alerts_enabled: enabled },
+    { onConflict: "child_id" });
+  if (error && (error.code === "42703" || error.code === "PGRST204")) {
+    return { error: t("views.security.zones.alertsUnavailable"), unavailable: true };
+  }
+  return { error: error ? errorMessage(error) : null };
+}
+
 export interface GeofenceInput {
   id?: string;
   name: string;

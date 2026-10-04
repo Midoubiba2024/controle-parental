@@ -740,6 +740,10 @@ const fr = {
         addButton: "Ajouter une zone",
         emptyTitle: "Aucune zone définie",
         emptyHint: "Ajoutez la maison et l’école pour recevoir une alerte « bien arrivé » lors des trajets.",
+        // Réglage SÉPARÉ du partage de position (location_settings.geofence_alerts_enabled).
+        alertsToggle: "<b>Alertes d’entrée et de sortie de zones</b>",
+        alertsHint: "Fonctionne indépendamment du partage de position. {name} en est informé(e) dans « Mes données ».",
+        alertsUnavailable: "Réglage bientôt disponible : la mise à jour du serveur n’est pas encore appliquée.",
         // {alerts} = une des valeurs notify* ci-dessous (ou vide)
         summary: "rayon {radius} m · {alerts}",
         summaryDisabled: "rayon {radius} m · {alerts} · désactivée",
@@ -883,7 +887,7 @@ const fr = {
       // Droit d'accès (export JSON).
       export: {
         title: "Exporter les données de {name} <muted>(droit d’accès)</muted>",
-        intro: "Télécharge un fichier JSON (format de données standard, lisible par d’autres logiciels) avec toutes les données enregistrées pour cet enfant (métadonnées et agrégats — jamais le contenu de tiers). L’export est inscrit au journal d’audit, visible de l’enfant.",
+        intro: "Télécharge un fichier JSON (format de données standard, lisible par d’autres logiciels) avec toutes les données enregistrées pour cet enfant (métadonnées et agrégats — jamais le contenu de tiers). L’export est inscrit au journal d’audit.",
         preparing: "Préparation…",
         button: "Télécharger l’export (fichier JSON)",
         done: "Export téléchargé.",
@@ -1060,25 +1064,33 @@ const fr = {
         subtitle: "{name} voit à tout moment ce qui est partagé avec vous.",
         youSee: "Vous voyez",
         youNeverSee: "Vous ne voyez jamais",
-        // Liste à aligner avec ce que l’enfant lit dans l’app (strings.xml : shared_*, never_shared — PR #24).
+        // MÊME liste, dans le même ordre, que « Mes données » côté enfant (app enfant,
+        // strings.xml : une clé see.* par ligne shared_*, une clé never.* par élément
+        // de never_shared). Toute modification se fait des DEUX côtés.
         see: {
-          usage: "Le temps passé et le nombre d’ouvertures par application et par catégorie, avec l’heure de dernière utilisation",
-          inventory: "La liste des applications installées et leur date d’installation",
-          device: "La batterie et le stockage de l’appareil",
-          location: "La position selon le mode choisi (périodique ou à la demande ; en direct seulement pendant un SOS ; entrées et sorties de zones)",
-          filter: "Le filtrage web : nom de domaine, catégorie et heure des sites bloqués — et de chaque site visité si vous activez ce journal ; jamais les pages ni leur contenu",
-          calls: "Le journal des appels, s’il est activé : sens, date, durée et un identifiant masqué du correspondant — jamais le numéro en clair ni ce qui a été dit",
-          safety: "Les alertes de sécurité (préado et ado) : seulement une catégorie d’alerte, calculée sur l’appareil à partir du texte des notifications — jamais le texte lui-même",
-          exchanges: "Les demandes et les messages échangés avec vous dans l’appli",
+          usage: "Le temps passé et le nombre d’ouvertures par application et par jour, avec l’heure de dernière utilisation et le type d’application",
+          inventory: "La liste des applications installées : leur nom, leur type, leur date d’installation, et quand une application apparaît ou disparaît",
+          device: "Le modèle de l’appareil, sa batterie, son stockage et l’état des autorisations de l’appli",
+          location: "La position selon le mode choisi (périodique, quand vous demandez où il ou elle est, et quand la batterie est presque vide) : sur une carte, avec la date, l’heure, la précision et la batterie à ce moment-là, le trajet d’une journée, et une alerte de batterie faible",
+          sos: "La position en direct pendant un SOS déclenché par l’enfant, même si le partage de position est désactivé",
+          zones: "Les arrivées dans les zones (et les départs si vous les avez choisis), si les alertes de zones sont activées — même quand le partage de position est désactivé",
+          calls: "Le journal des appels, s’il est activé : sens, date, durée et un code à la place du numéro (« Numéro masqué » si l’appelant le cache) — jamais ce qui a été dit",
+          filter: "Le filtrage web : nom, catégorie et heure des sites bloqués et des recherches rendues plus sûres — et de chaque site visité si vous activez ce journal — et si le filtrage est actif ou coupé, et depuis quand ; jamais les pages ni leur contenu",
+          safety: "Les alertes de sécurité (préado et ado) : catégorie, gravité, appli concernée, nombre et heure, calculées sur l’appareil — jamais le texte ; ainsi que l’état de l’analyse et les pauses",
+          requests: "Ses demandes de temps supplémentaire",
+          messages: "La lecture de vos messages et la bonne réception de vos actions (pause, sonnerie, demande de position…)",
+          export: "Un export de toutes ces informations dans un fichier",
+          retention: "Ces informations pendant une durée limitée, puis effacement automatique : en général de 1 mois à 1 an selon le type ; positions et sites visités : la durée que vous choisissez, jusqu’à 1 an. La liste des applis et les demandes restent tant que son profil existe (vous pouvez tout effacer en supprimant son profil)",
         },
         never: {
           content: "Le contenu de ses messages et de ses appels (hors messagerie de l’appli)",
+          contacts: "Le nom de ses contacts",
           notifications: "Le texte des notifications",
           pages: "Les pages web consultées",
           passwords: "Les mots de passe",
           media: "L’image de l’écran, de la caméra ou du micro",
         },
-        sameList: "{name} est informé(e) dans « Mes données » de ce qui est partagé avec vous.",
+        sameList: "{name} voit cette même liste dans « Mes données » sur son appareil, ajustée à vos réglages et à ses autorisations.",
         link: "Voir la page Confidentialité",
       },
       storage: {

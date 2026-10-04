@@ -25,9 +25,11 @@ class LocationRepository(private val store: SupervisionStore) {
         val periodicIntervalSec: Int,
         val retentionDays: Int,
         val highAccuracy: Boolean,
+        // Alertes d'entrée/sortie de zones : réglage SÉPARÉ du partage de position.
+        val geofenceAlertsEnabled: Boolean = true,
     ) {
         companion object {
-            val DEFAULT = Settings(true, "on_demand", 900, 30, false)
+            val DEFAULT = Settings(true, "on_demand", 900, 30, false, true)
         }
     }
 
@@ -37,28 +39,52 @@ class LocationRepository(private val store: SupervisionStore) {
         val notifyEnter: Boolean, val notifyExit: Boolean,
     )
 
-    /** Réglage de partage de l'enfant (ou défaut si absent / erreur réseau). */
-    suspend fun settings(): Settings {
-        val e = store.load() ?: return Settings.DEFAULT
+    /**
+     * Réglage de partage de l'enfant.
+     *  - lecture réussie : le réglage (DEFAULT si aucune ligne), MÉMORISÉ ;
+     *  - erreur (réseau, réponse illisible) : le dernier réglage lu avec succès ;
+     *  - rien de connu : null. L'appelant ÉCHOUE ALORS FERMÉ (aucune zone
+     *    enregistrée) et « mes données » affiche un texte prudent.
+     */
+    suspend fun settings(): Settings? = fetchSettings() ?: cachedSettings()
+
+    /** Dernier réglage lu avec succès (sans réseau), ou null. */
+    fun cachedSettings(): Settings? =
+        store.lastLocationSettingsJson?.let { json -> runCatching { parseSettings(JSONObject(json)) }.getOrNull() }
+
+    private suspend fun fetchSettings(): Settings? {
+        val e = store.load() ?: return null
         val res = client.get("location_settings",
-            "child_id=eq.${e.childId}&select=enabled,mode,periodic_interval_sec,retention_days,high_accuracy")
-        val arr = asArray(res) ?: return Settings.DEFAULT
-        val o = (if (arr.length() > 0) arr.optJSONObject(0) else null) ?: return Settings.DEFAULT
-        return Settings(
-            enabled = o.optBoolean("enabled", true),
-            mode = o.optString("mode", "on_demand"),
-            periodicIntervalSec = o.optInt("periodic_interval_sec", 900),
-            retentionDays = o.optInt("retention_days", 30),
-            highAccuracy = o.optBoolean("high_accuracy", false),
-        )
+            // select=* : tolère une base où la colonne geofence_alerts_enabled n'existe
+            // pas encore (migration 0030) — elle vaut alors true, comme avant.
+            "child_id=eq.${e.childId}&select=*")
+        val body = (res as? SupabaseClient.GetResult.Ok)?.body ?: return null
+        val arr = runCatching { JSONArray(body) }.getOrNull() ?: return null
+        val row = (if (arr.length() > 0) arr.optJSONObject(0) else null) ?: JSONObject()
+        store.lastLocationSettingsJson = row.toString()
+        return parseSettings(row)
     }
 
+    /** Ligne location_settings → Settings ("{}" = aucune ligne → valeurs par défaut). */
+    private fun parseSettings(o: JSONObject): Settings = Settings(
+        enabled = o.optBoolean("enabled", Settings.DEFAULT.enabled),
+        mode = o.optString("mode", Settings.DEFAULT.mode),
+        periodicIntervalSec = o.optInt("periodic_interval_sec", Settings.DEFAULT.periodicIntervalSec),
+        retentionDays = o.optInt("retention_days", Settings.DEFAULT.retentionDays),
+        highAccuracy = o.optBoolean("high_accuracy", Settings.DEFAULT.highAccuracy),
+        geofenceAlertsEnabled = o.optBoolean("geofence_alerts_enabled", Settings.DEFAULT.geofenceAlertsEnabled),
+    )
+
     /** Zones ACTIVES de l'enfant (à (ré)enregistrer dans GeofencingClient). */
-    suspend fun geofences(): List<Geofence> {
-        val e = store.load() ?: return emptyList()
+    suspend fun geofences(): List<Geofence> = geofencesOrNull() ?: emptyList()
+
+    /** Comme [geofences], mais null en cas d'erreur (pour ne pas confondre « aucune
+     *  zone » et « réseau indisponible »). */
+    suspend fun geofencesOrNull(): List<Geofence>? {
+        val e = store.load() ?: return null
         val res = client.get("geofences",
             "child_id=eq.${e.childId}&enabled=is.true&select=id,name,type,center_lat,center_lng,radius_m,notify_enter,notify_exit")
-        val arr = asArray(res) ?: return emptyList()
+        val arr = asArray(res) ?: return null
         val out = mutableListOf<Geofence>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue

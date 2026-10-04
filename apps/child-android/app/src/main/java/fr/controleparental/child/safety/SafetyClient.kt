@@ -1,5 +1,6 @@
 package fr.controleparental.child.safety
 
+import fr.controleparental.child.data.BatchRows
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
 import org.json.JSONArray
@@ -92,19 +93,13 @@ class SafetyClient(private val store: SupervisionStore) {
         if (signals.isEmpty()) return true
         val e = store.load() ?: return false
         val occurredAt = nowIso()
-        val arr = JSONArray()
-        for (s in signals) {
-            val o = JSONObject()
-                .put("family_id", e.familyId)
-                .put("child_id", e.childId)
-                .put("device_id", e.deviceId)
-                .put("category", s.category.wire)
-                .put("severity", s.severity.wire)
-                .put("occurrence_count", s.matchCount)
-                .put("occurred_at", occurredAt)
-            if (!sourceApp.isNullOrBlank()) o.put("source_app", sourceApp.take(200))
-            arr.put(o)
-        }
+        // source_app null reste une clé PRÉSENTE : lot homogène exigé par PostgREST (PGRST102).
+        val base = BatchRows.base(e.familyId, e.childId, e.deviceId)
+        val arr = BatchRows.toJsonArray(
+            signals.map {
+                BatchRows.safetySignal(base, it.category.wire, it.severity.wire, it.matchCount, occurredAt, sourceApp)
+            },
+        )
         return client.upsert("safety_signals", arr) is SupabaseClient.Result.Ok
     }
 

@@ -197,4 +197,6 @@ dependencies {
 
     // Tests unitaires JVM (moteur de règles PUR, sans dépendance Android).
     testImplementation("junit:junit:4.13.2")
+    // Vraie implémentation org.json en test JVM (celle d'android.jar n'est qu'un bouchon).
+    testImplementation("org.json:json:20240303")
 }

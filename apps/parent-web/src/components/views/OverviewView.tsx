@@ -184,15 +184,19 @@ export function OverviewView({ obs, child, onNavigate }: {
 }
 
 /**
- * Carte de transparence : ce que le parent voit / ne voit JAMAIS. Liste STATIQUE,
- * à aligner avec ce que l'enfant lit dans « Mes données » (app enfant :
- * strings.xml, clés shared_* et never_shared — PR #24). Pleine largeur, deux colonnes ; TOUTE la liste
+ * Carte de transparence : ce que le parent voit / ne voit JAMAIS. MÊME liste, dans
+ * le même ordre, que « Mes données » côté enfant (app enfant, strings.xml : une
+ * ligne shared_* par clé see.*, never_shared pour never.*). Côté enfant, chaque
+ * ligne suit les réglages réels. Pleine largeur, deux colonnes ; TOUTE la liste
  * reste visible, sur mobile comme sur grand écran (puces compactes).
  */
 function TransparencyCard({ name, active, onPrivacy }: { name: string; active: boolean; onPrivacy: () => void }) {
   const { t } = useI18n();
-  const see = ["usage", "inventory", "device", "location", "filter", "calls", "safety", "exchanges"] as const;
-  const never = ["content", "notifications", "pages", "passwords", "media"] as const;
+  const see = [
+    "usage", "inventory", "device", "location", "sos", "zones", "calls", "filter", "safety",
+    "requests", "messages", "export", "retention",
+  ] as const;
+  const never = ["content", "contacts", "notifications", "pages", "passwords", "media"] as const;
   return (
     <section className="transparency" aria-labelledby="ov-transparency">
       <div className="t-head">

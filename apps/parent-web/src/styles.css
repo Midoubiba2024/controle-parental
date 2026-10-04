@@ -540,6 +540,8 @@ label.row { flex-wrap: nowrap; align-items: center; gap: 10px; min-height: 44px;
 @media (min-width: 641px) { table.tbl code { overflow-wrap: normal; white-space: nowrap; } }
 label.check { align-items: flex-start; gap: 12px; min-height: 44px; padding: 10px 0; cursor: pointer; line-height: 1.45; }
 label.check > input, label.row > input[type="checkbox"] { margin-top: 1px; }
+/* Réglage indisponible : libellé grisé, curseur explicite. */
+label.check:has(> input:disabled) { color: var(--c-muted); cursor: not-allowed; }
 label.row:has(> input[type="checkbox"]) { align-items: flex-start; padding-block: 10px; line-height: 1.45; }
 
 input, select, textarea {

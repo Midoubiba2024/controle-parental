@@ -26,7 +26,23 @@ class LocationCoordinator(context: Context) {
     private val repo = LocationRepository(SupervisionStore(appContext))
     private val geofences = GeofenceManager(appContext)
 
-    @Volatile private var settings: LocationRepository.Settings = LocationRepository.Settings.DEFAULT
+    // Dernier réglage CONNU (lu ou mémorisé) ; null = jamais lu. Pour les positions,
+    // on retombe sur DEFAULT (check-in seulement) ; pour les zones, on ÉCHOUE FERMÉ.
+    @Volatile private var known: LocationRepository.Settings? = null
+    private val settings: LocationRepository.Settings
+        get() = known ?: LocationRepository.Settings.DEFAULT
+
+    private suspend fun refreshSettings(): LocationRepository.Settings {
+        known = runCatching { repo.settings() }.getOrNull() ?: known ?: repo.cachedSettings()
+        return settings
+    }
+
+    /** Les zones doivent-elles être enregistrées ? (réglage inconnu → non). */
+    private fun shouldRegisterZones(): Boolean = GeofencePolicy.shouldRegister(
+        hasFineLocation = client.hasFine(),
+        hasBackgroundLocation = client.hasBackground(),
+        geofenceAlertsEnabled = known?.geofenceAlertsEnabled ?: false,
+    )
 
     private var lastPeriodicMs = 0L
     private var lastSosPollMs = 0L
@@ -37,14 +53,17 @@ class LocationCoordinator(context: Context) {
 
     /** Rafraîchit le réglage de partage + ré-enregistre les geofences si besoin. */
     suspend fun onSync() {
-        settings = runCatching { repo.settings() }.getOrDefault(LocationRepository.Settings.DEFAULT)
-        runCatching { geofences.sync(client.hasFine()) }   // re-register seulement si les zones ont changé
+        refreshSettings()
+        // Re-register seulement si les zones ont changé ; tout retirer si les alertes
+        // de zones sont désactivées (réglage séparé du partage de position).
+        runCatching { geofences.sync(shouldRegisterZones()) }
     }
 
     /** Ré-enregistrement COMPLET des geofences après reboot (les geofences OS ne
      *  survivent pas au redémarrage). Appelé par BootReceiver (borné). */
     suspend fun registerGeofencesAfterBoot() {
-        runCatching { geofences.sync(client.hasFine(), force = true) }
+        refreshSettings()
+        runCatching { geofences.sync(shouldRegisterZones(), force = true) }
     }
 
     /** Appelé à chaque tick de la boucle (~3 s). Gère SOS live + relevé périodique. */
@@ -81,7 +100,7 @@ class LocationCoordinator(context: Context) {
     private suspend fun handlePeriodic(now: Long) {
         val s = settings
         if (!s.enabled || s.mode != "periodic") return
-        val intervalMs = s.periodicIntervalSec.coerceAtLeast(300) * 1000L
+        val intervalMs = s.periodicIntervalSec.coerceAtLeast(MIN_PERIODIC_INTERVAL_SEC) * 1000L
         if (now - lastPeriodicMs < intervalMs) return
         lastPeriodicMs = now
         val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return
@@ -96,8 +115,7 @@ class LocationCoordinator(context: Context) {
         // AUCUNE position — cohérent avec l'écran « mes données » qui dit alors
         // « partage désactivé ». Le SOS enfant (child-initiated) reste, lui,
         // toujours autorisé par un autre chemin.
-        val s = runCatching { repo.settings() }.getOrDefault(settings)
-        settings = s
+        val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return false
         val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return false
         return repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
@@ -106,8 +124,7 @@ class LocationCoordinator(context: Context) {
     /** Batterie faible (D7) : remonte la dernière position + une alerte. Respecte
      *  le réglage de partage (pas de position si désactivé). */
     suspend fun onBatteryLow() {
-        val s = runCatching { repo.settings() }.getOrDefault(settings)
-        settings = s
+        val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return
         val battery = batteryLevel()
         val loc = client.lastKnown() ?: client.currentFix(highAccuracy = false)
@@ -119,9 +136,16 @@ class LocationCoordinator(context: Context) {
         DeviceStatusCollector(appContext).collect().batteryLevel
     }.getOrNull()
 
-    private companion object {
-        const val SOS_POLL_MS = 15_000L     // vérif de l'état SOS
-        const val SOS_FIX_MS = 12_000L      // cadence de diffusion live pendant SOS
+    companion object {
+        private const val SOS_POLL_MS = 15_000L     // vérif de l'état SOS
+        private const val SOS_FIX_MS = 12_000L      // cadence de diffusion live pendant SOS
+        // Lues aussi par l'écran « mes données » : le texte affiché à l'enfant suit
+        // le comportement réel.
         const val MAX_SOS_LIVE_MS = 15 * 60_000L  // diffusion bornée à 15 min
+        const val MIN_PERIODIC_INTERVAL_SEC = 300 // plancher du relevé périodique
+
+        /** Intervalle réellement appliqué au relevé périodique, en minutes (arrondi). */
+        fun periodicIntervalMinutes(intervalSec: Int): Int =
+            (intervalSec.coerceAtLeast(MIN_PERIODIC_INTERVAL_SEC) + 30) / 60
     }
 }

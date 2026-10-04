@@ -53,7 +53,7 @@ d'un contrôle explicite d'autorité parentale). Source :
 - **Export (droit d'accès / portabilité)** — `export_child_data(child)` : renvoie
   **tout** l'enregistrement de l'enfant en JSON (toutes les tables le concernant).
   La console télécharge le fichier côté navigateur. L'accès est **journalisé**
-  (`audit_log`, action `rgpd.export`) — visible de l'enfant (« mes données »).
+  (`audit_log`, action `rgpd.export`). L'enfant est informé dans « Mes données » que ses parents peuvent tout exporter.
   *Déjà appliqué en live.*
 - **Effacement enfant (droit à l'effacement)** — `rgpd_delete_child(child)` :
   supprime l'enfant ; les FK `ON DELETE CASCADE` effacent toutes ses données. La
