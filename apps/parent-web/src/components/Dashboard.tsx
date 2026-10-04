@@ -73,7 +73,7 @@ const ALL_VIEWS = NAV.flatMap((s) => s.items.map((i) => i.key));
 // Au-delà de ce délai, la pastille d'appareil passe en ton neutre (relevé ancien).
 const FRESH_MS = 30 * 60_000;
 // Même seuil que le tiroir dans styles.css (dont iPhone en paysage).
-const MOBILE_QUERY = "(max-width: 900px), (pointer: coarse) and (max-height: 500px)";
+const MOBILE_QUERY = "(max-width: 900px), (max-height: 500px)";
 const MINUTE = 60_000;
 
 export function Dashboard({ session }: { session: Session }) {

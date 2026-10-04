@@ -82,7 +82,8 @@ console.log(`→ preview : ${base}`);
 
 const executablePath = process.env.PW_CHROMIUM
   || (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
-const browser = await chromium.launch({ executablePath });
+// --lang : champs date/heure natifs en français (jj/mm/aaaa, 24 h).
+const browser = await chromium.launch({ executablePath, args: ["--lang=fr-FR"] });
 
 function session() {
   const exp = Math.floor(Date.now() / 1000) + 3600;

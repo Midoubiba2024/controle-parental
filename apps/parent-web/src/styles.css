@@ -477,12 +477,12 @@ button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visi
   box-shadow: var(--c-side-active-shadow);
 }
 .nav-item[aria-current="page"] .nav-ic { color: var(--c-side-active-icon); }
-.nav-item .nav-label { flex: 1; min-width: 0; }
+.nav-item .nav-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-side-dot); flex: none; }
 .nav-item:focus-visible { outline-color: var(--c-focus); }
 /* Petit badge d'entrée (« Préado / ado ») et compteur (demandes en attente). */
 .nav-tag {
-  font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 1px 8px; border-radius: var(--r-pill);
+  font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-pill); flex: none;
   border: 1px solid var(--c-side-line); color: var(--c-side-title); white-space: nowrap;
 }
 .nav-item[aria-current="page"] .nav-tag { color: inherit; border-color: currentColor; opacity: .75; }
@@ -704,7 +704,7 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
 .app-row .dur { margin-inline-start: auto; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; white-space: nowrap; }
 
 .scroll { max-height: 460px; overflow: auto; overscroll-behavior: contain; }
-@media (max-width: 900px), (pointer: coarse) and (max-height: 500px) { .scroll { max-height: none; overflow: visible; } }
+@media (max-width: 900px), (max-height: 500px) { .scroll { max-height: none; overflow: visible; } }
 /* Liste tronquée : fondu sur le dernier élément + bouton « Afficher les N autres ». */
 .truncated { position: relative; }
 .truncated::after {
@@ -993,7 +993,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .transparency .link:hover { color: var(--c-sage-title); }
 /* « Voir toute la liste » : seulement sur mobile ; sur grand écran, tout est visible. */
 .transparency .t-more { display: none; }
-@media (max-width: 900px), (pointer: coarse) and (max-height: 500px) {
+@media (max-width: 900px), (max-height: 500px) {
   .transparency .t-list.collapsible li:nth-child(n+4) { display: none; }
   .transparency .t-more { display: inline-flex; margin-top: 10px; }
 }
@@ -1175,7 +1175,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .auth-foot { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--c-divider); display: flex; gap: 10px; align-items: flex-start; font-size: var(--fs-small); color: var(--c-muted); }
 .auth-foot svg { margin-top: 2px; color: var(--c-plum); }
 
-@media (max-width: 900px), (pointer: coarse) and (max-height: 500px) {
+@media (max-width: 900px), (max-height: 500px) {
   .auth { grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; }
   .auth-brand { padding: 22px 22px 24px; gap: 14px; border-radius: 20px; }
   .auth-headline { font-size: 27px; margin: 6px 0 0; }
@@ -1192,7 +1192,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
    Mobile / iPhone : la barre latérale devient un TIROIR hors écran
    ============================================================================= */
 .scrim { display: none; }
-@media (max-width: 900px), (pointer: coarse) and (max-height: 500px) {
+@media (max-width: 900px), (max-height: 500px) {
   .shell { display: block; }
   .sidebar {
     position: fixed; z-index: 50; inset-block: 0; inset-inline-start: 0;
@@ -1258,7 +1258,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 @media (max-width: 480px) {
   .header-date .profile { display: none; }
 }
-@media (min-width: 901px) and (pointer: fine), (min-width: 901px) and (min-height: 501px) {
+@media (min-width: 901px) and (min-height: 501px) {
   /* Bureau : commandes à droite, thème / déconnexion en dernier. */
   .header-ctl { order: 1; }
   .header-actions { order: 2; display: flex; gap: 10px; }
@@ -1278,7 +1278,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 /* Grand écran + souris : entrées de navigation un peu plus compactes (40 px)
    pour que les 13 entrées et le pied de barre tiennent sur un écran de 900 px.
    Au doigt (tactile / tiroir mobile), elles restent à 44 px. */
-@media (min-width: 901px) and (pointer: fine) {
+@media (min-width: 901px) and (min-height: 501px) and (pointer: fine) {
   .nav-item { min-height: 40px; }
   .nav { gap: 10px; }
   .sidebar { gap: 14px; padding-block: 18px 12px; }
