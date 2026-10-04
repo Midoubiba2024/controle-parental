@@ -102,11 +102,21 @@ const executablePath = process.env.PW_CHROMIUM
 // --lang : champs date/heure natifs en français (jj/mm/aaaa, 24 h).
 const browser = await chromium.launch({ executablePath, args: ["--lang=fr-FR"] });
 
-function session() {
+/** Session simulée ; `user` : autre compte FICTIF (appareil partagé). */
+function session(user = USER) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-  const jwt = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub: USER.id, role: "authenticated", exp, email: USER.email })}.signature`;
-  return { access_token: jwt, token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "refresh-factice", user: USER };
+  const jwt = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub: user.id, role: "authenticated", exp, email: user.email })}.signature`;
+  return { access_token: jwt, token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "refresh-factice", user };
+}
+// 2ᵉ compte fictif (scénario « appareil partagé »).
+const USER_B = { ...USER, id: "5c0b7a1e-2f4d-4e8a-9b3c-0d1e2f3a4b5c", email: "parent2@exemple.fr" };
+/** Utilisateur d'une requête, d'après le jeton (champ `sub`). */
+function requestUser(req) {
+  try {
+    const token = (req.headers()["authorization"] || "").replace(/^Bearer /, "");
+    return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).sub;
+  } catch { return USER.id; }
 }
 
 /** Applique les filtres PostgREST simples (eq., gte., lte., in.) aux fixtures. */
@@ -144,13 +154,17 @@ async function mockNetwork(context, account = { metadata: {} }) {
     if (req.method() === "OPTIONS") return json({}, 200);
     const path = url.pathname;
     if (path.startsWith("/auth/v1/user")) {
+      // `account.byUser` : un compte simulé PAR utilisateur (appareil partagé).
+      const sub = requestUser(req);
+      const acc = account.byUser ? (account.byUser[sub] ??= { metadata: {} }) : account;
+      const who = sub === USER_B.id ? USER_B : USER;
       if (req.method() === "PUT") {
-        if (account.failPut) return json({ code: 503, msg: "indisponible" }, 503);
+        if (acc.failPut) return json({ code: 503, msg: "indisponible" }, 503);
         const body = JSON.parse(req.postData() || "{}");
-        account.metadata = { ...account.metadata, ...(body.data ?? {}) };
-        account.puts = (account.puts ?? 0) + 1;
+        acc.metadata = { ...acc.metadata, ...(body.data ?? {}) };
+        acc.puts = (acc.puts ?? 0) + 1;
       }
-      return json({ ...USER, user_metadata: account.metadata });
+      return json({ ...who, user_metadata: acc.metadata });
     }
     if (path.startsWith("/auth/v1/token")) return json(session());
     if (path.startsWith("/auth/v1/logout")) return json({}, 204);
@@ -326,7 +340,7 @@ try {
       const { context, page } = await openConsole(vp, "light", "jardin", "settings", account);
       await page.locator(".palette-option", { hasText: "Clarté" }).click();
       await page.waitForTimeout(1200);
-      expect(!!(await local(page, "cp.appearance.pending")), "hors ligne : choix marqué « non synchronisé »");
+      expect(!!(await local(page, `cp.appearance.pending.${USER.id}`)), "hors ligne : choix marqué « non synchronisé »");
       await page.reload();
       await page.waitForSelector(".shell h1");
       await settle(page);
@@ -335,28 +349,79 @@ try {
       await page.evaluate(() => window.dispatchEvent(new Event("online")));
       await page.waitForTimeout(800);
       expect(account.metadata.palette === "clarte", `retour du réseau : choix envoyé au compte (${account.metadata.palette})`);
-      expect(!(await local(page, "cp.appearance.pending")), "retour du réseau : marqueur effacé");
+      expect(!(await local(page, `cp.appearance.pending.${USER.id}`)), "retour du réseau : marqueur effacé");
       await context.close();
     }
-    // f) Appareil partagé : la préférence d'un AUTRE compte n'est ni gardée ni
-    //    envoyée ; la déconnexion rétablit la préférence de l'appareil.
+    // f) Appareil partagé, à partir d'un état RÉEL : préférence locale d'une
+    //    version précédente (migrée en préférence de l'appareil), compte B qui
+    //    impose la sienne, puis session de B expirée, puis connexion de A.
     {
-      const account = { metadata: {} };
-      const { context, page } = await openConsole(vp, "light", "jardin", "overview", account, {
-        "cp.appearance.owner": "autre-compte-fictif",
-        "cp.appearance.device": JSON.stringify({ palette: "clarte", theme: "light" }),
-      });
+      const accounts = { byUser: { [USER.id]: { metadata: {} }, [USER_B.id]: { metadata: { palette: "jardin", theme: "dark" } } } };
+      const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: "light" });
+      await mockNetwork(context, accounts);
+      await context.addInitScript(([key, sess]) => {
+        try {
+          if (localStorage.getItem("e2e-init")) return;
+          localStorage.setItem("e2e-init", "1");
+          localStorage.setItem(key, JSON.stringify(sess));
+          localStorage.setItem("cp.palette", "clarte");   // anciennes clés, sans propriétaire
+          localStorage.setItem("cp-theme", "light");
+        } catch { /* */ }
+      }, [STORAGE_KEY, session(USER_B)]);
+      const { page, errors } = await openPage(context);
       await page.waitForTimeout(800);
-      expect(await rootAttr(page, "data-palette") === "clarte", "appareil partagé : préférence d'un autre compte remplacée par celle de l'appareil");
-      expect(!account.puts || account.metadata.palette !== "jardin", "appareil partagé : préférence d'un autre compte jamais envoyée");
+      const device = JSON.parse(await local(page, "cp.appearance.device") ?? "null");
+      expect(device?.palette === "clarte" && device?.theme === "light", `migration : préférence existante → préférence de l'appareil (${JSON.stringify(device)})`);
+      expect(await rootAttr(page, "data-palette") === "jardin" && await local(page, "cp.appearance.owner") === USER_B.id, "compte B : sa préférence s'applique (propriétaire B)");
+      // Session de B expirée pendant que l'appli était fermée → écran de connexion à la préférence de l'appareil.
+      await page.evaluate((key) => localStorage.removeItem(key), STORAGE_KEY);
+      await page.reload();
+      await page.waitForSelector(".auth");
+      await page.waitForTimeout(300);
+      expect(await rootAttr(page, "data-palette") === "clarte" && await rootAttr(page, "data-theme") === "light", "session expirée : écran de connexion à la préférence de l'appareil");
+      // B se reconnecte (préférence B), puis la session passe à A sans déconnexion propre.
+      await page.evaluate(([key, sess]) => localStorage.setItem(key, JSON.stringify(sess)), [STORAGE_KEY, session(USER_B)]);
+      await page.reload();
+      await page.waitForSelector(".shell h1");
+      await page.waitForTimeout(800);
+      await page.evaluate(([key, sess]) => localStorage.setItem(key, JSON.stringify(sess)), [STORAGE_KEY, session(USER)]);
+      await page.reload();
+      await page.waitForSelector(".shell h1");
+      await page.waitForTimeout(800);
+      const a = accounts.byUser[USER.id];
+      expect(await rootAttr(page, "data-palette") === "clarte", "appareil partagé : préférence de B remplacée par celle de l'appareil pour A");
+      expect(a.metadata.palette !== "jardin", `appareil partagé : préférence de B jamais envoyée au compte A (${JSON.stringify(a.metadata)})`);
       // Choix puis déconnexion IMMÉDIATE : l'envoi part avant signOut.
       await page.locator(".header-actions .icon-btn").first().click();       // clair → sombre
       await page.getByRole("button", { name: "Déconnexion" }).click();
       await page.waitForSelector(".auth", { timeout: 10_000 }).catch(() => {});
       await page.waitForTimeout(500);
-      expect(account.metadata.theme === "dark", `déconnexion : choix envoyé avant signOut (${account.metadata.theme})`);
+      expect(a.metadata.theme === "dark", `déconnexion : choix envoyé avant signOut (${a.metadata.theme})`);
       expect(await rootAttr(page, "data-palette") === "clarte" && await rootAttr(page, "data-theme") === "light",
         "déconnexion : retour à la préférence de l'appareil");
+      expect(errors.length === 0, `appareil partagé : aucune erreur de page (${errors.join(" | ")})`);
+      await context.close();
+    }
+    // h) Stockage corrompu (JSON valide mais pas un objet) : aucun plantage.
+    {
+      const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: "light" });
+      await mockNetwork(context);
+      await context.addInitScript(() => {
+        try {
+          localStorage.setItem("cp.appearance.owner", "compte-fictif");
+          localStorage.setItem("cp.appearance.device", "null");
+          localStorage.setItem("cp.appearance.pending.compte-fictif", "1");
+          localStorage.setItem("cp.palette", "jardin");
+        } catch { /* */ }
+      });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      await page.goto(base);
+      await page.waitForSelector(".auth", { timeout: 20_000 });
+      await page.waitForTimeout(300);
+      expect(errors.length === 0 && await rootAttr(page, "data-palette") === "cocon",
+        `stockage corrompu : pas de plantage, retour au défaut (${errors.join(" | ") || await rootAttr(page, "data-palette")})`);
       await context.close();
     }
     // g) Deux onglets : un choix dans l'un s'applique à l'autre, sans 2ᵉ envoi.

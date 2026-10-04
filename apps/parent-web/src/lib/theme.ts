@@ -113,13 +113,13 @@ export type AppearanceOrigin = "user" | "account" | "external";
    - OWNER_KEY   : à qui appartient la préférence locale (userId, ou "device"
                    pour un choix fait déconnecté) ;
    - DEVICE_KEY  : préférence propre à l'appareil, rétablie à la déconnexion ;
-   - PENDING_KEY : { userId, at, palette, theme } — choix pas encore enregistré
+   - PENDING_KEY.<userId> : { userId, at, palette, theme } — choix pas encore enregistré
                    dans le compte (posé à chaque choix, effacé quand updateUser
                    réussit) ; il porte la valeur, qui survit donc à une
                    déconnexion hors ligne. */
 const OWNER_KEY = "cp.appearance.owner";
 const DEVICE_KEY = "cp.appearance.device";
-const PENDING_KEY = "cp.appearance.pending";
+const PENDING_PREFIX = "cp.appearance.pending.";   // + userId : un marqueur PAR compte
 export const DEVICE_OWNER = "device";
 export type PendingSync = Appearance & { userId: string; at: number };
 
@@ -159,18 +159,29 @@ export function localOwner(): string {
   return load(OWNER_KEY) ?? DEVICE_OWNER;
 }
 
-export function readPending(): PendingSync | null {
+/** Objet JSON lu dans le stockage ; tout autre contenu (illisible, null, 1…) → null. */
+function loadObject(key: string): Record<string, unknown> | null {
   try {
-    const v = JSON.parse(load(PENDING_KEY) ?? "null") as Partial<PendingSync> | null;
-    if (!v || typeof v.userId !== "string" || typeof v.at !== "number") return null;
-    if (!isPalette(v.palette) || !isTheme(v.theme)) return null;
-    return { userId: v.userId, at: v.at, palette: v.palette, theme: v.theme };
+    const raw: unknown = JSON.parse(load(key) ?? "null");
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
   } catch { return null; }
 }
-/** Efface le marqueur s'il n'a pas changé depuis l'envoi (`at` identique). */
-export function clearPending(sent: PendingSync) {
-  const cur = readPending();
-  if (cur && cur.userId === sent.userId && cur.at === sent.at) store(PENDING_KEY, null);
+
+export function readPending(userId: string): PendingSync | null {
+  const v = loadObject(PENDING_PREFIX + userId);
+  if (!v || v.userId !== userId || typeof v.at !== "number") return null;
+  if (!isPalette(v.palette) || !isTheme(v.theme)) return null;
+  return { userId, at: v.at, palette: v.palette, theme: v.theme };
+}
+/**
+ * Efface le marqueur après un envoi réussi, seulement s'il n'a pas changé
+ * depuis (même `at`) ET si les valeurs envoyées sont bien les siennes.
+ */
+export function clearPending(seen: PendingSync, sent: Appearance) {
+  const cur = readPending(seen.userId);
+  if (cur && cur.at === seen.at && cur.palette === sent.palette && cur.theme === sent.theme) {
+    store(PENDING_PREFIX + seen.userId, null);
+  }
 }
 
 /**
@@ -188,8 +199,8 @@ export function setAppearance(next: Partial<Appearance>, origin: AppearanceOrigi
     persist(state);
     store(OWNER_KEY, currentUser ?? DEVICE_OWNER);
     if (origin === "user") {
-      if (currentUser) store(PENDING_KEY, JSON.stringify({ userId: currentUser, at: Date.now(), ...state } satisfies PendingSync));
-      else store(DEVICE_KEY, JSON.stringify(state));
+      if (currentUser) store(PENDING_PREFIX + currentUser, JSON.stringify({ userId: currentUser, at: Date.now(), ...state } satisfies PendingSync));
+      else store(DEVICE_KEY, JSON.stringify(state));   // choix fait déconnecté : celui de l'appareil
     }
   }
   apply(state);
@@ -206,8 +217,7 @@ export function setAppearanceUser(userId: string | null) { currentUser = userId;
  * retour à la préférence de l'appareil, sinon au défaut.
  */
 export function restoreDeviceAppearance() {
-  let device: Partial<Appearance> = {};
-  try { device = JSON.parse(load(DEVICE_KEY) ?? "{}") as Partial<Appearance>; } catch { /* défaut */ }
+  const device = loadObject(DEVICE_KEY) ?? {};
   const next: Appearance = {
     palette: isPalette(device.palette) ? device.palette : DEFAULT_PALETTE,
     theme: isTheme(device.theme) ? device.theme : "system",
@@ -235,7 +245,16 @@ if (typeof window !== "undefined") {
 }
 
 /** Au démarrage (avant le premier rendu) : attributs, theme-color et polices. */
-export function initAppearance() { apply(state); }
+export function initAppearance() {
+  // Migration unique (versions sans propriétaire) : la préférence déjà présente
+  // sur l'appareil devient celle de l'APPAREIL, avant toute synchronisation.
+  if (load(OWNER_KEY) === null) {
+    if (hasLocalAppearance()) store(DEVICE_KEY, JSON.stringify(state));
+    persist(state);
+    store(OWNER_KEY, DEVICE_OWNER);
+  }
+  apply(state);
+}
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const snapshot = () => state;

@@ -46,19 +46,19 @@ async function push(): Promise<void> {
   if (timer) { clearTimeout(timer); timer = null; }
   const userId = syncedUser;
   if (!userId) return;
-  const pending: PendingSync | null = readPending();
+  const pending: PendingSync | null = readPending(userId);
   const a = getAppearance();
   try {
     const { error } = await supabase.auth.updateUser({ data: { palette: a.palette, theme: a.theme } });
     if (error) { console.warn("Apparence non synchronisée avec le compte :", error.message); return; }
-    if (pending && pending.userId === userId) clearPending(pending);
+    if (pending) clearPending(pending, a);
   } catch (e) {
     console.warn("Apparence non synchronisée avec le compte :", e);
   }
 }
 
 function hasPendingFor(userId: string | null): boolean {
-  return !!userId && readPending()?.userId === userId;
+  return !!userId && readPending(userId) !== null;
 }
 
 /**
@@ -70,8 +70,11 @@ export async function flushAppearance(): Promise<void> {
   await Promise.race([push(), new Promise<void>((r) => setTimeout(r, FLUSH_TIMEOUT_MS))]);
 }
 
-/** À monter une fois (App), avec la session courante. */
-export function useAccountAppearanceSync(session: Session | null) {
+/**
+ * À monter une fois (App), avec la session courante. `ready` : la session
+ * initiale est résolue (getSession terminé).
+ */
+export function useAccountAppearanceSync(session: Session | null, ready: boolean) {
   const userId = session?.user.id ?? null;
   const prevUser = useRef<string | null>(null);
 
@@ -81,6 +84,12 @@ export function useAccountAppearanceSync(session: Session | null) {
     prevUser.current = userId;
   }, [userId]);
 
+  // Aucune session au démarrage (expirée pendant que l'appli était fermée) :
+  // l'écran de connexion ne garde pas la préférence du compte précédent.
+  useEffect(() => {
+    if (ready && !userId && localOwner() !== DEVICE_OWNER) restoreDeviceAppearance();
+  }, [ready, userId]);
+
   useEffect(() => {
     if (!userId || !session) return;
     let active = true;
@@ -89,8 +98,8 @@ export function useAccountAppearanceSync(session: Session | null) {
     setAppearanceUser(userId);
 
     const owner = localOwner();
-    const pending = readPending();
-    const pendingHere = pending?.userId === userId;
+    const pending = readPending(userId);
+    const pendingHere = pending !== null;
     // Préférence locale d'un AUTRE compte : ni conservée, ni envoyée.
     if (!pendingHere && owner !== userId && owner !== DEVICE_OWNER) restoreDeviceAppearance();
     const localIsMine = pendingHere || owner === userId || owner === DEVICE_OWNER;
@@ -113,7 +122,8 @@ export function useAccountAppearanceSync(session: Session | null) {
       // 2. Puis relecture du compte (un autre appareil a pu changer d'avis depuis
       //    l'émission du jeton), sans écraser un choix fait entre-temps ici.
       void supabase.auth.getUser().then(({ data, error }) => {
-        if (!active || userTouched || error || !data.user) return;
+        // Pas d'adoption si un choix d'ici (cet onglet ou un autre) attend l'envoi.
+        if (!active || userTouched || error || !data.user || hasPendingFor(userId)) return;
         const fresh = adopt(data.user.user_metadata);
         if (!fresh && !known && localIsMine && hasLocalAppearance()) void push();
       }).catch(() => { /* hors ligne : valeur locale */ });

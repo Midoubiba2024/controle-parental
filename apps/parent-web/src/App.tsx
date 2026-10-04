@@ -22,7 +22,7 @@ export function App() {
   }, []);
 
   // Palette et mode : la valeur du compte prime à la connexion (entre appareils).
-  useAccountAppearanceSync(session);
+  useAccountAppearanceSync(session, ready);
 
   if (!ready) return <div className="center muted">{t("app.loading")}</div>;
 
