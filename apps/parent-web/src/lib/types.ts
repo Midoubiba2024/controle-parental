@@ -72,6 +72,7 @@ export interface AppInventory {
 export interface DeviceStatus {
   id: string;
   device_id: string;
+  child_id?: string;
   battery_level: number | null;
   is_charging: boolean | null;
   storage_total_bytes: number | null;

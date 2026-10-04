@@ -5,7 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { ageProfileFromBirth, type AuditEntry, type Child, type Device, type DeviceMode } from "../../lib/types";
 import { fmtDateTime } from "../../lib/format";
 import { ageProfileLabel, auditActionLabel, roleLabel } from "../../lib/labels";
-import { CardHead, EmptyState } from "../Ui";
+import { CardHead, EmptyState, useShowMore } from "../Ui";
 import { auditIcon, ic, icSm } from "../icons";
 
 /** Libellé du mode d'appareil (valeur inconnue → affichée brute). */
@@ -49,6 +49,7 @@ export function FamilyView({ familyId, onChildrenChanged }: {
   useEffect(() => { void refresh(); }, [refresh]);
 
   const paired = devices.filter((d) => !d.revoked_at).length;
+  const { visible: auditVisible, button: auditMore, truncated: auditTruncated } = useShowMore(audit, 6);
 
   return (
     <div className="grid dash-wide top">
@@ -70,8 +71,9 @@ export function FamilyView({ familyId, onChildrenChanged }: {
       <section className="card" aria-labelledby="fam-audit">
         <CardHead id="fam-audit" icon={FileText} title={t("views.family.auditTitle")} sub={t("views.family.auditSubtitle")} />
         {audit.length === 0 ? <EmptyState title={t("views.family.auditEmpty")} /> : (
-          <ol className="timeline scroll" style={{ maxHeight: 640 }}>
-            {audit.map((a) => {
+          <>
+          <ol className={`timeline${auditTruncated ? " truncated" : ""}`}>
+            {auditVisible.map((a) => {
               const { Icon, tone } = auditIcon(a.action);
               return (
                 <li key={a.id}>
@@ -90,6 +92,8 @@ export function FamilyView({ familyId, onChildrenChanged }: {
               );
             })}
           </ol>
+          {auditMore}
+          </>
         )}
       </section>
     </div>
@@ -117,24 +121,25 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
   }
 
   return (
-    <form onSubmit={add} className="panel" aria-labelledby="add-child-title">
+    <form onSubmit={add} className="panel add-child" aria-labelledby="add-child-title">
       <h3 id="add-child-title" style={{ margin: 0 }}>{t("views.family.addChild.title")}</h3>
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "14px 16px", alignItems: "start" }}>
         <label htmlFor="child-name">{t("views.family.addChild.nameLabel")}
           <input id="child-name" placeholder={t("views.family.addChild.namePlaceholder")} value={name} required
             autoComplete="off" onChange={(e) => setName(e.target.value)} />
         </label>
-        <label htmlFor="child-birth">{t("views.family.addChild.birthLabel")}
+        <div className="fld">
+          <label htmlFor="child-birth">{t("views.family.addChild.birthLabel")}</label>
           <input id="child-birth" type="date" value={birth} aria-describedby="child-birth-hint"
             onChange={(e) => setBirth(e.target.value)} />
-        </label>
-        <div style={{ paddingTop: 26 }} className="add-child-submit">
+          <p id="child-birth-hint" className="card-sub" style={{ margin: 0, fontWeight: 400 }}>{t("views.family.addChild.birthHint")}</p>
+        </div>
+        <div className="add-child-submit">
           <button disabled={busy || !name.trim()} type="submit" className="block">
             <Plus {...ic} size={18} strokeWidth={2} />{busy ? t("common.busy") : t("views.family.addChild.submit")}
           </button>
         </div>
       </div>
-      <p id="child-birth-hint" className="card-sub" style={{ margin: 0 }}>{t("views.family.addChild.birthHint")}</p>
       {err && <p className="msg error">{err}</p>}
     </form>
   );
@@ -210,7 +215,7 @@ function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
         </div>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
-          <h3 style={{ margin: 0 }}>{t("views.family.devicesTitle")}</h3>
+          <h4 className="sub-title">{t("views.family.devicesTitle")}</h4>
           {devices.map((d) => (
             <div key={d.id} className="device-item" style={{ opacity: d.revoked_at ? 0.65 : 1 }}>
               <span className="ic"><Smartphone {...ic} /></span>
@@ -231,6 +236,16 @@ function ChildCard({ child, devices }: { child: Child; devices: Device[] }) {
 function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string }) {
   const { t, fmt } = useI18n();
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  // Le code est à usage unique et expire : passé l'heure, chiffres grisés, Copier
+  // désactivé et invitation à en générer un nouveau.
+  const [expired, setExpired] = useState(() => Date.now() >= new Date(expiresAt).getTime());
+  useEffect(() => {
+    const left = new Date(expiresAt).getTime() - Date.now();
+    if (left <= 0) { setExpired(true); return; }
+    setExpired(false);
+    const id = window.setTimeout(() => setExpired(true), left);
+    return () => window.clearTimeout(id);
+  }, [expiresAt]);
   const digitsRef = useRef<HTMLParagraphElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -266,19 +281,20 @@ function PairingTicket({ code, expiresAt }: { code: string; expiresAt: string })
   }
 
   return (
-    <div className="ticket">
+    <div className={`ticket${expired ? " expired" : ""}`}>
       <div style={{ minWidth: 0 }}>
         <p className="kicker">{t("views.family.pairing.kicker")}</p>
         <p className="digits" ref={digitsRef}>
           {groups.map((g, i) => <span key={i} className="grp">{g}</span>)}
         </p>
-        <p className="exp">
+        <p className="exp" role={expired ? "status" : undefined}>
           <Clock3 {...icSm} size={15} />
-          {t("views.family.pairing.expiresAt", { time: fmt.time(expiresAt, { hour: "2-digit", minute: "2-digit" }) })}
+          {expired ? t("views.family.pairing.expired")
+            : t("views.family.pairing.expiresAt", { time: fmt.time(expiresAt, { hour: "2-digit", minute: "2-digit" }) })}
         </p>
         {state === "failed" && <p className="exp" role="status">{t("views.family.pairing.copyFallback")}</p>}
       </div>
-      <button type="button" className={`copy${state === "copied" ? " done" : ""}`} onClick={copy}
+      <button type="button" className={`copy${state === "copied" ? " done" : ""}`} onClick={copy} disabled={expired}
         aria-label={t("views.family.pairing.copyAria")}>
         {state === "copied" ? <Check {...ic} /> : <Copy {...ic} />}
         <span aria-hidden="true">{state === "copied" ? t("views.family.pairing.copied") : t("views.family.pairing.copy")}</span>

@@ -4,7 +4,7 @@ import { REQUEST_KIND_LABEL } from "../../lib/rules";
 import { fmtDateTime } from "../../lib/format";
 import { errorMessage, t, Trans, useI18n } from "../../i18n";
 import { Check, Gift, Hand, X } from "lucide-react";
-import { EmptyState } from "../Ui";
+import { EmptyState, useShowMore } from "../Ui";
 import { ic } from "../icons";
 import type { AccessRequest, Child } from "../../lib/types";
 
@@ -25,11 +25,26 @@ export function RequestsView({ familyId, children }: { familyId: string; childre
     return (id: string) => m.get(id) ?? t("common.none");
   }, [children, t]);
 
+  // Nom lisible des applications citées dans les demandes (jamais « com.lego… »
+  // en premier) : lecture de l'inventaire, mêmes tables/RLS que la vue Applications.
+  const [appNames, setAppNames] = useState<Map<string, string>>(new Map());
+
   const refresh = useCallback(async () => {
     const { data, error } = await supabase.from("requests").select("*")
       .eq("family_id", familyId).order("created_at", { ascending: false }).limit(100);
-    if (error) setErr(errorMessage(error)); else { setRequests(data as AccessRequest[]); setErr(null); }
+    if (error) { setErr(errorMessage(error)); return; }
+    const list = data as AccessRequest[];
+    setRequests(list); setErr(null);
+    const pkgs = [...new Set(list.map((r) => r.payload?.package_name).filter((p): p is string => typeof p === "string"))];
+    if (pkgs.length > 0) {
+      const inv = await supabase.from("app_inventory").select("package_name,app_label").in("package_name", pkgs);
+      if (!inv.error) {
+        setAppNames(new Map((inv.data as { package_name: string; app_label: string | null }[])
+          .filter((a) => a.app_label).map((a) => [a.package_name, a.app_label as string])));
+      }
+    }
   }, [familyId]);
+  const appName = useCallback((pkg: string) => appNames.get(pkg) ?? pkg, [appNames]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -76,6 +91,7 @@ export function RequestsView({ familyId, children }: { familyId: string; childre
 
   const pending = requests.filter((r) => r.status === "pending");
   const history = requests.filter((r) => r.status !== "pending");
+  const { visible, button, truncated } = useShowMore(history, 8);
 
   return (
     <div className="grid dash">
@@ -91,7 +107,7 @@ export function RequestsView({ familyId, children }: { familyId: string; childre
               <strong>{childName(req.child_id)}</strong>
               <span className="badge sand">{REQUEST_KIND_LABEL[req.kind]}</span>
             </div>
-            <p className="small" style={{ margin: "6px 0" }}>{describe(req)}</p>
+            <p className="small" style={{ margin: "6px 0" }}>{describe(req, appName)}</p>
             {req.child_note && <p className="muted small" style={{ margin: "4px 0" }}>{t("views.requests.childNote", { note: req.child_note })}</p>}
             <div className="muted small">{fmtDateTime(req.created_at)}</div>
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
@@ -107,15 +123,17 @@ export function RequestsView({ familyId, children }: { familyId: string; childre
         <div className="card">
           <h2>{t("views.requests.historyTitle")}</h2>
           {history.length === 0 && <EmptyState title={t("views.requests.emptyHistory")} />}
-          <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {history.map((req) => (
-              <li key={req.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--c-divider)", fontSize: 14 }}>
+          <ul className={`plain${truncated ? " truncated" : ""}`}>
+            {visible.map((req) => (
+              <li key={req.id} style={{ fontSize: 14 }}>
                 <span className={`pill ${req.status === "approved" ? "in" : req.status === "denied" ? "blocked" : ""}`} style={{ marginInlineEnd: 8 }}>{statusLabel(req.status)}</span>
-                <b>{childName(req.child_id)}</b> · {REQUEST_KIND_LABEL[req.kind]} · {describe(req)}
+                <Trans k="views.requests.historyLine" tags={{ b: (c) => <b>{c}</b> }}
+                  params={{ child: childName(req.child_id), kind: REQUEST_KIND_LABEL[req.kind], detail: describe(req, appName) }} />
                 <div className="muted small">{req.decided_at ? fmtDateTime(req.decided_at) : fmtDateTime(req.created_at)}</div>
               </li>
             ))}
           </ul>
+          {button}
         </div>
       </div>
     </div>
@@ -162,18 +180,18 @@ function GrantBonusCard({ familyId, children, onDone }: {
   );
 }
 
-function describe(req: AccessRequest): string {
+function describe(req: AccessRequest, appName: (pkg: string) => string): string {
   const m = req.payload?.minutes;
   const minutes = m ?? t("views.requests.describe.unknownMinutes");
   const pkg = req.payload?.package_name;
   if (req.kind === "extra_time") {
     return req.payload?.scope === "app" && pkg
-      ? t("views.requests.describe.extraTimeApp", { minutes, app: pkg })
+      ? t("views.requests.describe.extraTimeApp", { minutes, app: appName(String(pkg)) })
       : t("views.requests.describe.extraTimeGlobal", { minutes });
   }
   if (req.kind === "reward") return t("views.requests.describe.reward", { minutes });
   if (req.kind === "unblock_app") {
-    return pkg != null ? t("views.requests.describe.unblockApp", { app: pkg }) : t("views.requests.describe.unblockAnyApp");
+    return pkg != null ? t("views.requests.describe.unblockApp", { app: appName(String(pkg)) }) : t("views.requests.describe.unblockAnyApp");
   }
   if (req.kind === "browse") {
     const domain = req.payload?.domain;

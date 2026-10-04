@@ -17,6 +17,11 @@ dans un navigateur, mais se lisent comme du HTML : valeurs de couleurs, tailles,
 espacements, rayons, ombres et structure. **Elles ne sont jamais embarquées dans
 l'application.**
 
+Les noms, l'e-mail et les chiffres qui y figurent sont **100 % fictifs** (famille
+« DURAND », enfant « Léa », `parent@exemple.fr`). N'y mettez jamais de données
+réelles : le dépôt est public. Les maquettes ne chargent aucune police en ligne ;
+l'application, elle, embarque Fraunces et Figtree en local (`apps/parent-web/src/fonts.css`).
+
 ## Jetons (résumé)
 
 - **Couleurs (clair)**

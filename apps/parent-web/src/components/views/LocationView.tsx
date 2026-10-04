@@ -4,7 +4,7 @@ import { useLocation, requestLocate, GEOFENCE_TRANSITION_LABEL, LOCATION_MODE_LA
 import { GEOFENCE_TYPE_LABEL } from "../../lib/location";
 import { fmtAgo, fmtDateTime, localDayKey } from "../../lib/format";
 import { Crosshair, DoorOpen, House, Map as MapIcon, MapPin, Radio, ShieldCheck, Siren } from "lucide-react";
-import { Tile, EmptyState } from "../Ui";
+import { Tile, EmptyState, ViewSkeleton } from "../Ui";
 import { ic } from "../icons";
 import { useI18n, Trans } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
@@ -90,7 +90,7 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
     setMsg(error ? error : t("views.location.checkInRequested"));
   }
 
-  if (loc.loading) return <p className="muted">{t("views.location.loading")}</p>;
+  if (loc.loading) return <ViewSkeleton compact />;
 
   return (
     <div className="stack" style={{ gap: 20 }}>
@@ -157,8 +157,9 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
               </button>
               {days.slice(0, 7).map(([d, n]) => (
                 <button type="button" key={d} className={selectedDay === d ? "on" : ""} aria-pressed={selectedDay === d} onClick={() => setSelectedDay(d)}>
-                  {fmt.date(new Date(d + "T00:00:00"), { weekday: "short", day: "numeric", month: "short" })}
-                  <span className="muted small"> · {n}</span>
+                  {t("views.location.map.dayChip", {
+                    count: n, day: fmt.date(new Date(d + "T00:00:00"), { weekday: "short", day: "numeric", month: "short" }),
+                  })}
                 </button>
               ))}
             </div>
@@ -184,10 +185,10 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
                 <tr key={e.id}>
                   <td><span className={`pill ${e.transition === "enter" ? "in" : e.transition === "exit" ? "out" : ""}`}>
                     {GEOFENCE_TRANSITION_LABEL[e.transition]}</span></td>
-                  <td>{e.geofence_name
+                  <td data-label={t("common.cellLabel", { label: t("views.location.events.colZone") })}>{e.geofence_name
                     ?? loc.geofences.find((g) => g.id === e.geofence_id)?.name
                     ?? t("views.location.events.deletedZone")}</td>
-                  <td className="muted">{fmtDateTime(e.occurred_at)} · {fmtAgo(e.occurred_at)}</td>
+                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.location.events.colWhen") })}>{fmtDateTime(e.occurred_at)}</td>
                 </tr>
               ))}
             </tbody>

@@ -60,8 +60,8 @@ export function CallsView({ obs }: { obs: ObservationData }) {
             <div className="tbl-wrap"><table className="tbl">
               <thead>
                 <tr>
-                  <th>{t("views.calls.columns.direction")}</th>
                   <th>{t("views.calls.columns.counterparty")}</th>
+                  <th>{t("views.calls.columns.direction")}</th>
                   <th>{t("views.calls.columns.duration")}</th>
                   <th>{t("views.calls.columns.date")}</th>
                 </tr>
@@ -69,10 +69,13 @@ export function CallsView({ obs }: { obs: ObservationData }) {
               <tbody>
                 {comms.map((c) => (
                   <tr key={c.id}>
-                    <td><span className={`pill ${c.direction}`}>{DIR_LABEL[c.direction]}</span></td>
                     <td>{counterparty(c)}</td>
-                    <td>{connected(c) ? fmtDuration(c.duration_ms ?? 0) : t("common.none")}</td>
-                    <td className="muted">{fmtDateTime(c.occurred_at)}</td>
+                    <td data-label={t("common.cellLabel", { label: t("views.calls.columns.direction") })}>
+                      <span className={`pill ${c.direction}`}>{DIR_LABEL[c.direction]}</span></td>
+                    <td data-label={t("common.cellLabel", { label: t("views.calls.columns.duration") })}>
+                      {connected(c) ? fmtDuration(c.duration_ms ?? 0) : t("common.none")}</td>
+                    <td className="muted" data-label={t("common.cellLabel", { label: t("views.calls.columns.date") })}>
+                      {fmtDateTime(c.occurred_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -85,8 +88,8 @@ export function CallsView({ obs }: { obs: ObservationData }) {
 }
 
 function counterparty(c: CommEvent): string {
-  // Le numéro n'est jamais en clair ; on affiche un identifiant de regroupement
-  // stable (préfixe du hash) ou « Numéro masqué ».
-  if (c.counterparty_hash) return t("views.calls.hiddenNumberWithId", { id: c.counterparty_hash.slice(0, 6) });
+  // Le numéro n'est jamais en clair : « Correspondant · a91f3c » (identifiant
+  // masqué STABLE) ; « Numéro masqué » seulement pour un appel réellement anonyme.
+  if (c.counterparty_hash) return t("views.calls.counterpartyWithId", { id: c.counterparty_hash.slice(0, 6) });
   return t("views.calls.hiddenNumber");
 }

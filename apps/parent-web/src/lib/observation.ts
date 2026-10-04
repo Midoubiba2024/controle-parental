@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase";
 import { dayKey } from "./format";
 import { errorMessage } from "../i18n";
@@ -47,12 +47,20 @@ export function useObservation(childId: string | null): ObservationData {
   const [reloadToken, setReloadToken] = useState(0);
 
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
+  const loadedFor = useRef<string | null>(null);
 
   useEffect(() => {
     // Garde anti-réponse-périmée (VIE PRIVÉE) : si l'enfant sélectionné change
     // avant la fin du chargement, on ignore la réponse de l'enfant précédent pour
     // ne JAMAIS afficher ses données sous l'entête d'un autre enfant.
     let active = true;
+    // Changement d'enfant : on VIDE d'abord les données de l'enfant précédent
+    // (jamais affichées sous le prénom du nouvel enfant pendant le chargement).
+    // Un simple rechargement du même enfant garde l'affichage en place.
+    if (childId !== loadedFor.current) {
+      setUsage([]); setInventory([]); setStatus([]); setComms([]); setDevices([]);
+      loadedFor.current = childId;
+    }
     if (!childId) { setLoading(false); return; }
     setLoading(true);
     setError(null);

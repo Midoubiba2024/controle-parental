@@ -86,11 +86,17 @@ export function categoryLabel(cat: FilterCategory | null): string {
   return FILTER_CATEGORIES.find((c) => c.key === cat)?.label ?? cat;
 }
 
-// Couleur décorative stable par catégorie (série CVD-safe, cycle 1..8).
+// Couleur décorative stable par catégorie — UNE couleur par catégorie (jamais
+// deux catégories identiques), la même pour l'icône et la pastille du journal.
+const FILTER_CATEGORY_COLOR: Record<FilterCategory, string> = {
+  adult: "var(--series-8)", violence: "var(--series-1)", gambling: "var(--series-4)",
+  drugs: "var(--series-3)", weapons: "var(--series-5)", hate: "var(--series-6)",
+  dating: "var(--series-2)", social: "var(--series-7)", piracy: "var(--c-plum)",
+  malware: "var(--c-sand-3)", ads_trackers: "var(--c-muted)",
+};
 export function filterCategoryColor(cat: FilterCategory | null): string {
-  if (!cat) return "var(--muted)";
-  const idx = FILTER_CATEGORIES.findIndex((c) => c.key === cat);
-  return idx < 0 ? "var(--muted)" : `var(--series-${(idx % 8) + 1})`;
+  if (!cat) return "var(--c-muted)";
+  return FILTER_CATEGORY_COLOR[cat] ?? "var(--c-muted)";
 }
 
 /* --------------------------- Presets par âge (C5) ------------------------ */

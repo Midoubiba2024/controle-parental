@@ -7,7 +7,7 @@ import {
 import { fmtAgo, fmtDateTime } from "../../lib/format";
 import type { CSSProperties } from "react";
 import { Ban, CircleCheck, FolderOpen, Hand, Plus, ShieldCheck, ShieldOff, TriangleAlert, X } from "lucide-react";
-import { EmptyState } from "../Ui";
+import { EmptyState, ViewSkeleton, useShowMore } from "../Ui";
 import { filterCategoryIcon, ic, icSm } from "../icons";
 import { Trans, errorMessage, useI18n } from "../../i18n";
 import type {
@@ -30,12 +30,11 @@ const STALE_MS = 5 * 60_000;
 
 export function FilteringView({ familyId, child }: { familyId: string; child: Child }) {
   const childId = child.id;
-  const { t } = useI18n();
   const f = useFilter(familyId, childId);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  if (f.loading) return <p className="muted">{t("views.filtering.loading")}</p>;
+  if (f.loading) return <ViewSkeleton compact />;
 
   async function run(fn: () => Promise<{ error?: string | null } | void>) {
     setBusy(true); setMsg(null);
@@ -57,10 +56,15 @@ export function FilteringView({ familyId, child }: { familyId: string; child: Ch
       {f.error && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{f.error}</p>}
       {msg && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{msg}</p>}
 
-      <StatusCard f={f} busy={busy} run={run} savePolicy={savePolicy} child={child} />
-      <SafeSearchCard f={f} busy={busy} run={run} savePolicy={savePolicy} />
-      <CategoriesCard f={f} busy={busy} run={run} savePolicy={savePolicy} />
-      <AskToBrowseCard f={f} familyId={familyId} busy={busy} run={run} />
+      {/* Deux colonnes équilibrées : état + catégories ; recherche sécurisée + demandes. */}
+      <div className="stack">
+        <StatusCard f={f} busy={busy} run={run} savePolicy={savePolicy} child={child} />
+        <CategoriesCard f={f} busy={busy} run={run} savePolicy={savePolicy} />
+      </div>
+      <div className="stack">
+        <SafeSearchCard f={f} busy={busy} run={run} savePolicy={savePolicy} />
+        <AskToBrowseCard f={f} familyId={familyId} busy={busy} run={run} />
+      </div>
       <ListsCard f={f} familyId={familyId} childId={childId} busy={busy} run={run} />
       <JournalCard f={f} />
     </div>
@@ -97,7 +101,7 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
         <Trans k="views.filtering.status.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
 
-      <label className="row" style={{ gap: 8, marginTop: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={enabled} disabled={busy}
           onChange={(e) => run(() => savePolicy({ enabled: e.target.checked }))} />
         <span><Trans k="views.filtering.status.enableToggle" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} /></span>
@@ -164,7 +168,7 @@ function SafeSearchCard({ f, busy, run, savePolicy }: Base) {
     <div className="card">
       <h2>{t("views.filtering.safeSearch.title")}</h2>
 
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.safe_search ?? true} disabled={busy}
           onChange={(e) => run(() => savePolicy({ safe_search: e.target.checked }))} />
         <span><Trans k="views.filtering.safeSearch.forceSafeSearch" tags={{ b: (c) => <b>{c}</b> }} /></span>
@@ -177,11 +181,11 @@ function SafeSearchCard({ f, busy, run, savePolicy }: Base) {
           {(Object.keys(YOUTUBE_MODE_LABEL) as YoutubeMode[]).map((m) =>
             <option key={m} value={m}>{YOUTUBE_MODE_LABEL[m]}</option>)}
         </select>
-        <span className="muted small">{t("views.filtering.safeSearch.youtubeVia")}</span>
+        <span className="muted small">{t(`views.filtering.safeSearch.youtubeHint.${policy?.youtube_restriction ?? "moderate"}`)}</span>
       </div>
 
       <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.whitelistTitle")}</h3>
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.whitelist_only ?? false} disabled={busy}
           onChange={(e) => run(() => savePolicy({ whitelist_only: e.target.checked }))} />
         <span><Trans k="views.filtering.safeSearch.whitelistOnly" tags={{ b: (c) => <b>{c}</b> }} /></span>
@@ -191,14 +195,14 @@ function SafeSearchCard({ f, busy, run, savePolicy }: Base) {
       </p>
 
       <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.askToBrowseTitle")}</h3>
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.ask_to_browse ?? false} disabled={busy}
           onChange={(e) => run(() => savePolicy({ ask_to_browse: e.target.checked }))} />
         <span><Trans k="views.filtering.safeSearch.askToBrowse" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
       <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.journalTitle")}</h3>
-      <label className="row" style={{ gap: 8 }}>
+      <label className="check">
         <input type="checkbox" checked={policy?.log_allowed ?? false} disabled={busy}
           onChange={(e) => run(() => savePolicy({ log_allowed: e.target.checked }))} />
         <span><Trans k="views.filtering.safeSearch.logAllowed" tags={{ b: (c) => <b>{c}</b> }} /></span>
@@ -339,9 +343,9 @@ function ListsCard({ f, familyId, childId, busy, run }: {
         <Trans k="views.filtering.lists.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); submit(); }} style={{ marginBottom: 6 }}>
-        <input aria-label={t("views.filtering.lists.title")} placeholder={t("views.filtering.lists.domainPlaceholder")} value={domain} onChange={(e) => setDomain(e.target.value)}
+        <input aria-label={t("views.filtering.lists.domainLabel")} placeholder={t("views.filtering.lists.domainPlaceholder")} value={domain} onChange={(e) => setDomain(e.target.value)}
           style={{ flex: 1, minWidth: 200 }} />
-        <select aria-label={t("views.filtering.lists.title")} value={action} onChange={(e) => setAction(e.target.value as FilterRuleAction)}>
+        <select aria-label={t("views.filtering.lists.actionLabel")} value={action} onChange={(e) => setAction(e.target.value as FilterRuleAction)}>
           <option value="block">{t("views.filtering.lists.actionBlock")}</option>
           <option value="allow">{t("views.filtering.lists.actionAllow")}</option>
         </select>
@@ -364,12 +368,14 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
   busy: boolean; onRemove: (id: string) => void; empty: string;
 }) {
   const { t } = useI18n();
+  const { visible, button, truncated } = useShowMore(rules, 8);
   return (
     <div>
       <h3 className="row" style={{ gap: 8 }}>{icon} {title} <span className="muted small">{t("views.filtering.lists.count", { count: rules.length })}</span></h3>
       {rules.length === 0 ? <p className="muted small">{empty}</p> : (
-        <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: 240 }}>
-          {rules.map((r) => (
+        <>
+        <ul className={truncated ? "truncated" : undefined} style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {visible.map((r) => (
             <li key={r.id} className="row"
               style={{ gap: 8, padding: "4px 0", borderBottom: "1px solid var(--c-divider)", justifyContent: "space-between", flexWrap: "nowrap" }}>
               <code style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{r.domain}</code>
@@ -383,6 +389,8 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
             </li>
           ))}
         </ul>
+        {button}
+        </>
       )}
     </div>
   );
@@ -391,6 +399,8 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
 /* ------------------------- Journal de domaines (F4-F6) ------------------- */
 function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
   const { t } = useI18n();
+  const { visible, button, truncated } = useShowMore(f.events, 15);
+  const cell = (k: "colCategory" | "colAction" | "colWhen") => t("common.cellLabel", { label: t(`views.filtering.journal.${k}`) });
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
       <h2>{t("views.filtering.journal.title")} <span className="muted small">{t("views.filtering.journal.subtitle")}</span></h2>
@@ -402,26 +412,29 @@ function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
         <EmptyState icon={FolderOpen} title={t("views.filtering.journal.emptyTitle")}
           hint={t("views.filtering.journal.emptyHint")} />
       ) : (
-        <div className="tbl-wrap"><table className="tbl">
+        <>
+        <div className={`tbl-wrap${truncated ? " truncated" : ""}`}><table className="tbl">
           <thead><tr>
             <th>{t("views.filtering.journal.colDomain")}</th><th>{t("views.filtering.journal.colCategory")}</th>
             <th>{t("views.filtering.journal.colAction")}</th><th>{t("views.filtering.journal.colWhen")}</th>
           </tr></thead>
           <tbody>
-            {f.events.map((ev) => (
+            {visible.map((ev) => (
               <tr key={ev.id}>
                 <td><code>{ev.domain}</code></td>
-                <td>
+                <td data-label={cell("colCategory")}>
                   <span className="badge">
                     <span className="sw" style={{ background: filterCategoryColor(ev.category) }} />{categoryLabel(ev.category)}
                   </span>
                 </td>
-                <td className="small">{DOMAIN_ACTION_LABEL[ev.action]}</td>
-                <td className="muted small">{fmtDateTime(ev.occurred_at)}</td>
+                <td className="small" data-label={cell("colAction")}>{DOMAIN_ACTION_LABEL[ev.action]}</td>
+                <td className="muted small" data-label={cell("colWhen")}>{fmtDateTime(ev.occurred_at)}</td>
               </tr>
             ))}
           </tbody>
         </table></div>
+        {button}
+        </>
       )}
     </div>
   );

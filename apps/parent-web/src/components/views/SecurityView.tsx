@@ -4,8 +4,9 @@ import {
   ackSos, resolveSos, acknowledgeAlert, GEOFENCE_TYPE_LABEL, geofenceColor,
 } from "../../lib/location";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
-import { BatteryLow, Check, House, LifeBuoy, Plus, Siren } from "lucide-react";
-import { EmptyState } from "../Ui";
+import type { CSSProperties } from "react";
+import { BatteryLow, Check, House, LifeBuoy, MapPin, Plus, School, Siren } from "lucide-react";
+import { EmptyState, ViewSkeleton } from "../Ui";
 import { ic } from "../icons";
 import { useI18n, t as tr } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
@@ -28,7 +29,7 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
     if (error) setMsg(error); else loc.reload();
   }
 
-  if (loc.loading) return <p className="muted">{t("app.loading")}</p>;
+  if (loc.loading) return <ViewSkeleton compact />;
 
   const openSos = loc.sos.filter((s) => s.status !== "resolved");
 
@@ -57,8 +58,8 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
               {loc.sos.map((s) => (
                 <tr key={s.id}>
                   <td><span className={`pill ${s.status === "resolved" ? "" : "blocked"}`}>{sosStatusLabel(s)}</span></td>
-                  <td className="muted">{fmtDateTime(s.started_at)}</td>
-                  <td className="muted">{s.ended_at ? fmtDateTime(s.ended_at) : t("common.none")}</td>
+                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.history.colStart") })}>{fmtDateTime(s.started_at)}</td>
+                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.history.colEnd") })}>{s.ended_at ? fmtDateTime(s.ended_at) : t("common.none")}</td>
                 </tr>
               ))}
             </tbody>
@@ -158,7 +159,7 @@ function SettingsCard({ familyId, child, loc, run }: {
           ? t("views.security.settings.youngChildAdvice")
           : t("views.security.settings.teenAdvice")}
       </p>
-      <div className="row" style={{ gap: 18, flexWrap: "wrap" }}>
+      <div className="row settings-row" style={{ gap: 18, flexWrap: "wrap" }}>
         <label className="fld">
           {t("views.security.settings.modeLabel")}
           <select value={mode} onChange={(e) =>
@@ -234,13 +235,16 @@ function ZonesCard({ familyId, child, loc, run }: {
       ) : (
         <div>
           {loc.geofences.map((g) => (
-            <div className="list-row" key={g.id}>
-              <span className="zone-tag">
-                <span className="zone-sw" style={{ background: geofenceColor(g.type) }} />
-                {GEOFENCE_TYPE_LABEL[g.type]}
+            <div className="list-row zone-row" key={g.id}>
+              <span className="zone-ic" aria-hidden="true" style={{ "--ic-color": geofenceColor(g.type) } as CSSProperties}>
+                {g.type === "home" ? <House {...ic} size={18} /> : g.type === "school" ? <School {...ic} size={18} /> : <MapPin {...ic} size={18} />}
               </span>
               <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>{g.name}</div>
+                {/* Type en légende seulement s'il apporte une information (≠ du nom). */}
+                {GEOFENCE_TYPE_LABEL[g.type].toLocaleLowerCase() !== g.name.trim().toLocaleLowerCase() && (
+                  <div className="muted small">{GEOFENCE_TYPE_LABEL[g.type]}</div>
+                )}
                 <div className="muted small">
                   {t(g.enabled ? "views.security.zones.summary" : "views.security.zones.summaryDisabled", {
                     radius: g.radius_m,
@@ -250,7 +254,8 @@ function ZonesCard({ familyId, child, loc, run }: {
                   })}
                 </div>
               </div>
-              <button className="ghost" onClick={() =>
+              <div className="zone-actions">
+              <button className="soft" onClick={() =>
                 run(() => saveGeofence(familyId, child.id, {
                   id: g.id, name: g.name, type: g.type, center_lat: g.center_lat,
                   center_lng: g.center_lng, radius_m: g.radius_m, enabled: !g.enabled,
@@ -258,10 +263,11 @@ function ZonesCard({ familyId, child, loc, run }: {
                 }))}>
                 {g.enabled ? t("views.security.zones.disable") : t("views.security.zones.enable")}
               </button>
-              <button className="ghost" onClick={() => setEditing(g)}>{t("views.security.zones.edit")}</button>
-              <button className="link" onClick={() => { if (confirm(t("views.security.zones.confirmDelete", { name: g.name }))) run(() => deleteGeofence(g.id)); }}>
+              <button className="soft" onClick={() => setEditing(g)}>{t("views.security.zones.edit")}</button>
+              <button className="link" style={{ color: "var(--c-danger)" }} onClick={() => { if (confirm(t("views.security.zones.confirmDelete", { name: g.name }))) run(() => deleteGeofence(g.id)); }}>
                 {t("views.security.zones.delete")}
               </button>
+              </div>
             </div>
           ))}
         </div>
@@ -356,21 +362,21 @@ function AlertsCard({ loc, run }: {
   loc: ReturnType<typeof useLocation>;
   run: (fn: () => Promise<{ error: string | null }>) => void;
 }) {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const unseen = loc.alerts.filter((a) => !a.acknowledged_at);
   if (loc.alerts.length === 0) return null;
   return (
     <div className="card">
       <h2>{t("views.security.alerts.title")} <span className="muted small">{t("views.security.alerts.unseen", { count: unseen.length })}</span></h2>
       <div className="tbl-wrap"><table className="tbl">
-        <thead><tr><th>{t("views.security.alerts.colAlert")}</th><th>{t("views.security.alerts.colWhen")}</th><th></th></tr></thead>
+        <thead><tr><th>{t("views.security.alerts.colAlert")}</th><th>{t("views.security.alerts.colWhen")}</th><th>{t("views.security.alerts.colState")}</th></tr></thead>
         <tbody>
           {loc.alerts.slice(0, 20).map((a) => (
             <tr key={a.id}>
-              <td><BatteryLow {...ic} size={18} style={{ verticalAlign: "middle", marginInlineEnd: 8, color: "var(--c-warning)" }} />{a.battery_level != null ? t("views.security.alerts.lowBatteryLevel", { level: a.battery_level }) : t("views.security.alerts.lowBattery")}</td>
-              <td className="muted">{fmtDateTime(a.created_at)} · {fmtAgo(a.created_at)}</td>
-              <td>{a.acknowledged_at
-                ? <span className="muted small">{t("views.security.alerts.seen")}</span>
+              <td><BatteryLow {...ic} size={18} style={{ verticalAlign: "middle", marginInlineEnd: 8, color: "var(--c-warning)" }} />{a.battery_level != null ? t("views.security.alerts.lowBatteryLevel", { level: fmt.percent(a.battery_level) }) : t("views.security.alerts.lowBattery")}</td>
+              <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.alerts.colWhen") })}>{fmtDateTime(a.created_at)}</td>
+              <td data-label={t("common.cellLabel", { label: t("views.security.alerts.colState") })}>{a.acknowledged_at
+                ? <span className="badge good">{t("views.security.alerts.seen")}</span>
                 : <button className="link" onClick={() => run(() => acknowledgeAlert(a.id))}>{t("views.security.alerts.markSeen")}</button>}
               </td>
             </tr>

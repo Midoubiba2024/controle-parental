@@ -3,7 +3,7 @@ import {
   byApp, byCategory, dailyTotals, pctDelta, totalInRange, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, fmtDayLabel, fmtDuration, fmtDurationShort, shiftDay,
+  appLabelOf, categoryColor, categoryLabel, dayTick, fmtDayLabel, fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { useI18n } from "../../i18n";
 import { CalendarDays, ChartColumn, ChartPie, MousePointerClick, Timer } from "lucide-react";
@@ -29,7 +29,8 @@ export function ScreenTimeView({ obs }: { obs: ObservationData }) {
   const days = Array.from({ length: period }, (_, i) => shiftDay(anchorDay, -(period - 1 - i)));
   const totals = dailyTotals(usage, days);
   const barData: Slice[] = days.map((d, i) => ({
-    key: d, label: period <= 7 ? fmtDayLabel(d) : (i % 3 === 0 ? d.slice(8) : ""),
+    // Libellé complet (aria-label, infobulle) + graduation courte de l'axe.
+    key: d, label: fmtDayLabel(d), tick: dayTick(d, period, i),
     value: totals[i], color: "var(--chart-bar)",
   }));
 

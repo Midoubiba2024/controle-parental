@@ -81,3 +81,14 @@ export function appInitials(label: string | null, pkg: string): string {
   const name = appLabelOf(label, pkg);
   return name.slice(0, 2).toUpperCase();
 }
+
+/**
+ * Libellé COURT de l'axe des jours d'un histogramme (le libellé complet reste
+ * dans l'aria-label et l'infobulle) : jour de la semaine abrégé sur 7 jours,
+ * numéro du jour un jour sur trois sur 30 jours (jamais de date tronquée).
+ */
+export function dayTick(day: string, period: number, index: number): string {
+  const d = new Date(day + "T00:00:00");
+  if (period <= 7) return fmt.date(d, { weekday: "short" });
+  return index % 3 === 0 ? fmt.date(d, { day: "numeric" }) : "";
+}

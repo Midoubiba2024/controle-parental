@@ -10,7 +10,9 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  // Message affiché dans une région TOUJOURS montée (annoncée à coup sûr) :
+  // info (compte créé) en role=status, erreur en role=alert.
+  const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -21,7 +23,7 @@ export function Login() {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setMsg(t("login.accountCreated"));
+        setMsg({ text: t("login.accountCreated"), error: false });
         setMode("signin");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -29,7 +31,7 @@ export function Login() {
         // La session est captée par onAuthStateChange dans App.
       }
     } catch (err) {
-      setMsg(errorMessage(err));
+      setMsg({ text: errorMessage(err), error: true });
     } finally {
       setBusy(false);
     }
@@ -41,10 +43,8 @@ export function Login() {
         <span className="auth-deco" aria-hidden="true"><Logo size={240} /></span>
         <div className="brand">
           <span className="brand-logo"><Logo size={26} /></span>
-          <span className="brand-text">
-            <span className="brand-name">{t("dashboard.brand")}</span>
-            <span className="brand-sub">{t("dashboard.brandSub")}</span>
-          </span>
+          {/* Sous-titre « Console parent » omis : c'est déjà le titre du formulaire. */}
+          <span className="brand-name">{t("dashboard.brand")}</span>
         </div>
         <p id="auth-headline" className="auth-headline">{t("login.headline")}</p>
         <p className="auth-lead">{t("login.lead")}</p>
@@ -65,7 +65,9 @@ export function Login() {
                 autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
             </label>
-            <label htmlFor="login-password">{t("login.password")}
+            {/* Le label ne contient QUE le champ : le bouton afficher/masquer a son propre nom. */}
+            <div className="fld">
+              <label htmlFor="login-password">{t("login.password")}</label>
               <span className="pw-field">
                 <input id="login-password" type={showPw ? "text" : "password"} value={password} required minLength={8}
                   onChange={(e) => setPassword(e.target.value)}
@@ -76,13 +78,18 @@ export function Login() {
                   {showPw ? <EyeOff {...ic} /> : <Eye {...ic} />}
                 </button>
               </span>
-            </label>
+            </div>
             <button disabled={busy} type="submit" className="block" style={{ minHeight: 48, marginTop: 4 }}>
               {mode === "signin" ? <LogIn {...ic} size={18} /> : <UserPlus {...ic} size={18} />}
               {busy ? t("common.busy") : mode === "signin" ? t("login.signIn") : t("login.signUp")}
             </button>
           </form>
-          {msg && <p className="msg" role="status" style={{ marginTop: 14 }}>{msg}</p>}
+          <p className="msg" role="status" aria-live="polite" style={{ marginTop: msg && !msg.error ? 14 : 0 }}>
+            {msg && !msg.error ? msg.text : ""}
+          </p>
+          <p className="msg error" role="alert" style={{ marginTop: msg?.error ? 14 : 0 }}>
+            {msg?.error ? msg.text : ""}
+          </p>
           <div className="auth-switch">
             <button type="button" className="link" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMsg(null); }}>
               {mode === "signin" ? t("login.switchToSignUp") : t("login.switchToSignIn")}
@@ -90,7 +97,7 @@ export function Login() {
           </div>
           <p className="auth-foot">
             <ShieldCheck {...ic} size={18} />
-            <span>{t("login.tagline")} · {t("login.mfaNotice")}</span>
+            <span>{t("dashboard.footerNote")}</span>
           </p>
         </div>
       </main>

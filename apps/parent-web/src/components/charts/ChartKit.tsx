@@ -147,7 +147,7 @@ export function Bars({
           const over = lim != null && d.value > lim * 1;
           const bg = hot ? "var(--c-accent)" : over ? "var(--chart-bar-over)" : d.color;
           return (
-            <div key={d.key} className={`bars-col${hot ? " hot" : ""}${dense ? " dense" : ""}`}>
+            <div key={d.key} className={`bars-col${hot ? " hot" : ""}${over && !hot ? " over" : ""}${dense ? " dense" : ""}`}>
               {showValues && <span className="val">{d.value > 0 ? (valueFmt ?? fmt)(d.value) : ""}</span>}
               <div
                 className="b bar"

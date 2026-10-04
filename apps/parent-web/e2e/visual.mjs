@@ -33,12 +33,16 @@ const VIEWS = [
   "overview", "screen", "apps", "calls", "rules", "filter", "location",
   "security", "wellbeing", "requests", "messages", "family", "privacy",
 ];
+const IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+// Langue et fuseau FRANÇAIS : champs date/heure, dates relatives comme chez l'utilisateur.
+const CONTEXT = { locale: "fr-FR", timezoneId: "Europe/Paris", reducedMotion: "reduce" };
 const VIEWPORTS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
-  iphone: {
-    viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
-    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-  },
+  iphone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IOS_UA },
+  // iPhone SE : plus petit écran courant (contrôle anti-débordement à 375 px).
+  "iphone-se": { viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IOS_UA },
+  // iPhone en paysage : tiroir de navigation (pointeur tactile, hauteur ≤ 500 px).
+  "iphone-landscape": { viewport: { width: 932, height: 430 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IOS_UA },
 };
 const THEMES = ["light", "dark"];
 // Tuile de carte unie (beige) générée localement : aucun appel à OpenStreetMap.
@@ -132,6 +136,11 @@ async function mockNetwork(context) {
       if (req.method() !== "GET" && req.method() !== "HEAD") return json([], 201);
       const table = path.slice("/rest/v1/".length);
       const rows = filterRows(TABLES[table] ?? [], url.searchParams);
+      // Comptage (select … { count: "exact", head: true }) : total dans Content-Range.
+      const range = `${rows.length ? `0-${rows.length - 1}` : "*"}/${rows.length}`;
+      if (req.method() === "HEAD") {
+        return route.fulfill({ status: 200, headers: { "content-range": range, "access-control-allow-origin": "*", "access-control-expose-headers": "Content-Range" }, body: "" });
+      }
       const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
       if (single) return rows[0] ? json(rows[0]) : json({ code: "PGRST116", message: "0 rows" }, 406);
       return json(rows);
@@ -168,7 +177,7 @@ try {
     for (const theme of THEMES) {
       // --- Connexion (sans session) ---------------------------------------
       {
-        const context = await browser.newContext({ ...vp, locale: "fr-FR", colorScheme: theme, reducedMotion: "reduce" });
+        const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: theme });
         await mockNetwork(context);
         await context.addInitScript((th) => { try { localStorage.setItem("cp-theme", th); } catch { /* */ } }, theme);
         const page = await context.newPage();
@@ -180,7 +189,7 @@ try {
       }
       // --- Console (session simulée) --------------------------------------
       for (const view of VIEWS) {
-        const context = await browser.newContext({ ...vp, locale: "fr-FR", colorScheme: theme, reducedMotion: "reduce" });
+        const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: theme });
         await mockNetwork(context);
         await context.addInitScript(([key, sess, th, v]) => {
           try {
@@ -202,12 +211,12 @@ try {
         }
         await checkOverflow(page, `${view}-${vpName}-${theme}`);
         await shot(page, `${view}-${vpName}-${theme}`);
-        if (vpName === "iphone" && view === "overview") {
+        if (vpName !== "desktop" && view === "overview") {
           await page.getByRole("button", { name: "Ouvrir le menu" }).click();
           await page.waitForTimeout(300);
-          await page.screenshot({ path: join(OUT, `drawer-iphone-${theme}.png`), animations: "disabled" });
-          shots.push(join(OUT, `drawer-iphone-${theme}.png`));
-          console.log(`  ✓ drawer-iphone-${theme}`);
+          await page.screenshot({ path: join(OUT, `drawer-${vpName}-${theme}.png`), animations: "disabled" });
+          shots.push(join(OUT, `drawer-${vpName}-${theme}.png`));
+          console.log(`  ✓ drawer-${vpName}-${theme}`);
         }
         if (errors.length) console.warn(`  ⚠ ${view}-${vpName}-${theme} : ${errors.join(" | ")}`);
         await context.close();

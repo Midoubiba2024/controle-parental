@@ -6,8 +6,9 @@ import {
 } from "../../lib/safety";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
 import type { CSSProperties } from "react";
-import { CirclePause, CloudSun, ExternalLink, FolderOpen, HeartHandshake, TriangleAlert } from "lucide-react";
-import { EmptyState } from "../Ui";
+import { CalendarClock, CirclePause, CloudSun, ExternalLink, FolderOpen, Funnel, HeartHandshake, MapPin, TriangleAlert, UserRoundCheck } from "lucide-react";
+import { EmptyState, ViewSkeleton } from "../Ui";
+import type { View } from "../Dashboard";
 import { ic, icSm, safetyCategoryIcon } from "../icons";
 import { Trans, errorMessage, useI18n } from "../../i18n";
 import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
@@ -24,17 +25,18 @@ import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
 
 const STALE_MS = 5 * 60_000;
 
-export function SafetyView({ familyId, child }: { familyId: string; child: Child }) {
-  const { t } = useI18n();
+export function SafetyView({ familyId, child, onNavigate }: {
+  familyId: string; child: Child; onNavigate: (v: View) => void;
+}) {
   const s = useSafety(familyId, child.id);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  if (s.loading) return <p className="muted">{t("views.wellbeing.loading")}</p>;
+  if (s.loading) return <ViewSkeleton compact />;
 
   // Gradation par âge : fonction RÉSERVÉE au profil ado (preteen/teen). Pour
   // young_child, elle est totalement OFF (ni service, ni analyse) → on ne propose rien.
-  if (child.age_profile === "young_child") return <YoungChildNotice child={child} />;
+  if (child.age_profile === "young_child") return <YoungChildNotice child={child} onNavigate={onNavigate} />;
 
   async function run(fn: () => Promise<{ error?: string | null } | void>) {
     setBusy(true); setMsg(null);
@@ -76,17 +78,26 @@ type RunFn = (fn: () => Promise<{ error?: string | null } | void>) => void;
 type SafetyHook = ReturnType<typeof useSafety>;
 
 /* ------------------------- Notice profil jeune enfant -------------------- */
-function YoungChildNotice({ child }: { child: Child }) {
+function YoungChildNotice({ child, onNavigate }: { child: Child; onNavigate: (v: View) => void }) {
   const { t } = useI18n();
+  const links: { view: View; icon: typeof Funnel }[] = [
+    { view: "filter", icon: Funnel }, { view: "rules", icon: CalendarClock }, { view: "location", icon: MapPin },
+  ];
   return (
     <div className="card">
-      <h2>{t("views.wellbeing.youngChild.title")}</h2>
-      <p className="muted small" style={{ marginTop: -8 }}>
-        <Trans k="views.wellbeing.youngChild.intro" tags={{ b: (c) => <b>{c}</b> }} />
-      </p>
-      <p>
-        <Trans k="views.wellbeing.youngChild.body" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />
-      </p>
+      <div className="empty">
+        <span className="empty-ic"><UserRoundCheck {...ic} size={22} /></span>
+        <h2 className="empty-title" style={{ fontSize: 20 }}>{t("views.wellbeing.youngChild.title")}</h2>
+        <p className="empty-hint" style={{ maxWidth: "52ch" }}>{t("views.wellbeing.youngChild.body", { name: child.display_name })}</p>
+        <p className="empty-hint" style={{ marginTop: 10 }}>{t("views.wellbeing.youngChild.protectedBy")}</p>
+        <div className="row" style={{ justifyContent: "center", marginTop: 6 }}>
+          {links.map(({ view, icon: Icon }) => (
+            <button key={view} type="button" className="ghost" onClick={() => onNavigate(view)}>
+              <Icon {...ic} size={18} />{t(`nav.${view}`)}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -107,7 +118,7 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
         <Trans k="views.wellbeing.settings.intro" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />
       </p>
 
-      <label className="row" style={{ gap: 8, marginTop: 8 }}>
+      <label className="check" style={{ marginTop: 8 }}>
         <input type="checkbox" checked={enabled} disabled={busy}
           onChange={(e) => run(() => saveSettings({ analysis_enabled: e.target.checked }))} />
         <span><Trans k="views.wellbeing.settings.enableToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
@@ -116,7 +127,7 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
         {t("views.wellbeing.settings.enableHint")}
       </p>
 
-      <label className="row" style={{ gap: 8, marginTop: 10 }}>
+      <label className="check">
         <input type="checkbox" checked={mutual} disabled={busy}
           onChange={(e) => run(() => saveSettings({ mutual_visibility: e.target.checked }))} />
         <span><Trans k="views.wellbeing.settings.mutualToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
@@ -253,17 +264,17 @@ function SignalsCard({ s, busy, run, acknowledge }: {
           <tbody>
             {s.signals.map((sig) => (
               <tr key={sig.id} style={{ opacity: sig.acknowledged_at ? 0.55 : 1 }}>
-                <td>
+                <td className="wrap">
                   <span className="badge">
                     <span className="sw" style={{ background: safetyCategoryColor(sig.category) }} />{safetyCategoryLabel(sig.category)}
                   </span>
                 </td>
-                <td><span className={`badge ${sig.severity === "high" ? "danger" : sig.severity === "medium" ? "warn" : "good"}`}>
+                <td data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colSeverity") })}><span className={`badge ${sig.severity === "high" ? "danger" : sig.severity === "medium" ? "warn" : "good"}`}>
                   {SEVERITY_LABEL[sig.severity]}
                 </span></td>
-                <td className="small"><code>{sig.source_app ?? t("common.none")}</code></td>
-                <td className="small">{sig.occurrence_count}</td>
-                <td className="muted small">{fmtDateTime(sig.occurred_at)}</td>
+                <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colApp") })}><code>{sig.source_app ?? t("common.none")}</code></td>
+                <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colOccurrences") })}>{sig.occurrence_count}</td>
+                <td className="muted small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colWhen") })}>{fmtDateTime(sig.occurred_at)}</td>
                 <td>
                   {sig.acknowledged_at
                     ? <span className="muted small">{t("views.wellbeing.signals.seen")}</span>
@@ -292,7 +303,7 @@ function ResourcesCard() {
           <div key={r.name} className="panel">
             <div className="row" style={{ justifyContent: "space-between" }}>
               <strong className="serif" style={{ fontSize: 18 }}>{r.name}</strong>
-              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}<ExternalLink {...icSm} /></a>
+              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}<ExternalLink {...icSm} className="flip-rtl" /></a>
             </div>
             <div className="small" style={{ margin: "4px 0" }}>{r.contact}</div>
             <div className="muted small">{r.desc}</div>

@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Console parent — Contrôle parental</title>
     <meta name="description" content="Console parent du contrôle parental transparent." />
-    <meta name="theme-color" content="#FAF6EF" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#170F18" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" data-scheme="light" content="#FAF6EF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" data-scheme="dark" content="#170F18" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
     <!-- Écran d'accueil iPhone : « Ajouter à l'écran d'accueil » (chemins RELATIFS, base "./"). -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -22,7 +22,12 @@
       // Même clé que src/lib/theme.ts ; stockage indisponible → réglage système.
       try {
         var th = localStorage.getItem("cp-theme");
-        if (th === "light" || th === "dark") document.documentElement.setAttribute("data-theme", th);
+        if (th === "light" || th === "dark") {
+          document.documentElement.setAttribute("data-theme", th);
+          // Barre du navigateur : une seule couleur, celle du thème choisi.
+          var color = th === "dark" ? "#170F18" : "#FAF6EF";
+          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.media = "all"; m.content = color; });
+        }
       } catch (e) { /* ignore */ }
     </script>
   </head>

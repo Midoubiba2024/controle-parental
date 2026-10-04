@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { useI18n } from "../i18n";
@@ -14,10 +14,10 @@ export function Tile({
   value: ReactNode;
   icon?: LucideIcon;
   tone?: Tone;
-  delta?: { pct: number | null; invert?: boolean; label?: string };
+  delta?: { pct: number | null; invert?: boolean };
   foot?: ReactNode;
 }) {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const pct = delta?.pct;
   // pct === 0 : état NEUTRE (ni hausse ni baisse) — pas de flèche trompeuse.
   const dir = pct == null ? null : pct === 0 ? "flat" : (delta?.invert ? -pct : pct) > 0 ? "up" : "down";
@@ -34,7 +34,7 @@ export function Tile({
           {dir && TrendIcon && (
             <span className={`trend ${dir}`}>
               <TrendIcon {...icSm} size={14} />
-              {t("ui.tile.deltaPct", { pct: Math.abs(pct!) })} {delta?.label ?? t("ui.tile.vsPrevious")}
+              {t("ui.tile.deltaVsPrevious", { pct: fmt.percent(pct!, true) })}
             </span>
           )}
           {foot}
@@ -79,4 +79,42 @@ export function CardHead({ title, sub, action, icon: Icon, tone = "plum", id }: 
       {action}
     </div>
   );
+}
+
+/** Repli élégant pendant un chargement (squelette ; sans animation si mouvement réduit). */
+export function ViewSkeleton({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <div className="skeleton" role="status">
+      <span className="visually-hidden">{t("dashboard.loadingView")}</span>
+      {!compact && (
+        <div className="grid cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="sk" style={{ height: 132 }} />)}
+        </div>
+      )}
+      <div className="grid dash-wide">
+        <div className="sk" style={{ height: 300 }} />
+        <div className="sk" style={{ height: 300 }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Liste tronquée : n'affiche que `limit` éléments, avec un fondu et un bouton
+ * « Afficher les N autres » (puis « Afficher moins »). Aucun défilement imbriqué.
+ */
+export function useShowMore<T>(items: T[], limit: number) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const hidden = Math.max(0, items.length - limit);
+  const visible = open || hidden === 0 ? items : items.slice(0, limit);
+  const button = hidden > 0 ? (
+    <div className="show-more">
+      <button type="button" className="link" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {open ? t("common.showLess") : t("common.showMore", { count: hidden })}
+      </button>
+    </div>
+  ) : null;
+  return { visible, button, truncated: !open && hidden > 0 };
 }

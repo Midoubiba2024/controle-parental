@@ -2,24 +2,29 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type Componen
 import type { Session } from "@supabase/supabase-js";
 import type { LucideIcon } from "lucide-react";
 import {
-  CalendarClock, Clock3, Funnel, House, Inbox, LayoutDashboard, LayoutGrid, Lock, LogOut, MapPin,
+  Blocks, CalendarClock, Clock3, Funnel, House, Inbox, LayoutDashboard, Lock, LogOut, MapPin,
   Menu, MessageCircle, Monitor, Moon, Phone, ShieldAlert, Sun, TriangleAlert, UserRoundCheck, Users, X,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 import { useObservation } from "../lib/observation";
-import { fmtAgo, fmtBytes } from "../lib/format";
+import { fmtAgo } from "../lib/format";
 import { ageProfileLabel } from "../lib/labels";
 import { errorMessage, Trans, useI18n } from "../i18n";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { ViewErrorBoundary } from "./ErrorBoundary";
+import { ViewSkeleton } from "./Ui";
 import { ic, Logo } from "./icons";
 import type { Child, Device, DeviceStatus, Family } from "../lib/types";
 
 /* --- Vues chargées À LA DEMANDE (un chunk par vue) ------------------------ */
 // Le premier écran ne télécharge que la coquille + la vue active ; Leaflet n'est
 // chargé que par Localisation / Sécurité.
+// Un échec réseau ponctuel est retenté une fois ; un chunk réellement disparu
+// (nouvelle version publiée) est traité par `vite:preloadError` (main.tsx) puis,
+// à défaut, par ViewErrorBoundary (« Réessayer » / « Recharger »).
 const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
-  lazy(() => load().then((m) => ({ default: m[name] })));
+  lazy(() => load().catch(() => load()).then((m) => ({ default: m[name] })));
 const OverviewView = named(() => import("./views/OverviewView"), "OverviewView");
 const ScreenTimeView = named(() => import("./views/ScreenTimeView"), "ScreenTimeView");
 const ApplicationsView = named(() => import("./views/ApplicationsView"), "ApplicationsView");
@@ -44,7 +49,7 @@ const NAV: { section: "follow" | "protect" | "exchange" | "account"; items: { ke
   { section: "follow", items: [
     { key: "overview", icon: LayoutDashboard },
     { key: "screen", icon: Clock3 },
-    { key: "apps", icon: LayoutGrid },
+    { key: "apps", icon: Blocks },
     { key: "calls", icon: Phone },
   ] },
   { section: "protect", items: [
@@ -67,7 +72,9 @@ const ALL_VIEWS = NAV.flatMap((s) => s.items.map((i) => i.key));
 
 // Au-delà de ce délai, la pastille d'appareil passe en ton neutre (relevé ancien).
 const FRESH_MS = 30 * 60_000;
-const MOBILE_QUERY = "(max-width: 900px)";
+// Même seuil que le tiroir dans styles.css (dont iPhone en paysage).
+const MOBILE_QUERY = "(max-width: 900px), (pointer: coarse) and (max-height: 500px)";
+const MINUTE = 60_000;
 
 export function Dashboard({ session }: { session: Session }) {
   const { t, fmt, locale } = useI18n();
@@ -89,6 +96,10 @@ export function Dashboard({ session }: { session: Session }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  // Horloge de la coquille : « relevé il y a X min » et fraîcheur restent justes.
+  const [now, setNow] = useState(() => Date.now());
+  const [pendingCount, setPendingCount] = useState(0);
 
   const loadFamilies = useCallback(async () => {
     setLoading(true);
@@ -117,6 +128,19 @@ export function Dashboard({ session }: { session: Session }) {
   useEffect(() => { void loadChildren(); }, [loadChildren]);
   useEffect(() => { try { localStorage.setItem("cp.view", view); } catch { /* ignore */ } }, [view]);
 
+  // --- Demandes en attente (badge de navigation) : simple comptage, même table
+  // et même RLS que RequestsView. Relu au changement de vue et chaque minute.
+  useEffect(() => {
+    let active = true;
+    if (!familyId) { setPendingCount(0); return; }
+    void (async () => {
+      const { count, error } = await supabase.from("requests").select("id", { count: "exact", head: true })
+        .eq("family_id", familyId).eq("status", "pending");
+      if (active && !error) setPendingCount(count ?? 0);
+    })();
+    return () => { active = false; };
+  }, [familyId, view, now]);
+
   // --- Tiroir mobile : Échap / voile ferment, focus piégé puis rendu ---------
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);
@@ -128,6 +152,9 @@ export function Dashboard({ session }: { session: Session }) {
     const focusables = () => Array.from(panel?.querySelectorAll<HTMLElement>(
       "button:not([disabled]), a[href], select, input, [tabindex]:not([tabindex='-1'])") ?? []);
     (panel?.querySelector<HTMLElement>("[aria-current='page']") ?? focusables()[0])?.focus();
+    // Le contenu derrière le tiroir devient inerte (ni focus, ni lecteur d'écran).
+    const main = mainRef.current;
+    main?.setAttribute("inert", "");
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); closeDrawer(); return; }
       if (e.key !== "Tab") return;
@@ -135,7 +162,9 @@ export function Dashboard({ session }: { session: Session }) {
       if (list.length === 0) return;
       const first = list[0];
       const last = list[list.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      const inside = panel?.contains(document.activeElement);
+      if (!inside) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", onKey);
@@ -146,6 +175,7 @@ export function Dashboard({ session }: { session: Session }) {
     const onMq = () => { if (!mq.matches) setDrawerOpen(false); };
     mq.addEventListener("change", onMq);
     return () => {
+      main?.removeAttribute("inert");
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       mq.removeEventListener("change", onMq);
@@ -153,6 +183,25 @@ export function Dashboard({ session }: { session: Session }) {
   }, [drawerOpen, closeDrawer]);
 
   const obs = useObservation(childId);
+  const reloadObs = obs.reload;
+
+  // Tic d'une minute + retour au premier plan (iPhone : onglet repris, page
+  // restaurée depuis le cache) : on rafraîchit l'heure ET les données.
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), MINUTE);
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      setNow(Date.now());
+      reloadObs();
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("pageshow", wake);
+    };
+  }, [reloadObs]);
 
   if (loading) return <div className="center muted">{t("app.loading")}</div>;
   // En cas d'erreur de chargement sans aucune famille connue, afficher l'erreur
@@ -178,10 +227,14 @@ export function Dashboard({ session }: { session: Session }) {
   const currentFamily = families.find((f) => f.id === familyId) ?? null;
   const showChildPicker = children.length > 0 && view !== "family" && view !== "requests";
 
-  // Pastille d'appareil : uniquement si un relevé RÉEL existe pour un appareil actif.
+  // Pastille d'appareil : uniquement si un relevé RÉEL existe pour un appareil
+  // actif DE L'ENFANT AFFICHÉ (jamais celui de l'enfant précédent pendant un chargement).
   const liveIds = new Set(obs.devices.filter((d) => !d.revoked_at).map((d) => d.id));
-  const st = obs.status.find((s) => liveIds.has(s.device_id)) ?? null;
-  const fresh = st ? Date.now() - new Date(st.captured_at).getTime() < FRESH_MS : false;
+  const st = !obs.loading && currentChild
+    ? obs.status.find((s) => liveIds.has(s.device_id) && (s.child_id == null || s.child_id === currentChild.id)) ?? null
+    : null;
+  const fresh = st ? now - new Date(st.captured_at).getTime() < FRESH_MS : false;
+  const youngChild = currentChild?.age_profile === "young_child";
 
   const today = fmt.date(new Date(), { weekday: "long", day: "numeric", month: "long" });
   const todayCap = today.charAt(0).toLocaleUpperCase(locale) + today.slice(1);
@@ -223,7 +276,14 @@ export function Dashboard({ session }: { session: Session }) {
                       aria-current={view === key ? "page" : undefined}>
                       <Icon {...ic} className="nav-ic" />
                       <span className="nav-label">{t(`nav.${key}`)}</span>
-                      {view === key && <span className="nav-dot" aria-hidden="true" />}
+                      {key === "wellbeing" && youngChild && <span className="nav-tag">{t("dashboard.teenOnly")}</span>}
+                      {key === "requests" && pendingCount > 0 && (
+                        <span className="nav-count">
+                          <span aria-hidden="true">{fmt.number(pendingCount)}</span>
+                          <span className="visually-hidden">{t("dashboard.pendingRequests", { count: pendingCount })}</span>
+                        </span>
+                      )}
+                      {view === key && key !== "requests" && !(key === "wellbeing" && youngChild) && <span className="nav-dot" aria-hidden="true" />}
                     </button>
                   </li>
                 ))}
@@ -234,13 +294,13 @@ export function Dashboard({ session }: { session: Session }) {
 
         <div className="sidebar-foot">
           <p className="sidebar-email">{session.user.email}</p>
-          <p className="sidebar-note">{t("dashboard.footerTagline")} {t("dashboard.footerPrivacy")}</p>
+          <p className="sidebar-note">{t("dashboard.footerNote")}</p>
           <LanguageSwitcher />
         </div>
       </aside>
       <div className="scrim" aria-hidden="true" onClick={closeDrawer} />
 
-      <main className="main" id="main">
+      <main className="main" id="main" ref={mainRef}>
         <header className="header">
           <div className="header-top">
             <button type="button" ref={menuBtnRef} className="icon-btn menu-btn"
@@ -249,10 +309,22 @@ export function Dashboard({ session }: { session: Session }) {
               <Menu {...ic} />
             </button>
             <p className="header-date">
-              {currentChild && view !== "family" && view !== "requests"
-                ? t("dashboard.headerDateWithProfile", { date: todayCap, profile: ageProfileLabel(currentChild.age_profile) })
-                : t("dashboard.headerDate", { date: todayCap })}
+              {t("dashboard.headerDate", { date: todayCap })}
+              {currentChild && view !== "family" && view !== "requests" && (
+                <span className="profile"> {t("dashboard.headerProfile", { profile: ageProfileLabel(currentChild.age_profile) })}</span>
+              )}
             </p>
+            {/* Ordre du DOM = ordre visuel sur mobile (thème / déconnexion sur la 1re ligne). */}
+            <div className="header-actions">
+              <button type="button" className="icon-btn" title={themeTitle} aria-label={themeTitle} onClick={cycleTheme}>
+                <ThemeIcon {...ic} />
+              </button>
+              <button type="button" className="ghost" onClick={() => supabase.auth.signOut()}
+                aria-label={t("dashboard.signOut")}>
+                <LogOut {...ic} size={18} />
+                <span className="signout-label">{t("dashboard.signOut")}</span>
+              </button>
+            </div>
             <div className="header-ctl">
               {families.length > 1 && (
                 <div className="picker">
@@ -273,24 +345,11 @@ export function Dashboard({ session }: { session: Session }) {
                 </div>
               )}
               {showChildPicker && st && currentChild && (
-                <div className={`status-pill${fresh ? "" : " stale"}`} role="status"
-                  title={t("dashboard.deviceStatus", {
-                    battery: st.battery_level ?? t("common.none"), storage: fmtBytes(st.storage_free_bytes),
-                  })}>
+                <div className={`status-pill${fresh ? "" : " stale"}`}>
                   <span className="dot" aria-hidden="true" />
                   {t("dashboard.deviceFreshness", { name: currentChild.display_name, ago: fmtAgo(st.captured_at) })}
                 </div>
               )}
-              <div className="header-actions">
-                <button type="button" className="icon-btn" title={themeTitle} aria-label={themeTitle} onClick={cycleTheme}>
-                  <ThemeIcon {...ic} />
-                </button>
-                <button type="button" className="ghost" onClick={() => supabase.auth.signOut()}
-                  aria-label={t("dashboard.signOut")}>
-                  <LogOut {...ic} size={18} />
-                  <span className="signout-label">{t("dashboard.signOut")}</span>
-                </button>
-              </div>
             </div>
           </div>
           <div className="header-title">
@@ -309,6 +368,7 @@ export function Dashboard({ session }: { session: Session }) {
         {obs.error && <p className="msg error">{obs.error}</p>}
         <ProtectionBanner childId={childId} status={obs.status} devices={obs.devices} />
 
+        <ViewErrorBoundary key={view}>
         <Suspense fallback={<ViewSkeleton />}>
           {view === "family" ? (
             <FamilyView familyId={familyId!} onChildrenChanged={loadChildren} />
@@ -327,7 +387,7 @@ export function Dashboard({ session }: { session: Session }) {
           ) : view === "security" ? (
             <SecurityView familyId={familyId!} child={currentChild} />
           ) : view === "wellbeing" ? (
-            <SafetyView familyId={familyId!} child={currentChild} />
+            <SafetyView familyId={familyId!} child={currentChild} onNavigate={go} />
           ) : view === "privacy" ? (
             <PrivacyView family={currentFamily!} child={currentChild}
               onChanged={() => { void loadFamilies(); void loadChildren(); }} />
@@ -338,6 +398,7 @@ export function Dashboard({ session }: { session: Session }) {
             : view === "apps" ? <ApplicationsView obs={obs} />
             : <CallsView obs={obs} />}
         </Suspense>
+        </ViewErrorBoundary>
       </main>
     </div>
   );
@@ -346,23 +407,6 @@ export function Dashboard({ session }: { session: Session }) {
 function initial(name: string | null | undefined): string {
   const first = (name ?? "").trim().charAt(0);
   return first ? first.toLocaleUpperCase() : "·";
-}
-
-/** Repli élégant pendant le chargement d'une vue (squelette, sans animation si réduite). */
-function ViewSkeleton() {
-  const { t } = useI18n();
-  return (
-    <div className="skeleton" role="status" aria-live="polite">
-      <span className="visually-hidden">{t("dashboard.loadingView")}</span>
-      <div className="grid cols-4">
-        {[0, 1, 2, 3].map((i) => <div key={i} className="sk" style={{ height: 132 }} />)}
-      </div>
-      <div className="grid dash-wide">
-        <div className="sk" style={{ height: 300 }} />
-        <div className="sk" style={{ height: 300 }} />
-      </div>
-    </div>
-  );
 }
 
 // LOT 8b — bannière TRANSPARENTE : signale au parent qu'une protection ATTENDUE a

@@ -38,9 +38,34 @@ export function date(
   return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(value);
 }
 
-/** Date et heure courtes : « 04/10 07:43 ». */
+const HM: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/**
+ * Date et heure RELATIVES, sans secondes, format unique de la console :
+ * « 06:40 » (aujourd'hui), « hier 18:12 », « 27 août, 18:12 » (cette année),
+ * « 27 août 2025, 18:12 » (années précédentes).
+ */
 export function dateTime(d: DateInput): string {
-  return date(d, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const value = toDate(d);
+  if (!isValidDate(value)) return t("common.none");
+  const now = new Date();
+  const time = date(value, HM);
+  if (sameDay(value, now)) return time;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(value, yesterday)) return t("units.when.yesterday", { time });
+  const day = date(value, value.getFullYear() === now.getFullYear()
+    ? { day: "numeric", month: "long" }
+    : { day: "numeric", month: "long", year: "numeric" });
+  return t("units.when.dated", { date: day, time });
+}
+
+/** Pourcentage à partir d'un nombre 0–100 : « 76 % » ; `signed` → « +32 % » / « −5 % ». */
+export function percent(value: number, signed = false): string {
+  if (!Number.isFinite(value)) return t("common.none");
+  return number(value / 100, { style: "percent", maximumFractionDigits: 0, ...(signed ? { signDisplay: "exceptZero" } : {}) });
 }
 
 /** Heure ; par défaut comme toLocaleTimeString() : « 07:43:12 ». */
@@ -127,5 +152,5 @@ export function languageName(code: string): string {
   }
 }
 
-export const fmt = { date, dateTime, time, number, duration, durationShort, bytes, ago, dayLabel, languageName };
+export const fmt = { date, dateTime, time, number, percent, duration, durationShort, bytes, ago, dayLabel, languageName };
 export type Fmt = typeof fmt;

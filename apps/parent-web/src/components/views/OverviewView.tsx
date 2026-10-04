@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   ArrowRight, Battery, BatteryCharging, Check, Clock3, Database, EyeOff, LayoutGrid, ShieldCheck,
 } from "lucide-react";
@@ -6,7 +6,7 @@ import {
   byApp, byCategory, dailyTotals, totalForDay, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, fmtBytes, fmtDayLabel,
+  appLabelOf, categoryColor, categoryLabel, dayKey, dayTick, fmtBytes, fmtDayLabel,
   fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { useDailyLimits } from "../../lib/rules";
@@ -28,10 +28,13 @@ export function OverviewView({ obs, child, onNavigate }: {
   const todayMs = totalForDay(usage, today);
   const { limitFor } = useDailyLimits(child.id);
 
-  // --- Tendance « vs hier » : seulement si la veille a des données RÉELLES.
+  // --- Tendance « jusqu'ici, vs hier (journée entière) » : seulement si la veille
+  // a des données RÉELLES et si le jour de référence est bien aujourd'hui (sinon
+  // l'appareil n'a rien remonté depuis plus d'un jour : comparaison trompeuse).
   const yesterday = shiftDay(anchorDay, -1);
   const hasYesterday = usage.some((u) => u.day === yesterday);
-  const diffMs = hasYesterday ? todayMs - totalForDay(usage, yesterday) : null;
+  const anchorIsToday = anchorDay === dayKey(0);
+  const diffMs = hasYesterday && anchorIsToday ? todayMs - totalForDay(usage, yesterday) : null;
 
   // --- 7 jours + limite quotidienne de chaque jour (si une limite existe).
   const days = Array.from({ length: 7 }, (_, i) => shiftDay(anchorDay, -(6 - i)));
@@ -40,7 +43,7 @@ export function OverviewView({ obs, child, onNavigate }: {
   const hasLimit = limitsMs.some((l) => l != null);
   const barData: Slice[] = days.map((d, i) => ({
     key: d, label: fmtDayLabel(d), value: totals[i], color: "var(--chart-bar)",
-    tick: fmt.date(new Date(d + "T00:00:00"), { weekday: "short" }),
+    tick: dayTick(d, 7, i),
   }));
   const daysWithData = totals.filter((v) => v > 0).length;
   const avg = daysWithData > 0 ? totals.reduce((s, v) => s + v, 0) / daysWithData : 0;
@@ -83,7 +86,7 @@ export function OverviewView({ obs, child, onNavigate }: {
             date: fmt.date(lastInstalled.installed_at!, { day: "numeric", month: "short" }),
           })} />
         <Tile label={t("views.overview.tiles.battery")} icon={st?.is_charging ? BatteryCharging : Battery} tone="sage"
-          value={st?.battery_level != null ? t("views.overview.tiles.batteryValue", { level: st.battery_level }) : t("common.none")}
+          value={st?.battery_level != null ? t("views.overview.tiles.batteryValue", { level: fmt.percent(st.battery_level) }) : t("common.none")}
           foot={st?.battery_level != null && (
             <>
               <Meter value={st.battery_level} max={100} color="var(--c-good)" />
@@ -102,7 +105,7 @@ export function OverviewView({ obs, child, onNavigate }: {
       </section>
 
       <div className="grid dash-wide">
-        <section className="card" aria-labelledby="ov-7d">
+        <section className="card stack-card" aria-labelledby="ov-7d">
           <CardHead id="ov-7d" title={t("views.overview.last7Days")}
             sub={avg > 0 ? t("views.overview.averagePerDay", { avg: fmtDuration(avg) }) : undefined}
             action={totals.some((v) => v > 0) && (
@@ -120,7 +123,7 @@ export function OverviewView({ obs, child, onNavigate }: {
                 limitLabel={constantLimit != null ? <Trans k="views.overview.limitLabel" params={{ value: fmtDuration(constantLimit) }}
                   tags={{ l: (c) => <span style={{ display: "block" }}>{c}</span> }} /> : undefined} />
               {hasLimit && (
-                <p className="card-sub" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--c-divider)" }}>
+                <p className="card-sub card-foot">
                   {exceeded > 0 ? t("views.overview.limitExceeded", { count: exceeded }) : t("views.overview.limitNeverExceeded")}
                 </p>
               )}
@@ -142,10 +145,10 @@ export function OverviewView({ obs, child, onNavigate }: {
       </div>
 
       <div className="grid dash-wide">
-        <section className="card" aria-labelledby="ov-apps">
+        <section className="card stack-card" aria-labelledby="ov-apps">
           <CardHead id="ov-apps" title={t("views.overview.topAppsToday")} sub={t("views.overview.topAppsSubtitle")}
             action={<button type="button" className="link" onClick={() => onNavigate("apps")}>
-              {t("views.overview.seeAllApps")}<ArrowRight {...icSm} />
+              {t("views.overview.seeAllApps")}<ArrowRight {...icSm} className="flip-rtl" />
             </button>} />
           {topApps.length === 0 ? <EmptyState icon={LayoutGrid} title={t("views.overview.noActivityToday")} /> : (
             <ul className="app-list">
@@ -177,10 +180,17 @@ export function OverviewView({ obs, child, onNavigate }: {
   );
 }
 
-/** Carte de transparence : ce que le parent voit / ne voit JAMAIS. */
+/**
+ * Carte de transparence : ce que le parent voit / ne voit JAMAIS. Liste STATIQUE,
+ * alignée mot pour mot sur ce que l'enfant lit dans « Mes données » (app enfant :
+ * strings.xml, clés shared_* et never_shared). Sur mobile, la liste « Vous voyez »
+ * se replie après 3 éléments (« Voir toute la liste ») sans jamais quitter la page.
+ */
 function TransparencyCard({ name, active, onPrivacy }: { name: string; active: boolean; onPrivacy: () => void }) {
   const { t } = useI18n();
-  const see = ["usage", "device", "calls"] as const;
+  const [expanded, setExpanded] = useState(false);
+  const see = ["usage", "inventory", "device", "location", "filter", "calls", "safety", "exchanges"] as const;
+  const never = ["content", "notifications", "pages", "passwords", "media"] as const;
   return (
     <section className="transparency" aria-labelledby="ov-transparency">
       <div className="t-head">
@@ -194,21 +204,28 @@ function TransparencyCard({ name, active, onPrivacy }: { name: string; active: b
       </div>
       <div>
         <p className="t-kicker yes">{t("views.overview.transparency.youSee")}</p>
-        <ul>
+        <ul id="t-see" className={`t-list${expanded ? "" : " collapsible"}`}>
           {see.map((k) => (
             <li key={k} className="yes"><Check {...icSm} size={18} />{t(`views.overview.transparency.see.${k}`)}</li>
           ))}
         </ul>
+        {!expanded && (
+          <button type="button" className="t-more" aria-expanded={false} aria-controls="t-see" onClick={() => setExpanded(true)}>
+            {t("views.overview.transparency.showAll")}
+          </button>
+        )}
       </div>
       <div>
         <p className="t-kicker no">{t("views.overview.transparency.youNeverSee")}</p>
         <ul>
-          <li className="no"><EyeOff {...icSm} size={18} />{t("views.overview.transparency.never.content")}</li>
-          <li className="no"><EyeOff {...icSm} size={18} />{t("views.overview.transparency.never.files", { name })}</li>
+          {never.map((k) => (
+            <li key={k} className="no"><EyeOff {...icSm} size={18} />{t(`views.overview.transparency.never.${k}`)}</li>
+          ))}
         </ul>
       </div>
+      <p className="t-same">{t("views.overview.transparency.sameList", { name })}</p>
       <button type="button" className="link" onClick={onPrivacy}>
-        {t("views.overview.transparency.link")}<ArrowRight {...icSm} />
+        {t("views.overview.transparency.link")}<ArrowRight {...icSm} className="flip-rtl" />
       </button>
     </section>
   );
