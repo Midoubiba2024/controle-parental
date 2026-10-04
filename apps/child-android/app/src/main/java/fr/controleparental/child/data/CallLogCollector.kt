@@ -6,8 +6,6 @@ import android.content.pm.PackageManager
 import android.provider.CallLog
 import androidx.core.content.ContextCompat
 import fr.controleparental.child.Config
-import java.security.MessageDigest
-import java.util.Locale
 
 /**
  * Journal d'appels — MÉTADONNÉES UNIQUEMENT (qui/quand/durée).
@@ -45,7 +43,7 @@ class CallLogCollector(private val context: Context) {
         // clair). Seuls le numéro — immédiatement haché — le sens, la durée et la
         // date sont collectés.
         val projection = arrayOf(
-            CallLog.Calls.NUMBER, CallLog.Calls.TYPE,
+            CallLog.Calls.NUMBER, CallLog.Calls.NUMBER_PRESENTATION, CallLog.Calls.TYPE,
             CallLog.Calls.DATE, CallLog.Calls.DURATION,
         )
         val cursor = context.contentResolver.query(
@@ -58,34 +56,31 @@ class CallLogCollector(private val context: Context) {
 
         cursor.use { c ->
             val iNum = c.getColumnIndex(CallLog.Calls.NUMBER)
+            val iPres = c.getColumnIndex(CallLog.Calls.NUMBER_PRESENTATION)
             val iType = c.getColumnIndex(CallLog.Calls.TYPE)
             val iDate = c.getColumnIndex(CallLog.Calls.DATE)
             val iDur = c.getColumnIndex(CallLog.Calls.DURATION)
             while (c.moveToNext()) {
                 val number = if (iNum >= 0) c.getString(iNum) else null
+                // Lue localement pour reconnaître un appel masqué ; jamais envoyée.
+                val presentation = if (iPres >= 0 && !c.isNull(iPres)) c.getInt(iPres) else CounterpartyHash.PRESENTATION_NOT_READ
                 val type = if (iType >= 0) c.getInt(iType) else 0
                 val date = if (iDate >= 0) c.getLong(iDate) else continue
                 val durationS = if (iDur >= 0) c.getLong(iDur) else 0
                 rows += CallRow(
                     direction = directionOf(type),
-                    // IDEMPOTENCE : jamais null. Un numéro absent/masqué donne un
-                    // hash SENTINELLE stable, pour que la contrainte d'unicité
-                    // (device_id, occurred_at, counterparty_hash, direction) matche
-                    // au rejeu (sinon NULLS DISTINCT ⇒ doublons). Le sentinel est une
-                    // constante : il n'expose aucun numéro.
-                    counterpartyHash = number?.takeIf { it.isNotBlank() }?.let { hash(it) }
-                        ?: hash(NO_NUMBER_SENTINEL),
+                    // Appel anonyme (absent, vide, privé, masqué) → null : la console
+                    // affiche « Numéro masqué », sans faux correspondant commun.
+                    // IDEMPOTENCE : la contrainte comm_events_dedup_key est NULLS NOT
+                    // DISTINCT (migration 0029), donc le rejeu d'un appel anonyme ne
+                    // crée pas de doublon.
+                    counterpartyHash = CounterpartyHash.of(number, presentation, Config.commHashPepper),
                     durationMs = durationS * 1000,
                     occurredAt = date,
                 )
             }
         }
         return rows
-    }
-
-    private companion object {
-        // Marqueur stable pour « numéro absent/inconnu » (appels masqués, privés).
-        const val NO_NUMBER_SENTINEL = "__no_number__"
     }
 
     private fun directionOf(type: Int): String = when (type) {
@@ -95,14 +90,5 @@ class CallLogCollector(private val context: Context) {
         CallLog.Calls.REJECTED_TYPE -> "rejected"
         CallLog.Calls.BLOCKED_TYPE -> "blocked"
         else -> "incoming"
-    }
-
-    // NB : hachage LOCAL — poivre présent dans l'APK, donc réversible (numéros à
-    // faible entropie). Clé de regroupement uniquement, pas un anonymat. À déplacer
-    // côté serveur (HMAC) avant activation en release (cf. Config.commHashPepper).
-    private fun hash(number: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val bytes = digest.digest("${Config.commHashPepper}:${number.trim()}".toByteArray())
-        return bytes.joinToString("") { String.format(Locale.ROOT, "%02x", it) }   // hachage machine : jamais localisé
     }
 }

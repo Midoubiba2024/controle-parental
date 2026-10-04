@@ -96,6 +96,15 @@ class SupervisionStore(context: Context) {
         get() = prefs.getBoolean(KEY_FILTER_DESIRED, false)
         set(value) { prefs.edit().putBoolean(KEY_FILTER_DESIRED, value).apply() }
 
+    /**
+     * Dernier réglage de localisation LU AVEC SUCCÈS (ligne JSON brute de
+     * location_settings, ou "{}" si aucune ligne). Sert de repli hors ligne : on ne
+     * retombe jamais sur un défaut plus permissif après une erreur réseau.
+     */
+    var lastLocationSettingsJson: String?
+        get() = prefs.getString(KEY_LOC_SETTINGS, null)
+        set(value) { prefs.edit().putString(KEY_LOC_SETTINGS, value).apply() }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
@@ -108,6 +117,7 @@ class SupervisionStore(context: Context) {
         const val KEY_CALL_WM = "call_log_watermark"
         const val KEY_STATUS_TS = "pending_status_captured_at"
         const val KEY_MSG_WM = "message_watermark"
+        const val KEY_LOC_SETTINGS = "last_location_settings"
         const val KEY_FILTER_DESIRED = "filter_desired"
     }
 }
