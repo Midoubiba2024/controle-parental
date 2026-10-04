@@ -76,21 +76,50 @@ class PairingProtocolTest {
 
     // --- GoTrue ----------------------------------------------------------------
 
-    @Test fun sessionParsedWithExpiresAt() {
+    @Test fun sessionExpiryUsesLocalClockAndExpiresIn() {
+        // expires_at (horloge serveur) ignoré quand expires_in est présent : un
+        // téléphone avancé d'une heure ne voit pas un jeton déjà expiré.
+        val localNow = 1_791_120_000L + 3_600
         val s = PairingProtocol.parseSession(
             """{"access_token":"jeton-a","token_type":"bearer","expires_in":3600,"expires_at":1791120000,
                "refresh_token":"jeton-r","user":{"id":"$kid","is_anonymous":true}}""",
-            nowEpochSeconds = 1_000,
+            nowEpochSeconds = localNow,
         )
-        assertEquals(AuthSession("jeton-a", "jeton-r", 1791120000L, kid), s)
+        assertEquals(AuthSession("jeton-a", "jeton-r", localNow + 3_600, kid, obtainedAt = localNow), s)
+        assertFalse(PairingProtocol.shouldRefreshProactively(s!!.expiresAt, s.obtainedAt, localNow + 1))
     }
 
-    @Test fun sessionExpiresAtFallsBackToExpiresIn() {
+    @Test fun sessionExpiresInFallsBackToExpiresAt() {
         val s = PairingProtocol.parseSession(
-            """{"access_token":"a","expires_in":3600,"refresh_token":"r","user":{"id":"$kid"}}""",
+            """{"access_token":"a","expires_at":4600,"refresh_token":"r","user":{"id":"$kid"}}""",
             nowEpochSeconds = 1_000,
         )
         assertEquals(4_600L, s!!.expiresAt)
+    }
+
+    @Test fun proactiveRefreshRules() {
+        // Expire dans moins de 60 s → rafraîchir.
+        assertTrue(PairingProtocol.shouldRefreshProactively(expiresAt = 1_050, obtainedAt = 0, nowEpochSeconds = 1_000))
+        assertTrue(PairingProtocol.shouldRefreshProactively(expiresAt = 1_050, obtainedAt = 900, nowEpochSeconds = 1_000))
+        // Encore valable longtemps → non.
+        assertFalse(PairingProtocol.shouldRefreshProactively(expiresAt = 4_600, obtainedAt = 1_000, nowEpochSeconds = 1_000))
+        // Échéance inconnue (ancien enrôlement) → jamais de proactif (le 401 s'en charge).
+        assertFalse(PairingProtocol.shouldRefreshProactively(expiresAt = 0, obtainedAt = 0, nowEpochSeconds = 1_000))
+        // Jeton reçu il y a moins de 30 s : pas de nouvelle rotation, même si
+        // l'échéance semble proche (expires_in très court, horloge qui saute).
+        assertFalse(PairingProtocol.shouldRefreshProactively(expiresAt = 1_020, obtainedAt = 990, nowEpochSeconds = 1_000))
+        assertTrue(PairingProtocol.shouldRefreshProactively(expiresAt = 1_020, obtainedAt = 960, nowEpochSeconds = 1_000))
+    }
+
+    @Test fun blockedUntilIsCappedAtFifteenMinutes() {
+        val now = 10_000_000L
+        // Valeur normale (≤ 15 min + marge) : conservée.
+        assertEquals(now + 754_000, PairingProtocol.effectiveBlockedUntil(now + 754_000, now))
+        assertEquals(now + 960_000, PairingProtocol.effectiveBlockedUntil(now + 960_000, now))
+        // Horloge reculée de plusieurs heures : ramenée à 15 min.
+        assertEquals(now + 900_000, PairingProtocol.effectiveBlockedUntil(now + 5 * 3_600_000, now))
+        // Échéance passée : pas de blocage.
+        assertEquals(now - 1, PairingProtocol.effectiveBlockedUntil(now - 1, now))
     }
 
     @Test fun incompleteSessionIsRejected() {
@@ -106,6 +135,9 @@ class PairingProtocolTest {
         )
         assertEquals("invalid_grant", PairingProtocol.authErrorCode(400, """{"error":"invalid_grant"}"""))
         assertEquals("http_502", PairingProtocol.authErrorCode(502, "<html>"))
+        // 5xx avec error_code : indisponibilité, pas un code « métier ».
+        assertEquals("http_500", PairingProtocol.authErrorCode(500, """{"code":500,"error_code":"unexpected_failure"}"""))
+        assertEquals(PairingMessage.UNAVAILABLE, PairingMessages.forCode(PairingProtocol.authErrorCode(500, """{"error_code":"unexpected_failure"}""")))
     }
 
     @Test fun lostSessionDetection() {

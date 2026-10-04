@@ -36,8 +36,11 @@ object PairingCode {
             c == '-' || c in '\u2010'..'\u2015' || c == '\u2212' ||
             c == '\uFE58' || c == '\uFE63' || c == '\uFF0D'
 
-    /** Majuscule ASCII puis équivalences Crockford O→0, I→1, L→1. */
-    private fun canonical(c: Char): Char = when (val u = if (c in 'a'..'z') c - 32 else c) {
+    /**
+     * Majuscule (Unicode, comme `upper()` côté SQL : `ı` → `I`, `ſ` → `S`) puis
+     * équivalences Crockford O→0, I→1, L→1.
+     */
+    private fun canonical(c: Char): Char = when (val u = c.uppercaseChar()) {
         'O' -> '0'
         'I', 'L' -> '1'
         else -> u
@@ -79,6 +82,53 @@ object PairingCode {
         }
         return Input(code, rejected)
     }
+
+    /** Résultat d'une modification du champ : texte normalisé + sélection. */
+    data class Edit(val code: String, val selStart: Int, val selEnd: Int, val rejected: Boolean)
+
+    /**
+     * Applique une modification du champ ([before] → [after], sélections comprises)
+     * en conservant la sélection de l'utilisateur :
+     *  - si le segment INSÉRÉ (collage) est à lui seul un code valide, il REMPLACE
+     *    tout le champ (coller un nouveau code dans un champ déjà rempli) ;
+     *  - sinon la saisie est filtrée ([sanitizeInput]) et la sélection recalculée
+     *    sur le texte filtré ;
+     *  - une frappe qui dépasserait 10 caractères est refusée (champ inchangé),
+     *    comme une longueur maximale.
+     * [before] est toujours une forme normalisée (≤ 10 caractères).
+     */
+    fun applyEdit(
+        before: String, beforeSelStart: Int, beforeSelEnd: Int,
+        after: String, afterSelStart: Int, afterSelEnd: Int,
+    ): Edit {
+        // Segment inséré : ce qui diffère entre le préfixe et le suffixe communs.
+        var prefix = 0
+        val maxPrefix = minOf(before.length, after.length)
+        while (prefix < maxPrefix && before[prefix] == after[prefix]) prefix++
+        var suffix = 0
+        while (suffix < minOf(before.length, after.length) - prefix &&
+            before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+        ) suffix++
+        val inserted = after.substring(prefix, after.length - suffix)
+        if (inserted.length > 1 && after != before && isValid(inserted)) {
+            val code = normalize(inserted)
+            return Edit(code, code.length, code.length, rejected = false)
+        }
+
+        val full = sanitizeInput(after)
+        if (significantLength(after) > LENGTH) {
+            // Débordement : on garde l'état précédent (pas de troncature silencieuse).
+            return Edit(before, beforeSelStart.coerceIn(0, before.length),
+                beforeSelEnd.coerceIn(0, before.length), rejected = full.rejected)
+        }
+        fun map(offset: Int) = sanitizeInput(after.take(offset.coerceIn(0, after.length))).code.length
+            .coerceAtMost(full.code.length)
+        return Edit(full.code, map(afterSelStart), map(afterSelEnd), full.rejected)
+    }
+
+    /** Nombre de caractères conservés par [sanitizeInput] avant la borne de 10. */
+    private fun significantLength(raw: String): Int =
+        raw.count { !isSeparator(it) && ALPHABET.indexOf(canonical(it)) >= 0 }
 
     /** Forme affichée : tiret après le 5e caractère (`7KQ2M-X9D4F`). */
     fun grouped(code: String): String =

@@ -10,12 +10,16 @@ import org.json.JSONObject
  * 🔴 Les jetons ne sont jamais journalisés ni inclus dans un code d'erreur.
  */
 
-/** Session GoTrue : [expiresAt] en secondes epoch (0 = inconnu). */
+/**
+ * Session GoTrue. [expiresAt] : échéance en secondes epoch de l'HORLOGE LOCALE
+ * (0 = inconnue) ; [obtainedAt] : réception, même horloge (0 = inconnue).
+ */
 data class AuthSession(
     val accessToken: String,
     val refreshToken: String,
     val expiresAt: Long,
     val userId: String,
+    val obtainedAt: Long = 0L,
 )
 
 /** Résultat de la RPC `pairing_complete` (toujours HTTP 200 pour le métier). */
@@ -41,8 +45,14 @@ object PairingProtocol {
     /** Marge de rafraîchissement proactif (§4) : expiration dans moins de 60 s. */
     const val REFRESH_MARGIN_SECONDS = 60L
 
+    /** Pas de rafraîchissement proactif d'un jeton reçu il y a moins de 30 s. */
+    const val MIN_TOKEN_AGE_SECONDS = 30L
+
     /**
-     * Session GoTrue (§2, §4). `expires_at` prioritaire, sinon `now + expires_in`.
+     * Session GoTrue (§2, §4). Échéance calculée sur l'HORLOGE LOCALE à la
+     * réception (`now + expires_in`) : un téléphone en avance ou en retard ne
+     * déclenche pas un rafraîchissement à chaque requête. `expires_at` (horloge
+     * du serveur) n'est qu'un repli si `expires_in` manque.
      * null si une valeur indispensable manque (réponse inattendue).
      */
     fun parseSession(body: String, nowEpochSeconds: Long): AuthSession? {
@@ -51,17 +61,33 @@ object PairingProtocol {
         val refresh = obj.optString("refresh_token")
         val userId = obj.optJSONObject("user")?.optString("id").orEmpty()
         if (access.isBlank() || refresh.isBlank() || userId.isBlank()) return null
-        val expiresAt = obj.optLong("expires_at", 0L).takeIf { it > 0 }
-            ?: obj.optLong("expires_in", 0L).takeIf { it > 0 }?.let { nowEpochSeconds + it }
+        val expiresAt = obj.optLong("expires_in", 0L).takeIf { it > 0 }?.let { nowEpochSeconds + it }
+            ?: obj.optLong("expires_at", 0L).takeIf { it > 0 }
             ?: 0L
-        return AuthSession(access, refresh, expiresAt, userId)
+        return AuthSession(access, refresh, expiresAt, userId, obtainedAt = nowEpochSeconds)
+    }
+
+    /**
+     * Rafraîchissement proactif (§4) : expiration dans moins de 60 s, sauf échéance
+     * inconnue (0) ou jeton reçu il y a moins de 30 s (évite toute rafale de
+     * rotations si l'horloge du téléphone saute).
+     */
+    fun shouldRefreshProactively(expiresAt: Long, obtainedAt: Long, nowEpochSeconds: Long): Boolean {
+        if (expiresAt <= 0) return false
+        val age = nowEpochSeconds - obtainedAt
+        if (obtainedAt > 0 && age in 0 until MIN_TOKEN_AGE_SECONDS) return false
+        return expiresAt - nowEpochSeconds < REFRESH_MARGIN_SECONDS
     }
 
     /**
      * Code d'erreur GoTrue (`{"code", "error_code", "msg"}` ; anciennes versions :
-     * `{"error", "error_description"}`), sinon `http_<code>`.
+     * `{"error", "error_description"}`), sinon `http_<code>` ; toujours
+     * `http_<code>` pour un 5xx.
      */
     fun authErrorCode(httpCode: Int, body: String): String {
+        // Indisponibilité serveur : toujours `http_5xx` (message « Connexion
+        // impossible »), même si GoTrue fournit un error_code (`unexpected_failure`).
+        if (httpCode >= 500) return "http_$httpCode"
         val obj = runCatching { JSONObject(body) }.getOrNull()
         val code = obj?.optString("error_code")?.takeIf { it.isNotBlank() }
             ?: obj?.optString("error")?.takeIf { it.isNotBlank() }
@@ -105,6 +131,20 @@ object PairingProtocol {
         }
         val mode = obj.optString("mode").takeIf { it == "standard" || it == "reinforced" } ?: "standard"
         return RpcOutcome.Paired(deviceId, familyId, childId, mode, obj.optBoolean("already_paired", false))
+    }
+
+    /** Fenêtre anti force brute du serveur : `retry_after_seconds` ≤ 15 min. */
+    const val MAX_RETRY_AFTER_SECONDS = 900L
+
+    /**
+     * Fin effective du blocage `too_many_attempts` (epoch ms). La valeur est
+     * persistée en heure murale : si l'horloge a reculé, elle pourrait bloquer des
+     * heures. Au-delà de 15 min + 60 s de marge, on la ramène à `now + 15 min`
+     * (le serveur ne demande jamais plus).
+     */
+    fun effectiveBlockedUntil(storedUntilMs: Long, nowMs: Long): Long {
+        val maxMs = MAX_RETRY_AFTER_SECONDS * 1000
+        return if (storedUntilMs - nowMs > maxMs + 60_000) nowMs + maxMs else storedUntilMs
     }
 
     /** Minutes affichées pour `too_many_attempts` : arrondi supérieur, au moins 1. */

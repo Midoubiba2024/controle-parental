@@ -84,4 +84,67 @@ class PairingCodeTest {
         // Curseur placé juste après le tiret affiché → après le 5e caractère.
         assertEquals(5, PairingCode.groupedToOriginal(6, 10))
     }
+
+    @Test fun unicodeUppercaseMatchesSqlUpper() {
+        // `ı` (i sans point) → I → 1 ; `ſ` (s long) → S, comme upper() côté serveur.
+        assertEquals("1", PairingCode.normalize("\u0131"))
+        assertEquals("S", PairingCode.normalize("\u017F"))
+        assertEquals(PairingCode.Input("1S", false), PairingCode.sanitizeInput("\u0131\u017F"))
+        assertTrue(PairingCode.isValid("7kq2m-x9d4\u017F"))
+    }
+
+    // --- applyEdit : sélection conservée, collage sur champ plein ----------------
+
+    @Test fun pastingNewCodeIntoFullFieldReplacesIt() {
+        val old = "ABCDEFGHJK"
+        val pasted = "7KQ2M-X9D4F"
+        val after = old + pasted                       // curseur en fin de champ plein
+        val e = PairingCode.applyEdit(old, 10, 10, after, after.length, after.length)
+        assertEquals(PairingCode.Edit("7KQ2MX9D4F", 10, 10, false), e)
+    }
+
+    @Test fun pastingNewCodeInTheMiddleOfFullFieldReplacesIt() {
+        val old = "ABCDEFGHJK"
+        val after = "ABCDE" + "7kq2m x9d4f" + "FGHJK"
+        val e = PairingCode.applyEdit(old, 5, 5, after, 16, 16)
+        assertEquals("7KQ2MX9D4F", e.code)
+        assertEquals(10, e.selStart)
+    }
+
+    @Test fun pasteOverSelectAllReplacesEverything() {
+        val e = PairingCode.applyEdit("ABCDEFGHJK", 0, 10, "7KQ2M-X9D4F", 11, 11)
+        assertEquals(PairingCode.Edit("7KQ2MX9D4F", 10, 10, false), e)
+    }
+
+    @Test fun selectAllIsPreserved() {
+        // Simple changement de sélection (« Tout sélectionner ») : rien n'est écrasé.
+        val e = PairingCode.applyEdit("ABCDEFGHJK", 10, 10, "ABCDEFGHJK", 0, 10)
+        assertEquals(PairingCode.Edit("ABCDEFGHJK", 0, 10, false), e)
+    }
+
+    @Test fun typingInTheMiddleKeepsCursorAfterTypedChar() {
+        // « ABC|DE » + frappe « x » → « ABCXDE », curseur après le X.
+        val e = PairingCode.applyEdit("ABCDE", 3, 3, "ABCxDE", 4, 4)
+        assertEquals(PairingCode.Edit("ABCXDE", 4, 4, false), e)
+    }
+
+    @Test fun typingSeparatorDoesNotMoveCursorBackwards() {
+        val e = PairingCode.applyEdit("ABCDE", 5, 5, "ABCDE-", 6, 6)
+        assertEquals(PairingCode.Edit("ABCDE", 5, 5, false), e)
+    }
+
+    @Test fun typingIntoFullFieldIsRefused() {
+        val e = PairingCode.applyEdit("ABCDEFGHJK", 5, 5, "ABCDEZFGHJK", 6, 6)
+        assertEquals(PairingCode.Edit("ABCDEFGHJK", 5, 5, false), e)
+    }
+
+    @Test fun typingUIsRejectedAndCursorStays() {
+        val e = PairingCode.applyEdit("ABC", 3, 3, "ABCu", 4, 4)
+        assertEquals(PairingCode.Edit("ABC", 3, 3, true), e)
+    }
+
+    @Test fun deletingKeepsCursor() {
+        val e = PairingCode.applyEdit("ABCDE", 3, 3, "ABDE", 2, 2)
+        assertEquals(PairingCode.Edit("ABDE", 2, 2, false), e)
+    }
 }

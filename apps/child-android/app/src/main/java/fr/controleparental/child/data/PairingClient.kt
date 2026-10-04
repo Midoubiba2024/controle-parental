@@ -91,7 +91,7 @@ class PairingClient(private val store: SupervisionStore) {
     /** §5 — session anonyme EN ATTENTE : réutilisée, rafraîchie si elle expire. */
     private fun pendingSession(): AuthClient.Result {
         val pending = store.loadPendingSession() ?: return freshSession()
-        if (!AuthClient.expiresSoon(pending.expiresAt)) return AuthClient.Result.Ok(pending)
+        if (!AuthClient.expiresSoon(pending.expiresAt, pending.obtainedAt)) return AuthClient.Result.Ok(pending)
         return when (val r = refreshPending(pending)) {
             // Session en attente perdue (compte anonyme purgé) : on en ouvre une autre.
             AuthClient.Result.Lost -> freshSession()
@@ -127,6 +127,7 @@ class PairingClient(private val store: SupervisionStore) {
             accessToken = s.accessToken,
             refreshToken = s.refreshToken,
             expiresAt = s.expiresAt,
+            obtainedAt = s.obtainedAt,
         )
         store.completeEnrollment(enrollment)
         return Result.Ok(enrollment)

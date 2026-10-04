@@ -64,7 +64,7 @@ object AuthClient {
 
     fun nowEpochSeconds(): Long = System.currentTimeMillis() / 1000
 
-    /** Rafraîchissement proactif conseillé (§4) : expire dans moins de 60 s. */
-    fun expiresSoon(expiresAt: Long): Boolean =
-        expiresAt > 0 && expiresAt - nowEpochSeconds() < PairingProtocol.REFRESH_MARGIN_SECONDS
+    /** Rafraîchissement proactif conseillé (§4) — voir PairingProtocol.shouldRefreshProactively. */
+    fun expiresSoon(expiresAt: Long, obtainedAt: Long): Boolean =
+        PairingProtocol.shouldRefreshProactively(expiresAt, obtainedAt, nowEpochSeconds())
 }

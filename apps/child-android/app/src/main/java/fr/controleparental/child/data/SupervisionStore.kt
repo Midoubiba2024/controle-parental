@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import fr.controleparental.child.pairing.AuthSession
+import fr.controleparental.child.pairing.PairingProtocol
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,8 +36,10 @@ class SupervisionStore(context: Context) {
         val mode: String,
         val accessToken: String,
         val refreshToken: String,
-        /** Expiration de [accessToken] en secondes epoch (0 = inconnue). */
+        /** Expiration de [accessToken], secondes epoch de l'horloge LOCALE (0 = inconnue). */
         val expiresAt: Long = 0L,
+        /** Réception de [accessToken], même horloge (0 = inconnue). */
+        val obtainedAt: Long = 0L,
     )
 
     val isEnrolled: Boolean get() = prefs.contains(KEY_DEVICE_ID)
@@ -56,10 +59,12 @@ class SupervisionStore(context: Context) {
             .putString(KEY_ACCESS, e.accessToken)
             .putString(KEY_REFRESH, e.refreshToken)
             .putLong(KEY_EXPIRES_AT, e.expiresAt)
+            .putLong(KEY_OBTAINED_AT, e.obtainedAt)
             .remove(KEY_PENDING_ACCESS)
             .remove(KEY_PENDING_REFRESH)
             .remove(KEY_PENDING_EXPIRES_AT)
             .remove(KEY_PENDING_USER_ID)
+            .remove(KEY_PENDING_OBTAINED_AT)
             .remove(KEY_PAIRING_BLOCKED_UNTIL)
             .commit()
         _unenrolled.value = null
@@ -70,11 +75,12 @@ class SupervisionStore(context: Context) {
      * Les refresh tokens sont À USAGE UNIQUE (rotation) : `commit()` pour que le
      * nouveau soit écrit AVANT tout usage de l'access token (docs/14-APPAIRAGE.md §4).
      */
-    fun updateTokens(accessToken: String, refreshToken: String, expiresAt: Long) {
+    fun updateTokens(s: AuthSession) {
         prefs.edit()
-            .putString(KEY_ACCESS, accessToken)
-            .putString(KEY_REFRESH, refreshToken)
-            .putLong(KEY_EXPIRES_AT, expiresAt)
+            .putString(KEY_ACCESS, s.accessToken)
+            .putString(KEY_REFRESH, s.refreshToken)
+            .putLong(KEY_EXPIRES_AT, s.expiresAt)
+            .putLong(KEY_OBTAINED_AT, s.obtainedAt)
             .commit()
     }
 
@@ -87,7 +93,10 @@ class SupervisionStore(context: Context) {
         val access = prefs.getString(KEY_PENDING_ACCESS, null) ?: return null
         val refresh = prefs.getString(KEY_PENDING_REFRESH, null) ?: return null
         val userId = prefs.getString(KEY_PENDING_USER_ID, null) ?: return null
-        return AuthSession(access, refresh, prefs.getLong(KEY_PENDING_EXPIRES_AT, 0L), userId)
+        return AuthSession(
+            access, refresh, prefs.getLong(KEY_PENDING_EXPIRES_AT, 0L), userId,
+            obtainedAt = prefs.getLong(KEY_PENDING_OBTAINED_AT, 0L),
+        )
     }
 
     fun savePendingSession(s: AuthSession) {
@@ -96,6 +105,7 @@ class SupervisionStore(context: Context) {
             .putString(KEY_PENDING_REFRESH, s.refreshToken)
             .putLong(KEY_PENDING_EXPIRES_AT, s.expiresAt)
             .putString(KEY_PENDING_USER_ID, s.userId)
+            .putLong(KEY_PENDING_OBTAINED_AT, s.obtainedAt)
             .commit()
     }
 
@@ -105,15 +115,20 @@ class SupervisionStore(context: Context) {
             .remove(KEY_PENDING_REFRESH)
             .remove(KEY_PENDING_EXPIRES_AT)
             .remove(KEY_PENDING_USER_ID)
+            .remove(KEY_PENDING_OBTAINED_AT)
             .commit()
     }
 
     /**
      * Fin du blocage `too_many_attempts` (epoch ms, 0 = aucun). Persisté : fermer
      * et rouvrir l'appli ne contourne pas l'attente demandée par le serveur.
+     * Jamais plus de 15 min dans le futur (PairingProtocol.effectiveBlockedUntil).
      */
     var pairingBlockedUntil: Long
-        get() = prefs.getLong(KEY_PAIRING_BLOCKED_UNTIL, 0L)
+        // Borné à 15 min à la lecture : persisté en heure murale (horloge reculée).
+        get() = PairingProtocol.effectiveBlockedUntil(
+            prefs.getLong(KEY_PAIRING_BLOCKED_UNTIL, 0L), System.currentTimeMillis(),
+        )
         set(value) { prefs.edit().putLong(KEY_PAIRING_BLOCKED_UNTIL, value).apply() }
 
     /**
@@ -137,6 +152,7 @@ class SupervisionStore(context: Context) {
             accessToken = prefs.getString(KEY_ACCESS, "")!!,
             refreshToken = prefs.getString(KEY_REFRESH, "")!!,
             expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L),
+            obtainedAt = prefs.getLong(KEY_OBTAINED_AT, 0L),
         )
     }
 
@@ -205,6 +221,8 @@ class SupervisionStore(context: Context) {
         private const val KEY_LOC_SETTINGS = "last_location_settings"
         private const val KEY_FILTER_DESIRED = "filter_desired"
         private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_OBTAINED_AT = "obtained_at"
+        private const val KEY_PENDING_OBTAINED_AT = "pending_obtained_at"
         private const val KEY_PENDING_ACCESS = "pending_access_token"
         private const val KEY_PENDING_REFRESH = "pending_refresh_token"
         private const val KEY_PENDING_EXPIRES_AT = "pending_expires_at"

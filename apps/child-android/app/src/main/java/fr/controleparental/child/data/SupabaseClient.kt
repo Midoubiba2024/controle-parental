@@ -220,7 +220,7 @@ class SupabaseClient(private val store: SupervisionStore) {
     /** Jeton courant, rafraîchi d'abord s'il expire dans moins de 60 s. */
     private suspend fun accessToken(): Token {
         val e = store.load() ?: return Token.Error("not_enrolled")
-        return if (AuthClient.expiresSoon(e.expiresAt)) refreshAfter(e.accessToken) else Token.Ok(e.accessToken)
+        return if (AuthClient.expiresSoon(e.expiresAt, e.obtainedAt)) refreshAfter(e.accessToken) else Token.Ok(e.accessToken)
     }
 
     /**
@@ -231,13 +231,13 @@ class SupabaseClient(private val store: SupervisionStore) {
      */
     private suspend fun refreshAfter(staleToken: String): Token = refreshMutex.withLock {
         val e = store.load() ?: return@withLock Token.Error("not_enrolled")
-        if (e.accessToken != staleToken && !AuthClient.expiresSoon(e.expiresAt)) {
+        if (e.accessToken != staleToken && !AuthClient.expiresSoon(e.expiresAt, e.obtainedAt)) {
             return@withLock Token.Ok(e.accessToken)
         }
         when (val r = AuthClient.refresh(e.refreshToken)) {
             is AuthClient.Result.Ok -> {
                 // Nouveau refresh token écrit (commit) AVANT tout usage de l'access token.
-                store.updateTokens(r.session.accessToken, r.session.refreshToken, r.session.expiresAt)
+                store.updateTokens(r.session)
                 Token.Ok(r.session.accessToken)
             }
             AuthClient.Result.Lost -> {
