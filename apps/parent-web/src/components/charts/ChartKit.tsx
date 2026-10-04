@@ -114,7 +114,9 @@ export function Bars({
 
   return (
     <div style={{ position: "relative" }}>
-      <div style={{ display: "flex", gap, alignItems: "flex-end", height }}>
+      {/* Axe TEMPOREL : toujours gauche→droite, même en RTL (convention des
+          graphiques chronologiques) ; les libellés gardent leur propre sens. */}
+      <div style={{ display: "flex", gap, alignItems: "flex-end", height, direction: "ltr" }}>
         {data.map((d) => {
           const h = Math.max((d.value / max) * plotH, d.value > 0 ? 3 : 0);
           const hot = d.key === highlightKey;
@@ -132,7 +134,7 @@ export function Bars({
                 })}
                 onMouseLeave={() => setTip(null)}
               />
-              <div className="tick" style={{ marginTop: 6, height: padB - 6, lineHeight: 1 }}>{d.label}</div>
+              <div className="tick" style={{ marginTop: 6, height: padB - 6, lineHeight: 1, unicodeBidi: "plaintext" }}>{d.label}</div>
             </div>
           );
         })}

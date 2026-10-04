@@ -387,7 +387,7 @@ function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
       <h2>{t("views.filtering.journal.title")} <span className="muted small">{t("views.filtering.journal.subtitle")}</span></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
         <Trans k="views.filtering.journal.intro" tags={{ b: (c) => <b>{c}</b> }}
-          params={{ days: f.policy?.retention_days ?? 30 }} />
+          params={{ count: f.policy?.retention_days ?? 30 }} />
       </p>
       {f.events.length === 0 ? (
         <EmptyState icon="🗂" title={t("views.filtering.journal.emptyTitle")}

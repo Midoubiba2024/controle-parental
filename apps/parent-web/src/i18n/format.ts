@@ -25,11 +25,17 @@ function toDate(d: DateInput): Date {
   return d instanceof Date ? d : new Date(d);
 }
 
+// Formateurs TOTAUX : une date invalide ou un nombre non fini (donnée absente,
+// corrompue…) s'affiche « — » au lieu de lever une RangeError (écran blanc).
+const isValidDate = (d: Date) => !Number.isNaN(d.getTime());
+
 /** Date/heure avec options Intl libres ; par défaut comme toLocaleDateString() : « 04/10/2026 ». */
 export function date(
   d: DateInput, opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" },
 ): string {
-  return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(toDate(d));
+  const value = toDate(d);
+  if (!isValidDate(value)) return t("common.none");
+  return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(value);
 }
 
 /** Date et heure courtes : « 04/10 07:43 ». */
@@ -46,11 +52,13 @@ export function time(
 
 /** Nombre selon la langue (séparateurs décimaux et de milliers). */
 export function number(n: number, opts: Intl.NumberFormatOptions = {}): string {
+  if (!Number.isFinite(n)) return t("common.none");
   return cached("num", opts, (l) => new Intl.NumberFormat(l, opts)).format(n);
 }
 
 /** Durée lisible à partir de millisecondes : « 2 h 35 », « 48 min », « 40 s ». */
 export function duration(ms: number): string {
+  if (Number.isNaN(ms) || ms === Infinity) return t("common.none");
   if (!ms || ms < 0) return t("units.duration.minutes", { m: number(0) });
   const totalMin = Math.round(ms / 60000);
   if (totalMin < 1) return t("units.duration.seconds", { s: number(Math.round(ms / 1000)) });
@@ -64,6 +72,7 @@ export function duration(ms: number): string {
 
 /** Durée courte pour axes : « 2h », « 45m », « 2h30 ». */
 export function durationShort(ms: number): string {
+  if (!Number.isFinite(ms)) return t("common.none");
   const totalMin = Math.round(ms / 60000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
@@ -75,7 +84,7 @@ export function durationShort(ms: number): string {
 
 /** Taille en octets : « 512 o », « 1,5 Mo », « 12 Go ». null → « — ». */
 export function bytes(value: number | null): string {
-  if (value == null) return t("common.none");
+  if (value == null || !Number.isFinite(value)) return t("common.none");
   const units = [
     t("units.bytes.b"), t("units.bytes.kb"), t("units.bytes.mb"), t("units.bytes.gb"), t("units.bytes.tb"),
   ];
@@ -91,7 +100,9 @@ export function bytes(value: number | null): string {
 
 /** Temps écoulé : « à l'instant », « il y a 5 min », « il y a 2 h », « il y a 3 j ». */
 export function ago(d: DateInput): string {
-  const diff = Date.now() - toDate(d).getTime();
+  const value = toDate(d);
+  if (!isValidDate(value)) return t("common.none");
+  const diff = Date.now() - value.getTime();
   const min = Math.floor(diff / 60000);
   if (diff < 0 || min < 1) return t("units.justNow");
   const rtf = cached("rel", {}, (l) => new Intl.RelativeTimeFormat(l, { style: "short", numeric: "always" }));

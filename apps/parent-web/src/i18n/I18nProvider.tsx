@@ -46,7 +46,7 @@ export function useI18n(): I18nValue {
  * analysées sur le GABARIT avant interpolation : une valeur fournie (nom saisi
  * par l'utilisateur…) n'est jamais interprétée comme du balisage.
  *
- *   <Trans k="views.dashboard.noChild" tags={{ b: (c) => <b>{c}</b> }} />
+ *   <Trans k="dashboard.noChild" tags={{ b: (c) => <b>{c}</b> }} />
  */
 export function Trans({ k, params, tags }: {
   k: MessageKey;

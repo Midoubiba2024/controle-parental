@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
 import { Dashboard } from "./components/Dashboard";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useI18n } from "./i18n";
 
 export function App() {
@@ -23,7 +24,7 @@ export function App() {
 
   return (
     <div className="app">
-      {session ? <Dashboard session={session} /> : <Login />}
+      {session ? <ErrorBoundary><Dashboard session={session} /></ErrorBoundary> : <Login />}
     </div>
   );
 }

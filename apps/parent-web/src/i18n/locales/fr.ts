@@ -18,6 +18,8 @@ const fr = {
     none: "—",
     busy: "…",
     language: "Langue",
+    unexpectedError: "Un problème inattendu a interrompu l'affichage.",
+    reload: "Recharger",
   },
 
   nav: {
@@ -125,7 +127,7 @@ const fr = {
   },
 
   errors: {
-    generic: "Une erreur est survenue. Réessayez.",
+    generic: "Une erreur est survenue.",
     network: "Connexion au serveur impossible. Vérifiez votre accès à Internet.",
     unauthenticated: "Session expirée ou absente : reconnectez-vous.",
     sessionExpired: "Votre session a expiré : reconnectez-vous.",
@@ -144,6 +146,15 @@ const fr = {
     weakPassword: "Mot de passe trop faible.",
     rateLimited: "Trop de tentatives : réessayez dans quelques minutes.",
     duplicate: "Cet élément existe déjà.",
+    notFound: "Élément introuvable (il a peut-être été supprimé).",
+    invalidInput: "Valeur invalide ou hors limites : vérifiez la saisie.",
+    serviceUnavailable: "Service momentanément indisponible. Réessayez dans quelques instants.",
+    samePassword: "Le nouveau mot de passe doit être différent de l'ancien.",
+    emailInvalid: "Adresse e-mail invalide.",
+    emailNotAuthorized: "L'envoi d'e-mail vers cette adresse est refusé par le service (configuration de l'envoi d'e-mails).",
+    signupDisabled: "Les inscriptions sont actuellement fermées.",
+    captchaFailed: "Vérification anti-robot échouée : réessayez.",
+    userBanned: "Ce compte est bloqué.",
   },
 
   enums: {
@@ -494,7 +505,10 @@ const fr = {
         title: "Journal des domaines",
         subtitle: "(métadonnées)",
         // {days} = durée de conservation en jours
-        intro: "Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu. Conservé {days} jours (purge automatique).",
+        intro: {
+          one: "Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu. Conservé {count} jour (purge automatique).",
+          other: "Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu. Conservé {count} jours (purge automatique).",
+        },
         emptyTitle: "Aucun événement",
         emptyHint: "Les domaines bloqués (et autorisés, si activé) remonteront ici.",
         colDomain: "Domaine",
