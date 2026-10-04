@@ -6,7 +6,7 @@ import {
   byApp, byCategory, dailyTotals, totalForDay, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, dayKey, dayLabelFor, dayTick, dayTickMin, fmtBytes, 
+  appLabelOf, categoryColor, categoryLabel, dayLabelFor, dayTick, dayTickMin, fmtBytes, 
   fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { useDailyLimits } from "../../lib/rules";
@@ -29,15 +29,14 @@ export function OverviewView({ obs, child, onNavigate }: {
   const { limitFor } = useDailyLimits(child.id);
 
   // --- Tendance « par rapport à hier » (aujourd'hui jusqu'ici, hier en journée
-  // entière) : seulement si la veille a des données RÉELLES, si le jour de
-  // référence est bien aujourd'hui ET si le dernier relevé date de moins de 24 h
-  // (sinon l'appareil ne remonte plus rien : comparaison trompeuse).
+  // entière) : seulement si la veille a des données RÉELLES et si le dernier
+  // relevé date de moins de 24 h (sinon l'appareil ne remonte plus rien :
+  // comparaison trompeuse).
   const yesterday = shiftDay(anchorDay, -1);
   const hasYesterday = usage.some((u) => u.day === yesterday);
-  const anchorIsToday = anchorDay === dayKey(0);
   const lastReading = status.reduce((max, s) => Math.max(max, new Date(s.captured_at).getTime() || 0), 0);
   const recent = lastReading > 0 && Date.now() - lastReading < 24 * 3_600_000;
-  const diffMs = hasYesterday && anchorIsToday && recent ? todayMs - totalForDay(usage, yesterday) : null;
+  const diffMs = hasYesterday && recent ? todayMs - totalForDay(usage, yesterday) : null;
 
   // --- 7 jours + limite quotidienne de chaque jour (si une limite existe).
   const days = Array.from({ length: 7 }, (_, i) => shiftDay(anchorDay, -(6 - i)));
@@ -186,8 +185,8 @@ export function OverviewView({ obs, child, onNavigate }: {
 
 /**
  * Carte de transparence : ce que le parent voit / ne voit JAMAIS. Liste STATIQUE,
- * alignée sur ce que l'enfant lit dans « Mes données » (app enfant : strings.xml,
- * clés shared_* et never_shared). Pleine largeur, deux colonnes ; TOUTE la liste
+ * à aligner avec ce que l'enfant lit dans « Mes données » (app enfant :
+ * strings.xml, clés shared_* et never_shared — PR #24). Pleine largeur, deux colonnes ; TOUTE la liste
  * reste visible, sur mobile comme sur grand écran (puces compactes).
  */
 function TransparencyCard({ name, active, onPrivacy }: { name: string; active: boolean; onPrivacy: () => void }) {

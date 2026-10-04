@@ -273,7 +273,7 @@ function SignalsCard({ s, busy, run, acknowledge }: {
                   {SEVERITY_LABEL[sig.severity]}
                 </span></td>
                 <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colApp") })}><code>{sig.source_app ?? t("common.none")}</code></td>
-                <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colOccurrences") })}>{sig.occurrence_count}</td>
+                <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colOccurrences") })}>{t("views.wellbeing.signals.occurrences", { count: sig.occurrence_count })}</td>
                 <td className="muted small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colWhen") })}>{fmtDateTime(sig.occurred_at)}</td>
                 <td className="t-actions">
                   {sig.acknowledged_at

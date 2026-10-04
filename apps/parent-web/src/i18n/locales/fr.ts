@@ -665,6 +665,7 @@ const fr = {
         colApp: "Application",
         // Abréviation de « occurrences » (colonne étroite)
         colOccurrences: "Nombre",
+        occurrences: { one: "{count}\u00A0fois", other: "{count}\u00A0fois" },
         colWhen: "Quand",
         seen: "vu",
         markSeen: "Marquer vu",
@@ -683,8 +684,10 @@ const fr = {
         emptyTitle: "Aucun SOS",
         emptyHint: "Le bouton SOS est déclenché par l’enfant depuis son application. Un épisode apparaît ici avec sa position en direct.",
         colStatus: "Statut",
-        colStart: "Début",
-        colEnd: "Fin",
+        colPeriod: "Période",
+        // {start} = date et heure de début, {end} = heure de fin (ou date si autre jour).
+        range: "{start}\u202F→\u202F{end}",
+        ongoing: "depuis {start}",
       },
       // Statut d'un épisode SOS
       sosStatus: {
@@ -1021,13 +1024,13 @@ const fr = {
         subtitle: "{name} voit à tout moment ce qui est partagé avec vous.",
         youSee: "Vous voyez",
         youNeverSee: "Vous ne voyez jamais",
-        // Liste ALIGNÉE sur ce que l'enfant lit dans l'app (strings.xml : shared_*, never_shared).
+        // Liste à aligner avec ce que l’enfant lit dans l’app (strings.xml : shared_*, never_shared — PR #24).
         see: {
           usage: "Le temps passé et le nombre d’ouvertures par application et par catégorie, avec l’heure de dernière utilisation",
           inventory: "La liste des applications installées et leur date d’installation",
           device: "La batterie et le stockage de l’appareil",
           location: "La position selon le mode choisi (périodique ou à la demande ; en direct seulement pendant un SOS ; entrées et sorties de zones)",
-          filter: "Le filtrage web : nom de domaine, catégorie et heure des sites bloqués — et de CHAQUE site visité si vous activez ce journal ; jamais les pages ni leur contenu",
+          filter: "Le filtrage web : nom de domaine, catégorie et heure des sites bloqués — et de chaque site visité si vous activez ce journal ; jamais les pages ni leur contenu",
           calls: "Le journal des appels, s’il est activé : sens, date, durée et un identifiant masqué du correspondant — jamais le numéro en clair ni ce qui a été dit",
           safety: "Les alertes de sécurité (préado et ado) : seulement une catégorie d’alerte, calculée sur l’appareil à partir du texte des notifications — jamais le texte lui-même",
           exchanges: "Les demandes et les messages échangés avec vous dans l’appli",

@@ -107,8 +107,9 @@ const app_inventory = [
 const comm_events = [
   ["incoming", 4 * MIN + 12_000, 2 * H, "a91f3c"], ["outgoing", 2 * MIN, 5 * H, "7be20d"],
   ["missed", null, 26 * H, "a91f3c"], ["incoming", 11 * MIN, 30 * H, "c40e88"],
-  // Dernier appel : RÉELLEMENT anonyme (numéro masqué par l'appelant) → aucun
-  // identifiant (hash null) ; la console affiche alors « Numéro masqué ».
+  // Dernier appel : RÉELLEMENT anonyme (numéro masqué par l'appelant). Simule le
+  // comportement de l'app enfant APRÈS la PR #24 (hash null pour un appel
+  // anonyme) ; la console affiche alors « Numéro masqué ».
   ["outgoing", 45_000, 52 * H, "a91f3c"], ["blocked", null, 70 * H, null],
 ].map(([direction, duration_ms, back, hash], i) => ({
   id: `call-${i}`, child_id: CHILD, device_id: DEV, kind: "call", direction,

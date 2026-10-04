@@ -3,7 +3,8 @@
    Cohérence des couleurs de fond par palette (barre du navigateur / PWA).
    La couleur de <meta name="theme-color"> ne peut pas lire les variables CSS :
    elle est donc recopiée à QUATRE endroits, qui doivent rester identiques :
-     1. src/styles.css      : --c-bg de chaque palette (clair, sombre) ;
+     1. src/styles.css      : --c-bg de chaque palette (clair, sombre) — et les
+                              blocs sombre forcé / sombre système identiques ;
      2. src/lib/theme.ts    : PALETTES[palette] = { light, dark } ;
      3. index.html          : script anti-flash (palettes = { p: [clair, sombre] })
                               + les deux <meta name="theme-color"> par défaut ;
@@ -39,6 +40,18 @@ for (const [p, want] of Object.entries(palettes)) {
   if (!light || norm(light[1]) !== want.light) errors.push(`styles.css ${p} clair : ${light?.[1]} ≠ ${want.light}`);
   if (!dark || norm(dark[1]) !== want.dark) errors.push(`styles.css ${p} sombre : ${dark?.[1]} ≠ ${want.dark}`);
   if (!mq || norm(mq[1]) !== want.dark) errors.push(`styles.css ${p} sombre (système) : ${mq?.[1]} ≠ ${want.dark}`);
+}
+
+// 1 bis. styles.css : le bloc sombre FORCÉ (bouton de thème) et le bloc sombre
+// SYSTÈME (prefers-color-scheme) doivent déclarer exactement les mêmes jetons.
+const decls = (body) => new Map([...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].replace(/\s+/g, " ").trim()]));
+for (const p of Object.keys(palettes)) {
+  const forced = css.match(new RegExp(`:root\\[data-palette="${p}"\\]\\[data-theme="dark"\\][^{]*\\{([^}]*)\\}`));
+  const system = css.match(new RegExp(`prefers-color-scheme: dark\\)\\s*\\{\\s*:root\\[data-palette="${p}"\\][^{]*\\{([^}]*)\\}`));
+  if (!forced || !system) { errors.push(`styles.css ${p} : bloc sombre forcé ou système introuvable`); continue; }
+  const f = decls(forced[1]), y = decls(system[1]);
+  for (const [k, v] of f) if (y.get(k) !== v) errors.push(`styles.css ${p} sombre : ${k} = ${v} (forcé) ≠ ${y.get(k)} (système)`);
+  for (const k of y.keys()) if (!f.has(k)) errors.push(`styles.css ${p} sombre : ${k} seulement dans le bloc système`);
 }
 
 // 3. index.html

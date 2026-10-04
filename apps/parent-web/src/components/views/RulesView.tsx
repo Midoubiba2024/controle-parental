@@ -55,24 +55,38 @@ export function RulesView({ familyId, child, obs }: {
   }
 
   return (
-    <div className="grid dash">
+    <div className="grid dash rules-cols">
       {r.error && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{r.error}</p>}
       {msg && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{msg}</p>}
 
       {/* Deux colonnes INDÉPENDANTES : une carte haute ne crée pas de vide dans l'autre. */}
+      {/* Sur mobile (une colonne), les .stack s'effacent et .rs-* fixe l'ordre :
+          Pause & verrouillage d'abord (action immédiate), puis limites, garde-fous… */}
       <div className="stack">
-        <TimeLimitsCard r={r} familyId={familyId} child={child} busy={busy} run={run}
-          usageTodayTotal={usageTodayTotal} />
-        <CategoryRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
-          usageByCat={usageTodayByCat} />
-        <AppRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
-          inventory={obs.inventory} usageByPkg={usageTodayByPkg} anchorDay={obs.anchorDay} />
+        <div className="rs rs-time">
+          <TimeLimitsCard r={r} familyId={familyId} child={child} busy={busy} run={run}
+            usageTodayTotal={usageTodayTotal} />
+        </div>
+        <div className="rs rs-categories">
+          <CategoryRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
+            usageByCat={usageTodayByCat} />
+        </div>
+        <div className="rs rs-apps">
+          <AppRulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run}
+            inventory={obs.inventory} usageByPkg={usageTodayByPkg} anchorDay={obs.anchorDay} />
+        </div>
       </div>
       <div className="stack">
-        <InstantControlCard familyId={familyId} childId={childId} devices={obs.devices}
-          busy={busy} run={run} commands={r.commands} />
-        <GuardsCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
-        <SchedulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
+        <div className="rs rs-instant">
+          <InstantControlCard familyId={familyId} childId={childId} devices={obs.devices}
+            busy={busy} run={run} commands={r.commands} />
+        </div>
+        <div className="rs rs-guards">
+          <GuardsCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
+        </div>
+        <div className="rs rs-schedules">
+          <SchedulesCard r={r} familyId={familyId} childId={childId} busy={busy} run={run} />
+        </div>
       </div>
     </div>
   );
@@ -369,9 +383,9 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
   }
 
   return (
-    <div className="card" style={{ gridColumn: "1 / -1" }}>
+    <div className="card">
       <h2>{t("views.rules.categoryRules.title")}</h2>
-      <div className="tbl-wrap"><table className="tbl">
+      <div className="tbl-wrap"><table className="tbl rules-cat">
         <thead><tr>
           <th>{t("views.rules.categoryRules.colCategory")}</th><th>{t("views.rules.categoryRules.colToday")}</th>
           <th>{t("views.rules.categoryRules.colRule")}</th>
@@ -548,15 +562,17 @@ function SchedulesCard({ r, familyId, childId, busy, run }: CardBase) {
         {t("views.rules.schedules.intro")}
       </p>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); run(createSchedule); }} style={{ marginBottom: 12 }}>
-        <input aria-label={t("views.rules.schedules.namePlaceholder")} aria-describedby="schedule-name-hint"
-          placeholder={t("views.rules.schedules.namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="fld field-with-hint">
+          <input aria-label={t("views.rules.schedules.namePlaceholder")} aria-describedby="schedule-name-hint"
+            placeholder={t("views.rules.schedules.namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
+          <span id="schedule-name-hint" className="field-hint">{t("views.rules.schedules.nameHint")}</span>
+        </div>
         <select aria-label={t("views.rules.schedules.kindLabel")} value={kind} onChange={(e) => setKind(e.target.value as ScheduleKind)}>
           {(Object.keys(SCHEDULE_KIND_LABEL) as ScheduleKind[]).map((k) =>
             <option key={k} value={k}>{SCHEDULE_KIND_LABEL[k]}</option>)}
         </select>
         <button disabled={busy || !name.trim()} type="submit"><Plus {...ic} size={18} strokeWidth={2} />{t("views.rules.schedules.addSchedule")}</button>
       </form>
-      <p id="schedule-name-hint" className="card-sub" style={{ marginTop: -6, marginBottom: 12 }}>{t("views.rules.schedules.nameHint")}</p>
 
       {r.schedules.length === 0 ? <EmptyState icon={CalendarDays} title={t("views.rules.schedules.emptyTitle")}
         hint={t("views.rules.schedules.emptyHint")} /> : (

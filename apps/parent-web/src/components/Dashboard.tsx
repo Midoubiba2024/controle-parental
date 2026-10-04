@@ -151,6 +151,8 @@ export function Dashboard({ session }: { session: Session }) {
   useEffect(() => { void loadFamilies(); }, [loadFamilies]);
   useEffect(() => { void loadChildren(); }, [loadChildren]);
   useEffect(() => { try { localStorage.setItem("cp.view", view); } catch { /* ignore */ } }, [view]);
+  // Changer de vue relance aussi les vues paresseuses en échec (nouvel import).
+  useEffect(() => { resetFailedViews(); }, [view]);
 
   // --- Demandes en attente (badge de navigation) : simple comptage, même table
   // et même RLS que RequestsView. Relu au changement de vue, chaque minute et

@@ -40,7 +40,8 @@ function CrashScreen() {
  * Filet LOCAL autour d'une vue chargée à la demande : un chunk introuvable (ex.
  * nouvelle version publiée sur GitHub Pages) ou une erreur de rendu n'emportent
  * ni la barre latérale ni l'en-tête. Monté avec `key={vue}` : changer de vue
- * réinitialise l'erreur et relance le chargement.
+ * réinitialise l'erreur ; `onRetry` (et le changement de vue, côté Dashboard)
+ * recrée le React.lazy en échec pour relancer réellement le chargement.
  */
 export class ViewErrorBoundary extends Component<{ children: ReactNode; onRetry?: () => void }, { failed: boolean; attempt: number }> {
   state = { failed: false, attempt: 0 };

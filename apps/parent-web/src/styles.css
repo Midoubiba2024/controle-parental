@@ -153,7 +153,7 @@
   --c-brand-logo-bg:      #B5472F;
   --c-brand-logo-ink:     #FFFFFF;
   --c-side-active-icon:   #B5472F;
-  --c-side-active-shadow: 0 8px 18px -12px rgba(0, 0, 0, 0.55);
+  --shadow-side-active: 0 8px 18px -12px rgba(0, 0, 0, 0.55);
   --c-side-dot:           #B5472F;
   --c-side-email:         #F4ECF1;
   --c-avatar-bg:          #4A2F4E;
@@ -304,7 +304,7 @@
   --c-brand-logo-bg:      #B5472F;
   --c-brand-logo-ink:     #FFFFFF;
   --c-side-active-icon:   #F29B87;
-  --c-side-active-shadow: none;
+  --shadow-side-active: none;
   --c-side-dot:           #F29B87;
   --c-side-email:         #F4ECF1;
   --c-avatar-bg:          #4A2F4E;
@@ -399,7 +399,7 @@
     --c-brand-logo-bg:      #B5472F;
     --c-brand-logo-ink:     #FFFFFF;
     --c-side-active-icon:   #F29B87;
-    --c-side-active-shadow: none;
+    --shadow-side-active: none;
     --c-side-dot:           #F29B87;
     --c-side-email:         #F4ECF1;
     --c-avatar-bg:          #4A2F4E;
@@ -538,7 +538,7 @@ button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visi
 .nav-item:hover { background: var(--c-side-hover); color: var(--c-side-strong); }
 .nav-item[aria-current="page"] {
   background: var(--c-side-active); color: var(--c-side-active-ink); font-weight: 600;
-  box-shadow: var(--c-side-active-shadow);
+  box-shadow: var(--shadow-side-active);
 }
 .nav-item[aria-current="page"] .nav-ic { color: var(--c-side-active-icon); }
 .nav-item .nav-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -831,13 +831,14 @@ table.tbl td.wrap { white-space: normal; min-width: 180px; }
   table.tbl.compact td.t-badge { order: 1; }
   table.tbl.compact td.t-none { display: none; }
   table.tbl.compact td.t-actions { order: 4; flex-basis: 100%; }
-  table.tbl.compact td:has(+ td.t-actions)::after { content: none; }
   table.tbl.compact tr::after { content: ""; flex-basis: 100%; order: 2; }
   table.tbl.compact td:not(:first-child):not(.t-badge) { order: 3; gap: 0; }
   table.tbl.compact td[data-label]:not(:first-child)::before {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  table.tbl.compact td:not(:first-child):not(.t-badge):not(:last-child):not(:empty)::after {
+  /* Séparateur « · » seulement si une AUTRE cellule méta suit (jamais orphelin
+     devant une pastille ou une action finale). */
+  table.tbl.compact td:not(:first-child):not(.t-badge):not(.t-actions):has(~ td:not(.t-badge):not(.t-actions):not(.t-none):not(:empty))::after {
     content: "·"; content: "·" / ""; margin-inline-start: 10px; color: var(--c-muted);
   }
   /* Tableau à 2 colonnes (libellé / valeur) : pas de préfixe, valeurs alignées. */
@@ -1136,6 +1137,22 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 /* Créneau : « De » / « À » sur deux colonnes, même sur mobile. */
 .window-times { display: grid; grid-template-columns: repeat(2, minmax(0, 160px)); gap: 10px; }
 .window-times input { width: 100%; }
+/* Champ + aide juste en dessous (formulaires en ligne). */
+.field-with-hint { gap: 4px; }
+.field-hint { font-size: var(--fs-caption); font-weight: 500; color: var(--c-muted); }
+/* Règles par catégorie (mobile) : libellés et champs alignés sur la ligne de base. */
+@media (max-width: 640px) { table.tbl.rules-cat tr { align-items: baseline; } }
+/* Règles d'accès en une colonne : ordre d'importance, « Pause & verrouillage » d'abord. */
+@media (max-width: 1100px), (max-height: 500px) {
+  .rules-cols > .stack { display: contents; }
+  .rules-cols .rs-instant { order: 1; }
+  .rules-cols .rs-time { order: 2; }
+  .rules-cols .rs-guards { order: 3; }
+  .rules-cols .rs-categories { order: 4; }
+  .rules-cols .rs-apps { order: 5; }
+  .rules-cols .rs-schedules { order: 6; }
+}
+.rs { min-width: 0; }
 .dow-grid button { min-width: 0; }
 .sub-title { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--c-ink); }
 /* Formulaire d'ajout : bouton aligné en bas des champs seulement en multi-colonnes. */
@@ -1209,7 +1226,10 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 .map-frame .leaflet-container .leaflet-popup-content-wrapper,
 .map-frame .leaflet-container .leaflet-popup-tip { background: var(--c-surface); color: var(--c-ink); box-shadow: var(--shadow-pop); }
 .map-frame .leaflet-container .leaflet-popup-content-wrapper { border-radius: var(--r-ctl); }
-.map-frame .leaflet-container .leaflet-popup-content { font-size: 14px; margin: 10px 14px; }
+/* Marge de fin : le « × » de 32 px ne recouvre jamais le libellé. */
+.map-frame .leaflet-container .leaflet-popup-content { font-size: 14px; margin: 10px 14px; margin-inline-end: 38px; }
+/* Focus de la carte elle-même : à l'intérieur (le cadre coupe tout débord). */
+.map-frame .leaflet-container:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -3px; }
 .map-frame .leaflet-container a.leaflet-popup-close-button {
   width: 32px; height: 32px; font: 22px/32px var(--font-body); color: var(--c-muted); border-radius: var(--r-md);
 }
@@ -1219,7 +1239,7 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
   border: 1px solid var(--c-border); border-radius: var(--r-ctl); box-shadow: var(--shadow-card); overflow: hidden;
 }
 .map-frame .leaflet-container .leaflet-bar a {
-  width: 40px; height: 40px; line-height: 40px; font-size: 20px; font-weight: 500;
+  width: 40px; height: 40px; line-height: 40px; font-family: var(--font-body); font-size: 20px; font-weight: 500;
   background: var(--c-surface); color: var(--c-ink); border-bottom: 1px solid var(--c-divider);
 }
 .map-frame .leaflet-container .leaflet-bar a:is(:first-child, :last-child) { border-radius: 0; }
@@ -1337,6 +1357,12 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 }
 /* Petits écrans : titre resserré, points sur une ligne (variante courte). */
 .auth-points .pt-short { display: none; }
+/* iPhone SE (667 px de haut) : l'accroche s'efface pour que « Se connecter »
+   reste au-dessus de la ligne de flottaison. */
+@media (max-width: 480px) and (max-height: 700px) {
+  .auth-headline { display: none; }
+  .auth-brand { padding: 18px 20px 20px; gap: 12px; }
+}
 @media (max-width: 480px) {
   .auth-headline { font-size: 22px; }
   .auth-points .pt-long { display: none; }
@@ -1469,6 +1495,12 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
 /* Grand écran + souris : entrées de navigation un peu plus compactes (40 px)
    pour que les 13 entrées et le pied de barre tiennent sur un écran de 900 px.
    Au doigt (tactile / tiroir mobile), elles restent à 44 px. */
+/* Bureau peu haut (≤ 960 px, ex. 1440×900) : barre resserrée pour que le pied tienne. */
+@media (min-width: 901px) and (min-height: 501px) and (max-height: 960px) and (pointer: fine) {
+  .sidebar .nav-item { min-height: 36px; }
+  .sidebar .nav { gap: 6px; }
+  .sidebar .nav-title { margin-bottom: 2px; }
+}
 @media (min-width: 901px) and (min-height: 501px) and (pointer: fine) {
   .nav-item { min-height: 40px; }
   .nav { gap: 10px; }

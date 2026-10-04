@@ -35,7 +35,8 @@ export function date(
 ): string {
   const value = toDate(d);
   if (!isValidDate(value)) return t("common.none");
-  return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(value);
+  // Insécable entre le numéro du jour et le mois (« 3 oct. » jamais coupé).
+  return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(value).replace(/(\d) (?=\p{L})/gu, "$1\u00A0");
 }
 
 const HM: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };

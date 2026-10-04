@@ -29,8 +29,9 @@ chaque itération. En cas d'écart, l'application fait foi :
 
 - **textes** : le catalogue `apps/parent-web/src/i18n/locales/fr.ts`. En
   particulier, la liste « Vous voyez / Vous ne voyez jamais » de la carte de
-  transparence (`views.overview.transparency.*`) est celle, alignée sur ce que
-  l'enfant lit dans « Mes données », qui s'affiche réellement — la liste écrite
+  transparence (`views.overview.transparency.*`) est celle qui s'affiche
+  réellement — à aligner avec ce que l'enfant lit dans « Mes données » (app
+  enfant, PR #24) — la liste écrite
   dans `vue-ensemble.dc.html` n'est qu'une illustration antérieure ;
 - **jetons** (couleurs, rayons, ombres, polices) : `apps/parent-web/src/styles.css`.
 - **mise en page** : la carte de transparence occupe désormais toute la largeur,

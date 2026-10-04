@@ -19,7 +19,7 @@ import type { Child, Geofence, GeofenceType, LocationMode, SosEvent } from "../.
    ============================================================================= */
 
 export function SecurityView({ familyId, child }: { familyId: string; child: Child }) {
-  const { t } = useI18n();
+  const { t, fmt } = useI18n();
   const loc = useLocation(child.id);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -53,13 +53,16 @@ export function SecurityView({ familyId, child }: { familyId: string; child: Chi
             hint={t("views.security.history.emptyHint")} />
         ) : (
           <div className="tbl-wrap"><table className="tbl compact">
-            <thead><tr><th>{t("views.security.history.colStatus")}</th><th>{t("views.security.history.colStart")}</th><th>{t("views.security.history.colEnd")}</th></tr></thead>
+            <thead><tr><th>{t("views.security.history.colStatus")}</th><th>{t("views.security.history.colPeriod")}</th></tr></thead>
             <tbody>
               {loc.sos.map((s) => (
                 <tr key={s.id}>
                   <td><span className={`pill ${s.status === "resolved" ? "" : "blocked"}`}>{sosStatusLabel(s)}</span></td>
-                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.history.colStart") })}>{fmtDateTime(s.started_at)}</td>
-                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.history.colEnd") })}>{s.ended_at ? fmtDateTime(s.ended_at) : t("common.none")}</td>
+                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.security.history.colPeriod") })}>
+                    {s.ended_at
+                      ? t("views.security.history.range", { start: fmtDateTime(s.started_at), end: sameDay(s.started_at, s.ended_at) ? fmt.time(s.ended_at) : fmtDateTime(s.ended_at) })
+                      : t("views.security.history.ongoing", { start: fmtDateTime(s.started_at) })}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -368,7 +371,7 @@ function AlertsCard({ loc, run }: {
   if (loc.alerts.length === 0) return null;
   return (
     <div className="card">
-      <h2>{t("views.security.alerts.title")} <span className="muted small">{t("views.security.alerts.unseen", { count: unseen.length })}</span></h2>
+      <h2>{t("views.security.alerts.title")}{unseen.length > 0 && <> <span className="muted small">{t("views.security.alerts.unseen", { count: unseen.length })}</span></>}</h2>
       <div className="tbl-wrap"><table className="tbl compact">
         <thead><tr><th>{t("views.security.alerts.colAlert")}</th><th>{t("views.security.alerts.colWhen")}</th><th>{t("views.security.alerts.colState")}</th></tr></thead>
         <tbody>
@@ -386,4 +389,10 @@ function AlertsCard({ loc, run }: {
       </table></div>
     </div>
   );
+}
+
+/** Deux horodatages le même jour (local) : la fin s'affiche alors en heure seule. */
+function sameDay(a: string, b: string): boolean {
+  const x = new Date(a), y = new Date(b);
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
 }
