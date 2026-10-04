@@ -47,7 +47,11 @@ class SafetyNotificationListener : NotificationListenerService() {
     private val client by lazy { SafetyClient(store) }
 
     // Instantané de décision (mémoire) — jamais lu depuis les prefs sur le callback.
-    @Volatile private var snapEnrolled = false
+    // L'enrôlement courant se lit dans SupervisionStore.current (mémoire, sans
+    // déchiffrement) ; [snapChildId] = enfant pour lequel la config a été
+    // synchronisée AVEC SUCCÈS. Aucune analyse si les deux diffèrent (LOT 12b :
+    // jamais la config d'un ancien enfant appliquée à un nouvel appairage).
+    @Volatile private var snapChildId: String? = null
     @Volatile private var snapActive = false   // consentement + profil ado
     @Volatile private var snapPaused = false   // pause de confidentialité (K8)
     @Volatile private var snapSynced = false   // une config fiable a été obtenue
@@ -60,11 +64,10 @@ class SafetyNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         if (!Config.featureSafetySignals) return
-        snapEnrolled = store.isEnrolled
-        if (!snapEnrolled) return
+        // Construit le store : initialise SupervisionStore.current dans ce processus.
+        if (!runCatching { store.isEnrolled }.getOrDefault(false)) return
         scope.launch {
-            client.syncSettings(cache)
-            applySnapshot()
+            syncSnapshot()
             lastRefreshAt = System.currentTimeMillis()
             client.reportStatus(snapActive && !snapPaused)
         }
@@ -77,7 +80,8 @@ class SafetyNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (!Config.featureSafetySignals || sbn == null || !snapEnrolled) return
+        if (!Config.featureSafetySignals || sbn == null) return
+        val current = SupervisionStore.current.value ?: return
         val n = sbn.notification ?: return
         // #2 — ignorer les résumés de groupe (pas un vrai message).
         if ((n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
@@ -88,11 +92,15 @@ class SafetyNotificationListener : NotificationListenerService() {
         if (lastSeen.put(key, sbn.postTime) == sbn.postTime) return
         if (lastSeen.size > MAX_SEEN) lastSeen.clear()
 
+        // Config synchronisée pour un AUTRE enfant (ou jamais) : resynchroniser,
+        // et ne rien analyser d'ici là.
+        val sameChild = snapChildId == current.childId
         // Rafraîchir l'instantané si périmé (asynchrone, en mémoire — pas de prefs ici).
-        maybeRefreshSnapshot()
+        maybeRefreshSnapshot(force = !sameChild)
 
-        // Défaut protecteur : pas de config fiable, non consenti/gradué, ou en pause → rien.
-        if (!snapSynced || !snapActive || snapPaused) return
+        // Défaut protecteur : pas de config fiable pour CET enfant, non
+        // consenti/gradué, ou en pause → rien.
+        if (!sameChild || !snapSynced || !snapActive || snapPaused) return
 
         // Extraction du texte EN MÉMOIRE (variable locale, jamais loggée/persistée).
         val text = extractText(n) ?: return
@@ -100,7 +108,10 @@ class SafetyNotificationListener : NotificationListenerService() {
         // `text` sort de portée ici : aucune trace. Seuls les signaux remontent.
         if (signals.isEmpty()) return
         val sourceApp = sbn.packageName
-        scope.launch { client.reportSignals(signals, sourceApp) }
+        scope.launch {
+            // Dernière garde avant envoi : toujours le même enfant enrôlé.
+            if (SupervisionStore.current.value?.childId == current.childId) client.reportSignals(signals, sourceApp)
+        }
     }
 
     /** Recopie l'état du cache (déjà rafraîchi sur IO) dans l'instantané mémoire. */
@@ -110,15 +121,33 @@ class SafetyNotificationListener : NotificationListenerService() {
         snapSynced = !cache.neverSynced
     }
 
-    private fun maybeRefreshSnapshot() {
+    /**
+     * Synchronise la config puis l'instantané. [snapChildId] ne prend la valeur de
+     * l'enfant courant qu'après une synchro RÉUSSIE pour lui (gardes connues).
+     */
+    private suspend fun syncSnapshot() {
+        val childId = SupervisionStore.current.value?.childId
+        val ok = client.syncSettings(cache) != null
+        applySnapshot()
+        snapChildId = when {
+            childId == null || SupervisionStore.current.value?.childId != childId -> null
+            ok && snapSynced -> childId
+            snapChildId == childId -> childId   // échec réseau : on garde la config de CET enfant
+            else -> null
+        }
+    }
+
+    private fun maybeRefreshSnapshot(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (now - lastRefreshAt > SETTINGS_TTL_MS && !syncing) {
+        val age = now - lastRefreshAt
+        // Forcé (enfant différent) : au plus toutes les 30 s, pour ne jamais
+        // enchaîner les requêtes à chaque notification si le réseau échoue.
+        if (((force && age > FORCED_REFRESH_MIN_MS) || age > SETTINGS_TTL_MS) && !syncing) {
             lastRefreshAt = now
             syncing = true
             scope.launch {
                 try {
-                    client.syncSettings(cache)
-                    applySnapshot()
+                    syncSnapshot()
                 } finally { syncing = false }
             }
         }
@@ -158,6 +187,7 @@ class SafetyNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val SETTINGS_TTL_MS = 2 * 60 * 1000L // 2 min
+        private const val FORCED_REFRESH_MIN_MS = 30_000L
         private const val RECENT_MESSAGES = 3
         private const val MAX_SEEN = 500
 

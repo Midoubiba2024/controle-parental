@@ -6,6 +6,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import fr.controleparental.child.pairing.AuthSession
 import fr.controleparental.child.pairing.PairingProtocol
+import fr.controleparental.child.service.Unenrollment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * (EncryptedSharedPreferences — clé maître dans l'Android Keystore.)
  */
 class SupervisionStore(context: Context) {
+
+    private val appContext: Context = context.applicationContext ?: context
 
     private val prefs: SharedPreferences = run {
         val masterKey = MasterKey.Builder(context)
@@ -42,7 +45,24 @@ class SupervisionStore(context: Context) {
         val obtainedAt: Long = 0L,
     )
 
+    init {
+        // État observable initialisé UNE fois par processus depuis le stockage.
+        if (!stateLoaded) synchronized(Companion) {
+            if (!stateLoaded) {
+                _current.value = readIds()
+                _unenrolled.value = prefs.getString(KEY_UNENROLL_REASON, null)
+                    ?.let { runCatching { UnenrollReason.valueOf(it) }.getOrNull() }
+                stateLoaded = true
+            }
+        }
+    }
+
     val isEnrolled: Boolean get() = prefs.contains(KEY_DEVICE_ID)
+
+    private fun readIds(): Ids? {
+        val device = prefs.getString(KEY_DEVICE_ID, null) ?: return null
+        return Ids(device, prefs.getString(KEY_CHILD_ID, "")!!)
+    }
 
     /**
      * Appairage réussi (LOT 12) : la session anonyme EN ATTENTE devient la session
@@ -66,8 +86,10 @@ class SupervisionStore(context: Context) {
             .remove(KEY_PENDING_USER_ID)
             .remove(KEY_PENDING_OBTAINED_AT)
             .remove(KEY_PAIRING_BLOCKED_UNTIL)
+            .remove(KEY_UNENROLL_REASON)
             .commit()
         _unenrolled.value = null
+        _current.value = Ids(e.deviceId, e.childId)
     }
 
     /**
@@ -133,14 +155,36 @@ class SupervisionStore(context: Context) {
 
     /**
      * Désenrôlement subi (§4 session perdue, §5 appareil retiré par le parent) :
-     * efface l'enrôlement ET la session locale (tout le stockage de supervision),
-     * puis prévient l'interface pour revenir à l'écran d'appairage. Plus aucune
-     * requête ne part ensuite : tous les clients s'arrêtent sur « non enrôlé ».
+     * efface l'enrôlement ET la session locale (tout le stockage de supervision)
+     * en écrivant, dans le MÊME commit, le motif et un drapeau « démontage en
+     * attente ». Puis lance le démontage centralisé ([Unenrollment]) : levée de
+     * toutes les restrictions, notification visible, arrêt du service — quel que
+     * soit l'appelant (worker, VPN, boucle, écran). Plus aucune requête ne part
+     * ensuite : tous les clients s'arrêtent sur « non enrôlé ».
      */
     fun unenroll(reason: UnenrollReason) {
-        prefs.edit().clear().commit()
+        prefs.edit().clear()
+            .putString(KEY_UNENROLL_REASON, reason.name)
+            .putBoolean(KEY_TEARDOWN_PENDING, true)
+            .commit()
+        _current.value = null
         _unenrolled.value = reason
+        Unenrollment.releaseAsync(appContext, reason)
     }
+
+    /** Message de désenrôlement affiché : consommé par l'écran d'appairage. */
+    fun acknowledgeUnenrolled() {
+        prefs.edit().remove(KEY_UNENROLL_REASON).apply()
+        _unenrolled.value = null
+    }
+
+    /**
+     * Un démontage ([Unenrollment]) a été demandé et n'est pas encore terminé
+     * (processus tué pendant le démontage) : rejoué au démarrage et au boot.
+     */
+    var teardownPending: Boolean
+        get() = prefs.getBoolean(KEY_TEARDOWN_PENDING, false)
+        set(value) { prefs.edit().putBoolean(KEY_TEARDOWN_PENDING, value).commit() }
 
     fun load(): Enrollment? {
         if (!isEnrolled) return null
@@ -198,16 +242,27 @@ class SupervisionStore(context: Context) {
     /** Pourquoi l'appareil a été désenrôlé (message affiché à l'écran d'appairage). */
     enum class UnenrollReason { SESSION_LOST, DEVICE_REVOKED }
 
+    /** Identifiants de l'enrôlement courant (lecture en mémoire, sans déchiffrement). */
+    data class Ids(val deviceId: String, val childId: String)
+
     companion object {
+        @Volatile private var stateLoaded = false
+
         /**
-         * Dernier désenrôlement subi dans ce processus (null = aucun). Observé par
-         * MainActivity pour revenir à l'écran d'appairage sans redémarrage.
+         * Enrôlement COURANT (null = non enrôlé), tenu à jour par
+         * [completeEnrollment] et [unenroll]. Observé par MainActivity (écran à
+         * afficher, démarrage du service), lu sans déchiffrement par le VPN
+         * (étiquetage du journal) et l'analyse bien-être (garde du child_id).
+         */
+        private val _current = MutableStateFlow<Ids?>(null)
+        val current: StateFlow<Ids?> = _current.asStateFlow()
+
+        /**
+         * Dernier désenrôlement subi (null = aucun), PERSISTÉ jusqu'à ce que l'écran
+         * d'appairage l'ait affiché ([acknowledgeUnenrolled]) ou un nouvel appairage.
          */
         private val _unenrolled = MutableStateFlow<UnenrollReason?>(null)
         val unenrolled: StateFlow<UnenrollReason?> = _unenrolled.asStateFlow()
-
-        /** Message affiché : consommé par l'écran d'appairage. */
-        fun acknowledgeUnenrolled() { _unenrolled.value = null }
 
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_FAMILY_ID = "family_id"
@@ -228,5 +283,7 @@ class SupervisionStore(context: Context) {
         private const val KEY_PENDING_EXPIRES_AT = "pending_expires_at"
         private const val KEY_PENDING_USER_ID = "pending_user_id"
         private const val KEY_PAIRING_BLOCKED_UNTIL = "pairing_blocked_until"
+        private const val KEY_UNENROLL_REASON = "unenroll_reason"
+        private const val KEY_TEARDOWN_PENDING = "unenroll_teardown_pending"
     }
 }

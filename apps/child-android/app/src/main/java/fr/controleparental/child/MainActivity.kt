@@ -21,6 +21,7 @@ import androidx.lifecycle.lifecycleScope
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.service.SupervisionService
+import fr.controleparental.child.service.Unenrollment
 import fr.controleparental.child.ui.MyDataScreen
 import fr.controleparental.child.ui.PairingScreen
 import kotlinx.coroutines.launch
@@ -48,6 +49,9 @@ class MainActivity : ComponentActivity() {
         if (store.isEnrolled) {
             SupervisionService.start(this)
             lifecycleScope.launch { SupabaseClient(store).verifyDeviceActive(force = true) }
+        } else {
+            // Filet LOT 12b : rejouer un démontage interrompu (processus tué).
+            Unenrollment.resumeIfPending(this)
         }
 
         setContent {

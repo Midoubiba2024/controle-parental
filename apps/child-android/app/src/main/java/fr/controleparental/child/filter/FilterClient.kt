@@ -61,10 +61,14 @@ class FilterClient(private val store: SupervisionStore) {
     suspend fun logDomainEvents(events: List<DomainEvent>): Boolean {
         if (events.isEmpty()) return true
         val e = store.load() ?: return false
+        // Seuls les événements capturés sous CET enrôlement partent : jamais ceux
+        // d'un ancien appairage sous l'identité d'un nouvel enfant (LOT 12b).
+        val mine = eventsForDevice(events, e.deviceId)
+        if (mine.isEmpty()) return true
         // category null reste une clé PRÉSENTE : lot homogène exigé par PostgREST (PGRST102).
         val base = BatchRows.base(e.familyId, e.childId, e.deviceId)
         val arr = BatchRows.toJsonArray(
-            events.map { BatchRows.domainEvent(base, it.domain, it.category, it.action, it.occurredAtIso) },
+            mine.map { BatchRows.domainEvent(base, it.domain, it.category, it.action, it.occurredAtIso) },
         )
         return client.upsert("domain_events", arr) is SupabaseClient.Result.Ok
     }
@@ -88,6 +92,8 @@ class FilterClient(private val store: SupervisionStore) {
         val category: String?,
         val action: String,        // blocked | allowed | rewritten
         val occurredAtIso: String,
+        /** Appareil enrôlé AU MOMENT de la capture (jamais réattribué à un autre). */
+        val deviceId: String,
     )
 
     // --- Helpers ------------------------------------------------------------

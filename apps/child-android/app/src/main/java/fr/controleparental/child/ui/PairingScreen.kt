@@ -70,7 +70,7 @@ fun PairingScreen(
     fun submit() {
         if (!canSubmit) return
         busy = true; errorCode = null
-        SupervisionStore.acknowledgeUnenrolled()
+        store.acknowledgeUnenrolled()
         scope.launch {
             when (val r = client.complete(code)) {
                 is PairingClient.Result.Ok -> onEnrolled()

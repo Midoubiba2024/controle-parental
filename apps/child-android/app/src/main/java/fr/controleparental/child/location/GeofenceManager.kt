@@ -51,6 +51,15 @@ class GeofenceManager(private val context: Context) {
     fun isActive(): Boolean = names.contains(KEY_SIG)
 
     /**
+     * Désenrôlement (LOT 12b) : retire INCONDITIONNELLEMENT toutes nos geofences et
+     * vide le cache local (idempotent, sans appel réseau).
+     */
+    suspend fun removeAll() = withContext(Dispatchers.IO) {
+        runCatching { Tasks.await(client.removeGeofences(pendingIntent())) }
+        names.edit().clear().commit()
+    }
+
+    /**
      * Resynchronise les geofences enregistrées avec celles de la base.
      * [shouldRegister] vient de GeofencePolicy : permission de localisation FINE
      * (et arrière-plan pour un déclenchement app fermée) ET alertes de zones

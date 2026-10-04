@@ -58,6 +58,9 @@ class SafetyCache(context: Context) {
 
     fun toConfig(): SafetyConfig = SafetyConfig(analysisEnabled = analysisEnabled, teenProfile = teenProfile)
 
+    /** Désenrôlement (LOT 12b) : rien de l'ancien enfant ne doit subsister. */
+    fun clear() { prefs.edit().clear().commit() }
+
     private companion object {
         const val KEY_ENABLED = "analysis_enabled"
         const val KEY_MUTUAL = "mutual_visibility"

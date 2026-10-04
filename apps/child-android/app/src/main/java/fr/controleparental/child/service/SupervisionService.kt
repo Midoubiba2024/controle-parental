@@ -142,15 +142,23 @@ class SupervisionService : Service() {
         var tick = 0L
         while (scope.isActive) {
             // Plus enrôlé (session perdue ou appareil retiré par le parent, LOT 12) :
-            // plus rien à superviser → on lève l'overlay et on s'arrête (aucune
-            // requête ; la notification disparaît avec le service).
-            if (!SupervisionStore(this).isEnrolled) {
+            // overlay levé, aucune requête. Tant que le démontage (Unenrollment)
+            // n'a pas levé les restrictions, la notification RESTE visible : c'est
+            // Unenrollment qui arrête le service, en dernier. S'il n'y a rien à
+            // démonter, on s'arrête tout de suite.
+            val store = SupervisionStore(this)
+            if (!store.isEnrolled) {
+                val pending = store.teardownPending
                 withContext(Dispatchers.Main) {
                     overlay.hide()
-                    loopStarted = false   // un ré-appairage relancera une boucle neuve
-                    stopSelf()
+                    if (!pending) {
+                        loopStarted = false   // un ré-appairage relancera une boucle neuve
+                        stopSelf()
+                    }
                 }
-                return
+                if (!pending) return
+                delay(TICK_MS)
+                continue
             }
 
             if (tick % SYNC_EVERY == 0L) {
@@ -243,6 +251,11 @@ class SupervisionService : Service() {
         private const val COMMANDS_EVERY = 5L     // ~15 s
         private const val SYNC_EVERY = 100L       // ~5 min
         const val EXTRA_FROM_BOOT = "from_boot"
+
+        /** Arrêt (désenrôlement) : la notification de supervision disparaît. */
+        fun stop(context: Context) {
+            runCatching { context.stopService(Intent(context, SupervisionService::class.java)) }
+        }
 
         fun start(context: Context, fromBoot: Boolean = false) {
             val intent = Intent(context, SupervisionService::class.java)
