@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  useLocation, saveGeofence, deleteGeofence, saveLocationSettings,
+  useLocation, saveGeofence, deleteGeofence, saveLocationSettings, saveGeofenceAlerts,
   ackSos, resolveSos, acknowledgeAlert, GEOFENCE_TYPE_LABEL, geofenceColor,
 } from "../../lib/location";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 import { BatteryLow, Check, House, LifeBuoy, MapPin, Plus, School, Siren, Trash2 } from "lucide-react";
 import { EmptyState, ViewSkeleton } from "../Ui";
 import { ic } from "../icons";
-import { useI18n, t as tr } from "../../i18n";
+import { Trans, useI18n, t as tr } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
 import type { Child, Geofence, GeofenceType, LocationMode, SosEvent } from "../../lib/types";
 
@@ -217,6 +217,12 @@ function ZonesCard({ familyId, child, loc, run }: {
 }) {
   const { t } = useI18n();
   const [editing, setEditing] = useState<Geofence | "new" | null>(null);
+  // Réglage « Alertes de zones » : indisponible tant que la colonne n'existe pas
+  // (ligne lue SANS le champ, ou écriture refusée pour colonne inconnue).
+  const [alertsUnavailable, setAlertsUnavailable] = useState(false);
+  const s = loc.settings;
+  const columnMissing = alertsUnavailable || (s != null && !("geofence_alerts_enabled" in s));
+  const alertsOn = s?.geofence_alerts_enabled ?? true;
 
   return (
     <div className="card">
@@ -224,6 +230,24 @@ function ZonesCard({ familyId, child, loc, run }: {
         <h2 style={{ margin: 0 }}>{t("views.security.zones.title")} <span className="muted small">{t("views.security.zones.titleHint")}</span></h2>
         {editing === null && <button onClick={() => setEditing("new")}><Plus {...ic} size={18} strokeWidth={2} />{t("views.security.zones.addButton")}</button>}
       </div>
+
+      <label className="check">
+        <input type="checkbox" checked={alertsOn} disabled={columnMissing}
+          onChange={(e) => {
+            const enabled = e.target.checked;
+            run(async () => {
+              const res = await saveGeofenceAlerts(familyId, child.id, enabled);
+              if (res.unavailable) setAlertsUnavailable(true);
+              return res;
+            });
+          }} />
+        <span><Trans k="views.security.zones.alertsToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
+      </label>
+      <p className="muted small" style={{ marginTop: -2 }}>
+        {columnMissing
+          ? t("views.security.zones.alertsUnavailable")
+          : t("views.security.zones.alertsHint", { name: child.display_name })}
+      </p>
 
       {editing !== null ? (
         <ZoneForm

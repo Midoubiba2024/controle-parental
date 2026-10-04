@@ -245,6 +245,9 @@ export interface LocationSettings {
   periodic_interval_sec: number;
   retention_days: number;
   high_accuracy: boolean;
+  // Alertes d'entrée/sortie de zones, indépendantes du mode (migration 0030).
+  // Absent tant que la migration n'est pas appliquée.
+  geofence_alerts_enabled?: boolean;
 }
 
 export interface LocationFix {

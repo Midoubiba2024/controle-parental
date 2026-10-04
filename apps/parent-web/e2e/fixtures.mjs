@@ -107,9 +107,9 @@ const app_inventory = [
 const comm_events = [
   ["incoming", 4 * MIN + 12_000, 2 * H, "a91f3c"], ["outgoing", 2 * MIN, 5 * H, "7be20d"],
   ["missed", null, 26 * H, "a91f3c"], ["incoming", 11 * MIN, 30 * H, "c40e88"],
-  // Dernier appel : RÉELLEMENT anonyme (numéro masqué par l'appelant). Simule le
-  // comportement de l'app enfant APRÈS la PR #24 (hash null pour un appel
-  // anonyme) ; la console affiche alors « Numéro masqué ».
+  // Dernier appel : RÉELLEMENT anonyme (numéro masqué par l'appelant). L'app enfant
+  // envoie un hash NULL pour un numéro absent, privé ou masqué (CounterpartyHash,
+  // migration 0029) ; la console affiche alors « Numéro masqué ».
   ["outgoing", 45_000, 52 * H, "a91f3c"], ["blocked", null, 70 * H, null],
 ].map(([direction, duration_ms, back, hash], i) => ({
   id: `call-${i}`, child_id: CHILD, device_id: DEV, kind: "call", direction,
@@ -162,6 +162,7 @@ const HOME = [45.7772, 4.8556];
 const location_settings = [{
   id: "ls-1", family_id: FAM, child_id: CHILD, enabled: true, mode: "periodic",
   periodic_interval_sec: 900, retention_days: 30, high_accuracy: false,
+  geofence_alerts_enabled: true,   // migration 0030
 }];
 const location_fixes = Array.from({ length: 12 }, (_, i) => ({
   id: `fix-${i}`, child_id: CHILD, device_id: DEV, captured_at: ago(i * 15 * MIN + 4 * MIN),
