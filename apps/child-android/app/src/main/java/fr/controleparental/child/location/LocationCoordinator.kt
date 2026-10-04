@@ -3,6 +3,7 @@ package fr.controleparental.child.location
 import android.content.Context
 import fr.controleparental.child.data.DeviceStatusCollector
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.SupervisionService
 import java.time.Instant
 
 /**
@@ -101,6 +102,9 @@ class LocationCoordinator(context: Context) {
     private suspend fun handlePeriodic(now: Long) {
         val s = settings
         if (!s.enabled || s.mode != "periodic") return
+        // Collecte : jamais sans notification de supervision visible (LOT 12b).
+        // Échec fermé, rien en file ; le relevé part dès que la notification revient.
+        if (!SupervisionService.supervisionVisible(appContext)) return
         val intervalMs = s.periodicIntervalSec.coerceAtLeast(MIN_PERIODIC_INTERVAL_SEC) * 1000L
         if (now - lastPeriodicMs < intervalMs) return
         lastPeriodicMs = now
@@ -108,23 +112,31 @@ class LocationCoordinator(context: Context) {
         repo.insertFix(loc, source = "periodic", batteryLevel = batteryLevel())
     }
 
-    /** Check-in ponctuel (commande 'locate', D2). Retourne true si une position
-     *  a été remontée. */
-    suspend fun checkInOnDemand(): Boolean {
+    /** Issue d'un check-in à la demande. */
+    enum class CheckIn { SENT, NOT_SENT, SUPERVISION_NOT_VISIBLE }
+
+    /** Check-in ponctuel (commande 'locate', D2). */
+    suspend fun checkInOnDemand(): CheckIn {
+        // Collecte demandée par le parent : jamais sans notification de supervision
+        // visible (LOT 12b). L'appelant n'accuse alors PAS l'exécution.
+        if (!SupervisionService.supervisionVisible(appContext)) return CheckIn.SUPERVISION_NOT_VISIBLE
         // On RECHARGE le réglage (il a pu changer) et on RESPECTE le choix du
         // parent : si le partage est désactivé (off / !enabled), on ne remonte
         // AUCUNE position — cohérent avec l'écran « mes données » qui dit alors
         // « partage désactivé ». Le SOS enfant (child-initiated) reste, lui,
         // toujours autorisé par un autre chemin.
         val s = refreshSettings()
-        if (!s.enabled || s.mode == "off") return false
-        val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return false
-        return repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
+        if (!s.enabled || s.mode == "off") return CheckIn.NOT_SENT
+        val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return CheckIn.NOT_SENT
+        val sent = repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
+        return if (sent) CheckIn.SENT else CheckIn.NOT_SENT
     }
 
     /** Batterie faible (D7) : remonte la dernière position + une alerte. Respecte
      *  le réglage de partage (pas de position si désactivé). */
     suspend fun onBatteryLow() {
+        // Collecte automatique (position + alerte) : jamais sans supervision visible.
+        if (!SupervisionService.supervisionVisible(appContext)) return
         val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return
         val battery = batteryLevel()

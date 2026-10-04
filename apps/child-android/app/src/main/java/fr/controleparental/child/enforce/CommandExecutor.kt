@@ -42,8 +42,7 @@ class CommandExecutor(
         // Enrôlement capturé AVANT le réseau (garde LOT 12b, voir apply()).
         val deviceId = SupervisionStore.current.value?.deviceId ?: return
         for (c in policyClient.pendingCommands()) {
-            apply(c, deviceId)
-            policyClient.ackCommand(c.id, "acked")
+            policyClient.ackCommand(c.id, apply(c, deviceId))
         }
     }
 
@@ -84,7 +83,13 @@ class CommandExecutor(
      *  commande `message` (#4/#8) → pas de collision ni de spam au re-sondage. */
     private fun messageNotifId(id: String): Int = MSG_NOTIF_BASE + ((id.hashCode() and 0x7fffffff) % 1000)
 
-    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String) {
+    /**
+     * Applique la commande et renvoie le statut d'accusé : `acked` (traitée) ou
+     * `delivered` (reçue mais NON exécutée). Le serveur n'autorise à l'appareil que
+     * ces deux statuts (app.commands_guard_child_update) : un `locate` refusé
+     * faute de supervision visible reste donc `delivered`, jamais `acked`.
+     */
+    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String): String {
         when (c.type) {
             // Écritures de cache / appels DPM : jamais après (ou pendant) un démontage.
             "pause" -> Unenrollment.ifStillEnrolled(deviceId) { cache.pauseActive = true }
@@ -94,8 +99,11 @@ class CommandExecutor(
             }
             "ring" -> ring()
             "message" -> notifyMessage(c.payload.optString("message").ifBlank { context.getString(R.string.parent_message_default) }, CMD_MSG_NOTIF_ID)
-            "locate" -> location?.checkInOnDemand()
+            "locate" -> if (location?.checkInOnDemand() == LocationCoordinator.CheckIn.SUPERVISION_NOT_VISIBLE) {
+                return "delivered"
+            }
         }
+        return "acked"
     }
 
     private fun ring() {
