@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { ageProfileFromBirth, type AuditEntry, type Child, type Device, type DeviceMode } from "../../lib/types";
 import { fmtDateTime } from "../../lib/format";
+import { ageProfileLabel, auditActionLabel, roleLabel } from "../../lib/labels";
 import { EmptyState } from "../Ui";
 
 export function FamilyView({ familyId, onChildrenChanged }: {
@@ -46,8 +47,8 @@ export function FamilyView({ familyId, onChildrenChanged }: {
         <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {audit.map((a) => (
             <li key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-              <code>{a.action}</code>
-              <span className="muted small"> · {a.actor_role ?? "—"} · {fmtDateTime(a.created_at)}</span>
+              <span style={{ fontWeight: 600 }}>{auditActionLabel(a.action)}</span>
+              <span className="muted small"> · {roleLabel(a.actor_role)} · {fmtDateTime(a.created_at)}</span>
             </li>
           ))}
         </ul>
@@ -121,12 +122,12 @@ function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
     <div style={{ borderTop: "1px solid var(--border)", padding: "14px 0" }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <strong>{child.display_name}</strong>
-        <span className="badge">{child.age_profile}</span>
+        <span className="badge">{ageProfileLabel(child.age_profile)}</span>
       </div>
       <div className="inline" style={{ marginTop: 8 }}>
         <select value={mode} onChange={(e) => setMode(e.target.value as DeviceMode)}>
           <option value="standard">Standard</option>
-          <option value="reinforced">Renforcé (device owner requis)</option>
+          <option value="reinforced">Renforcé (appareil dédié)</option>
         </select>
         <button className="ghost" disabled={busy} onClick={genCode}>{busy ? "…" : "Générer un code d'appairage"}</button>
       </div>
