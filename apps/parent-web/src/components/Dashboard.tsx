@@ -129,7 +129,10 @@ export function Dashboard({ session }: { session: Session }) {
         <div className="topbar">
           <div>
             <h1>{VIEW_TITLE[view]}</h1>
-            {currentChild && <div className="sub">{currentChild.display_name}</div>}
+            <div className="sub">
+              {currentFamily ? `Famille ${currentFamily.name}` : ""}
+              {currentChild ? ` · ${currentChild.display_name}` : ""}
+            </div>
           </div>
           <span className="spacer" />
 
