@@ -8,22 +8,6 @@
      `satisfies Messages` : voir docs/13-I18N.md.
    ============================================================================= */
 
-import rules from "./_wip/rules";
-import requests from "./_wip/requests";
-import filtering from "./_wip/filtering";
-import wellbeing from "./_wip/wellbeing";
-import security from "./_wip/security";
-import location from "./_wip/location";
-import map from "./_wip/map";
-import privacy from "./_wip/privacy";
-import family from "./_wip/family";
-import messages from "./_wip/messages";
-import overview from "./_wip/overview";
-import screenTime from "./_wip/screenTime";
-import applications from "./_wip/applications";
-import calls from "./_wip/calls";
-import charts from "./_wip/charts";
-
 const fr = {
   app: {
     documentTitle: "Console parent — Contrôle parental",
@@ -284,21 +268,662 @@ const fr = {
   },
 
   views: {
-    rules,
-    requests,
-    filtering,
-    wellbeing,
-    security,
-    location,
-    map,
-    privacy,
-    family,
-    messages,
-    overview,
-    screenTime,
-    applications,
-    calls,
-    charts,
+    rules: {
+      loading: "Chargement des règles…",
+
+      // Actions possibles d'une règle (catégorie ou application).
+      ruleAction: {
+        free: "Libre",
+        limit: "Limiter",
+        block: "Bloquer",
+        allow: "Autoriser",
+        alwaysAllow: "Toujours autoriser",
+      },
+
+      timeLimits: {
+        title: "Temps d'écran",
+        today: "Aujourd'hui",
+        // {used} = durée déjà formatée (ex. « 1 h 05 »), {limit} = minutes.
+        usageOfLimit: "{used} / {limit} min",
+        bonusToday: "+ {minutes} min de bonus aujourd'hui",
+        presetsTitle: "Préréglages par âge",
+        presetsHint: "Repères d'aide à la décision — ajustables ci-dessous à tout moment.",
+        dailyLimitTitle: "Limite quotidienne (globale)",
+        dailyLimitPlaceholder: "aucune",
+        minutesPerDay: "minutes / jour",
+        save: "Enregistrer",
+        weekdayTitle: "Par jour de semaine (surcharge)",
+        graceTitle: "Délai de grâce « encore 1 min »",
+        graceToggle: "Autoriser une courte prolongation à l'atteinte d'un quota",
+        graceDuration: "Durée (min)",
+        graceUsesPerDay: "Fois / jour",
+      },
+
+      instantControl: {
+        title: "Pause & verrouillage",
+        intro: "Action <b>visible</b> par l'enfant, réversible. L'appel d'urgence (112) n'est jamais bloqué.",
+        noDeviceTitle: "Aucun appareil appairé",
+        noDeviceHint: "Appairez un appareil dans l'onglet Famille.",
+        pause: "⏸ Pause",
+        resume: "▶ Reprendre",
+        lock: "🔒 Verrouiller",
+        ring: "🔔 Faire sonner",
+        messagePlaceholder: "Message sur l'écran (ex. « À table ! »)",
+        send: "Envoyer",
+        recentCommands: "Dernières commandes",
+        // Statut d'une commande envoyée à l'appareil.
+        commandStatus: {
+          pending: "En attente",
+          delivered: "Délivrée",
+          acked: "Acquittée",
+          expired: "Expirée",
+          cancelled: "Annulée",
+        },
+      },
+
+      guards: {
+        title: "Mode vacances & verrous",
+        vacationTitle: "Mode vacances / pause de planning",
+        vacationHint: "Suspend temporairement les plannings (horaires, Downtime, École). Reprise automatique à la fin.",
+        vacationActive: "actif",
+        // Libellés « Du [date] » / « Au [date] ».
+        from: "Du",
+        until: "Au",
+        clear: "Effacer",
+        installTitle: "Validation d'installation",
+        blockNewApps: "Bloquer toute <b>nouvelle application</b> jusqu'à validation du parent",
+        systemLockTitle: "Verrouillage des réglages système",
+        systemLockToggle: "Empêcher la modification de l'heure, des comptes et des options développeur",
+        systemLockHint: "Effectif en mode <b>Renforcé</b> (device owner).",
+        ratingTitle: "Classification d'âge",
+        ratingNone: "Aucune restriction",
+        ratingHint: "niveau maximal autorisé",
+      },
+
+      categoryRules: {
+        title: "Règles par catégorie",
+        colCategory: "Catégorie",
+        colToday: "Aujourd'hui",
+        colRule: "Règle",
+        colQuota: "Quota",
+      },
+
+      appRules: {
+        title: "Règles par application",
+        searchPlaceholder: "Rechercher une application…",
+        newApps: "Nouvelles apps",
+        newAppsWithCount: "Nouvelles apps <b>({count})</b>",
+        emptyTitle: "Aucune application",
+        emptyHint: "L'inventaire remonte depuis l'appareil enfant une fois la supervision active.",
+        // {category} = catégorie de l'app, {duration} = durée d'utilisation formatée.
+        categoryWithUsage: "{category} · {duration} aujourd'hui",
+      },
+
+      schedules: {
+        title: "Plannings <note>(réutilisables entre enfants)</note>",
+        intro: "Horaires autorisés/interdits (A4), Downtime/coucher (A5), mode École (A6). Assignez un planning à cet enfant via la case ; les fenêtres horaires s'éditent ci-dessous.",
+        namePlaceholder: "Nom (ex. Nuit en semaine)",
+        addSchedule: "+ Planning",
+        emptyTitle: "Aucun planning",
+        emptyHint: "Créez un premier planning (ex. Downtime du soir) puis assignez-le.",
+        assigned: "Appliqué à cet enfant",
+        noWindows: "Aucune fenêtre horaire.",
+        // {days} = jours (ex. « Lun–Ven »), {start}/{end} = heures HH:MM.
+        window: "{days} · {start}→{end}",
+        rangeArrow: "→",
+        addWindow: "+ Fenêtre",
+      },
+    },
+    requests: {
+      pendingTitle: "En attente <count>({count})</count>",
+      emptyPendingTitle: "Aucune demande en attente",
+      emptyPendingHint: "Les demandes de temps ou de déblocage de l'enfant apparaissent ici.",
+      // Commentaire libre de l'enfant, cité.
+      childNote: "« {note} »",
+      approve: "Approuver",
+      deny: "Refuser",
+      historyTitle: "Historique",
+      emptyHistory: "Aucune décision pour l'instant.",
+
+      status: {
+        pending: "En attente",
+        approved: "Approuvée",
+        denied: "Refusée",
+        cancelled: "Annulée",
+      },
+
+      // Résumé d'une demande ({minutes} peut valoir « ? » si inconnu).
+      describe: {
+        unknownMinutes: "?",
+        extraTimeGlobal: "+{minutes} min (global)",
+        extraTimeApp: "+{minutes} min sur {app}",
+        reward: "+{minutes} min de récompense",
+        unblockApp: "Débloquer {app}",
+        unblockAnyApp: "Débloquer une app",
+        browse: "Accès au site {domain}",
+        browseUnknown: "Accès au site demandé",
+      },
+
+      grantBonus: {
+        title: "Octroyer un bonus",
+        hint: "Ajoute des minutes au quota du jour (récompense).",
+        unit: "min",
+        submit: "Offrir",
+      },
+    },
+    filtering: {
+      loading: "Chargement du filtrage…",
+
+      // Carte « Filtrage du web » : interrupteur général, état VPN, préréglages
+      status: {
+        title: "Filtrage du web",
+        intro: "Filtrage par <b>nom de domaine (DNS) sur l'appareil</b> — aucune inspection du contenu, aucun déchiffrement. Visible par l'enfant dans « mes données ».",
+        enableToggle: "<b>Activer le filtrage</b> pour {name}",
+        protectionTitle: "État de la protection",
+        noDevice: "Aucun appareil n'a encore signalé l'état du filtrage. Il apparaîtra ici une fois le filtrage autorisé sur l'appareil enfant.",
+        device: "Appareil",
+        badgeDisabled: "⚠️ désactivé",
+        badgeUncertain: "⚠️ état incertain",
+        badgeActive: "🛡️ actif",
+        // {ago} = temps relatif (« il y a 5 min »), {when} = date/heure courte
+        cutAgo: "coupé {ago}",
+        silentSince: "silencieux depuis {ago}",
+        lastSeen: "dernière nouvelle {when}",
+        antiBypass: "Anti-contournement <b>transparent</b> (C9) : si le filtrage est désactivé (ou silencieux trop longtemps), c'est signalé ici et à l'enfant — jamais en cachette.",
+        presetsTitle: "Préréglages par âge",
+        presetsHint: "Jeune enfant → liste blanche stricte ; (pré)ado → catégories + Ask-to-Browse. Ajustable ci-contre.",
+      },
+
+      // Carte SafeSearch / YouTube / modes
+      safeSearch: {
+        title: "SafeSearch & modes",
+        forceSafeSearch: "Forcer <b>SafeSearch</b> (Google, Bing, DuckDuckGo) — réécriture DNS (C3)",
+        youtubeTitle: "YouTube mode restreint (C4)",
+        youtubeVia: "via restrict(moderate).youtube.com",
+        whitelistTitle: "Liste blanche stricte (C5)",
+        whitelistOnly: "N'autoriser <b>que</b> les domaines de la liste blanche (+ services essentiels)",
+        whitelistHint: "Recommandé pour le jeune enfant. Les services système et les urgences restent toujours accessibles.",
+        askToBrowseTitle: "Ask-to-Browse (C6)",
+        askToBrowse: "Permettre à l'enfant de <b>demander l'accès</b> à un site bloqué",
+        journalTitle: "Journal des domaines",
+        logAllowed: "Consigner aussi les domaines <b>autorisés</b> (sinon : seulement les blocages)",
+        retentionLabel: "Rétention (jours)",
+        retentionHint: "métadonnées seulement — jamais d'URL ni de contenu",
+      },
+
+      // Carte catégories bloquées
+      categories: {
+        title: "Catégories bloquées",
+        intro: "Le contenu adulte (C7) est bloqué par défaut dans tous les préréglages.",
+      },
+
+      // File d'approbation Ask-to-Browse
+      askToBrowse: {
+        title: "Demandes d'accès",
+        count: "({count})",
+        emptyTitle: "Aucune demande en attente",
+        emptyHint: "Quand l'enfant demande l'accès à un site bloqué, il apparaît ici.",
+        unknownDomain: "domaine inconnu",
+        badge: "Ask-to-Browse",
+        // Note libre écrite par l'enfant, entre guillemets
+        childNote: "« {note} »",
+        allowButton: "Autoriser le domaine",
+        denyButton: "Refuser",
+      },
+
+      // Listes blanche / noire
+      lists: {
+        title: "Listes de domaines",
+        intro: "Une règle s'applique au domaine <b>et à ses sous-domaines</b>. « Autoriser » surclasse un blocage de catégorie ; « Bloquer » interdit un domaine précis.",
+        domainPlaceholder: "exemple.com",
+        actionBlock: "Bloquer (liste noire)",
+        actionAllow: "Autoriser (liste blanche)",
+        addButton: "+ Ajouter",
+        invalidDomain: "Domaine invalide (ex. exemple.com).",
+        allowTitle: "Liste blanche",
+        allowEmpty: "Aucun domaine explicitement autorisé.",
+        blockTitle: "Liste noire",
+        blockEmpty: "Aucun domaine explicitement bloqué.",
+        count: "({count})",
+        // Règle créée suite à une demande Ask-to-Browse
+        requested: "demandé",
+      },
+
+      // Journal des domaines (métadonnées)
+      journal: {
+        title: "Journal des domaines",
+        subtitle: "(métadonnées)",
+        // {days} = durée de conservation en jours
+        intro: "Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu. Conservé {days} jours (purge automatique).",
+        emptyTitle: "Aucun événement",
+        emptyHint: "Les domaines bloqués (et autorisés, si activé) remonteront ici.",
+        colDomain: "Domaine",
+        colCategory: "Catégorie",
+        colAction: "Action",
+        colWhen: "Quand",
+      },
+    },
+    wellbeing: {
+      loading: "Chargement de la sécurité ado…",
+
+      // Affiché à la place de la vue pour un profil « jeune enfant » (fonction désactivée)
+      youngChild: {
+        title: "Sécurité ado — non applicable",
+        intro: "L'analyse de bien-être sur l'appareil est <b>réservée au profil ado</b> (pré-ado / ado).",
+        body: "Pour <b>{name}</b> (profil jeune enfant), cette fonction est <b>totalement désactivée</b> : aucun service d'analyse n'est actif et aucune permission n'est demandée. La protection passe par le <b>filtrage</b>, les <b>limites de temps</b> et la <b>localisation transparente</b>. Elle pourra être proposée, de façon transparente et co-consentie, lorsque l'enfant grandira (gradation par âge — CNIL/RGPD art. 8).",
+      },
+
+      // Réglages « mode ado » (K6), état de l'analyse, pause de confidentialité (K8)
+      settings: {
+        title: "Analyse de bien-être (sur l'appareil)",
+        intro: "Le texte des notifications est analysé <b>sur le téléphone de {name}</b>. Vous ne recevez qu'une <b>alerte de catégorie</b> (ci-dessous) — <b>jamais</b> ses messages, jamais le texte. L'ado le voit dans « mes données » et peut la désactiver ou la mettre en pause.",
+        enableToggle: "<b>Activer l'analyse</b> (nécessite le co-consentement de l'ado)",
+        enableHint: "Désactivée par défaut (privacy by default). L'analyse ne tourne que si l'ado accorde aussi l'accès aux notifications sur son appareil.",
+        mutualToggle: "<b>Visibilité mutuelle</b> (mode ado, K6) — l'ado voit ce que vous voyez",
+        // {name} = prénom de l'ado ; {ago} = temps relatif (« il y a 5 min »)
+        pauseNoticeSince: "<b>⏸ Pause de confidentialité active.</b> {name} a suspendu l'analyse (depuis {ago}). Vous voyez qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.",
+        pauseNotice: "<b>⏸ Pause de confidentialité active.</b> {name} a suspendu l'analyse. Vous voyez qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.",
+        statusTitle: "État de l'analyse",
+        noDevice: "Aucun appareil n'a encore signalé l'état de l'analyse. Il apparaîtra ici une fois l'accès aux notifications accordé sur l'appareil de l'ado.",
+        device: "Appareil",
+        // Badges au féminin : « l'analyse »
+        badgeInactive: "⏸ inactive",
+        badgeUncertain: "⚠️ état incertain",
+        badgeActive: "🫶 active",
+        cutAgo: "coupée {ago}",
+        silentSince: "silencieuse depuis {ago}",
+        lastSeen: "dernière nouvelle {when}",
+        transparency: "Transparence : si l'ado retire l'accès (son droit), c'est signalé ici — jamais en cachette.",
+      },
+
+      // Tableau agrégé par catégorie (G6)
+      categories: {
+        title: "Par catégorie",
+        subtitle: "(alertes de métadonnées)",
+        intro: "Regroupement des signaux détectés sur l'appareil. <b>Aucun contenu</b> — seulement catégorie, gravité et compte.",
+        emptyTitle: "Aucun signal",
+        emptyHint: "Tant que rien n'est détecté, rien n'apparaît ici. C'est bon signe.",
+      },
+
+      // Journal des signaux (métadonnées seulement)
+      signals: {
+        title: "Signaux récents",
+        subtitle: "(métadonnées)",
+        intro: "Catégorie + gravité + application source + heure. <b>Jamais</b> le texte, l'extrait ou le message.",
+        emptyTitle: "Aucun signal",
+        emptyHint: "Les alertes de catégorie remonteront ici.",
+        colCategory: "Catégorie",
+        colSeverity: "Gravité",
+        colApp: "Application",
+        // Abréviation de « occurrences » (colonne étroite)
+        colOccurrences: "Occur.",
+        colWhen: "Quand",
+        seen: "vu",
+        markSeen: "Marquer vu",
+      },
+
+      // Ressources d'aide (V12)
+      resources: {
+        title: "Ressources d'aide",
+        intro: "En cas de difficulté, ces services d'écoute et de signalement peuvent aider — vous et l'ado.",
+        open: "ouvrir ↗",
+      },
+    },
+    security: {
+      history: {
+        title: "Historique SOS",
+        emptyTitle: "Aucun SOS",
+        emptyHint: "Le bouton SOS est déclenché par l'enfant depuis son application. Un épisode apparaît ici avec sa position en direct.",
+        colStatus: "Statut",
+        colStart: "Début",
+        colEnd: "Fin",
+      },
+      // Statut d'un épisode SOS
+      sosStatus: {
+        active: "Actif",
+        acked: "Aide en route",
+        resolved: "Clos",
+      },
+      banner: {
+        title: "SOS — {status}",
+        triggered: "Déclenché {ago} · {date}",
+        triggeredWithMessage: "Déclenché {ago} · {date} · « {message} »",
+        ackTitle: "Prévenir l'enfant que l'aide arrive",
+        ackButton: "✅ Aide en route",
+        resolveButton: "Clôturer",
+        // Popups de carte
+        sosPositionLabel: "Position SOS · {date}",
+        lastKnownBeforeSosLabel: "Dernière position connue avant le SOS · {date}",
+        liveCaption: "Dernière position SOS {ago} · ±{accuracy} m",
+        liveCaptionStreaming: "Dernière position SOS {ago} · ±{accuracy} m · diffusion en direct",
+        noSosPositionCaption: "Pas encore de position SOS — dernière position connue {ago} · ±{accuracy} m",
+        waitingFirstPosition: "En attente de la première position de l'appareil…",
+      },
+      settings: {
+        title: "Partage de position",
+        titleHint: "(adapté à l'âge)",
+        youngChildAdvice: "Profil jeune enfant : le suivi périodique est adapté. Il reste visible de l'enfant (notification permanente).",
+        teenAdvice: "Profil (pré)ado : privilégiez le check-in à la demande — plus respectueux de l'autonomie. L'enfant voit chaque partage.",
+        modeLabel: "Mode de partage",
+        modeOff: "Désactivé",
+        modeOnDemand: "À la demande (check-in)",
+        modeOnDemandRecommended: "À la demande (check-in) — conseillé",
+        modePeriodic: "Périodique (suivi de fond)",
+        modePeriodicRecommended: "Périodique (suivi de fond) — conseillé",
+        frequencyLabel: "Fréquence",
+        every5Min: "Toutes les 5 min",
+        every15Min: "Toutes les 15 min",
+        every30Min: "Toutes les 30 min",
+        everyHour: "Toutes les heures",
+        retentionLabel: "Conservation",
+        retentionDays: "{days} jours",
+        accuracyLabel: "Précision",
+        accuracyBalanced: "Équilibrée (moins de batterie)",
+        accuracyHigh: "Haute (GPS précis)",
+      },
+      zones: {
+        title: "Zones de sécurité",
+        titleHint: "(maison, école…)",
+        addButton: "+ Ajouter une zone",
+        emptyTitle: "Aucune zone définie",
+        emptyHint: "Ajoutez la maison et l'école pour recevoir une alerte « bien arrivé » lors des trajets.",
+        // {alerts} = une des valeurs notify* ci-dessous (ou vide)
+        summary: "rayon {radius} m · {alerts}",
+        summaryDisabled: "rayon {radius} m · {alerts} · désactivée",
+        notifyEnter: "alerte arrivée",
+        notifyExit: "alerte départ",
+        notifyBoth: "alerte arrivée + alerte départ",
+        disable: "Désactiver",
+        enable: "Activer",
+        edit: "Modifier",
+        delete: "Supprimer",
+        confirmDelete: "Supprimer « {name} » ?",
+      },
+      zoneForm: {
+        centerMarker: "Centre de la zone",
+        mapHint: "Cliquez sur la carte pour placer le centre de la zone, puis ajustez le rayon.",
+        nameLabel: "Nom",
+        namePlaceholder: "Maison, École…",
+        typeLabel: "Type",
+        typeHome: "Maison",
+        typeSchool: "École",
+        typeCustom: "Autre lieu",
+        radiusLabel: "Rayon : {radius} m",
+        notifyEnter: "Alerte « bien arrivé »",
+        notifyExit: "Alerte au départ",
+        center: "Centre : {lat}, {lng}",
+        save: "Enregistrer",
+        create: "Créer la zone",
+        cancel: "Annuler",
+      },
+      alerts: {
+        title: "Alertes de sécurité",
+        unseen: { one: "({count} non vue)", other: "({count} non vues)" },
+        colAlert: "Alerte",
+        colWhen: "Quand",
+        lowBattery: "🔋 Batterie faible",
+        lowBatteryLevel: "🔋 Batterie faible ({level}%)",
+        seen: "vue",
+        markSeen: "Marquer vue",
+      },
+    },
+    location: {
+      loading: "Chargement de la localisation…",
+      checkInRequested: "Check-in demandé — la position arrivera dès que l'appareil répond.",
+      transparency: {
+        title: "Localisation transparente.",
+        // <b> = mode de partage actuel
+        body: "Seules les positions de cette application sont partagées — jamais à l'insu de l'enfant : il voit dans « mes données » quand et comment sa position est transmise. Partage actuel : <b>{mode}</b>. Les positions sont conservées {days} jours puis supprimées.",
+        defaultMode: "à la demande",
+      },
+      sos: {
+        title: "<strong>SOS en cours</strong> — déclenché {ago}.",
+        hint: "La position est diffusée en direct ci-dessous. Détails et accusé de réception dans l'onglet <b>Sécurité / SOS</b>.",
+      },
+      tiles: {
+        lastPosition: "Dernière position",
+        accuracy: "Précision",
+        accuracyValue: "±{accuracy} m",
+        zones: "Zones de sécurité",
+        realtime: "Suivi temps réel",
+        connected: "Connecté",
+        pollingFallback: "Repli polling",
+      },
+      map: {
+        title: "Carte",
+        realtime: "temps réel",
+        noDevice: "Aucun appareil appairé",
+        requestCheckIn: "📍 Demander un check-in",
+        emptyTitle: "Aucune position pour l'instant",
+        emptyHint: "Dès que l'appareil enfant partage une position (périodique ou à la demande), elle apparaît ici. Les zones de sécurité se dessinent même sans position.",
+        recent: "Récent",
+        dayTrace: { one: "Trajet du jour sélectionné ({count} point).", other: "Trajet du jour sélectionné ({count} points)." },
+        recentHint: "Points récents, tous jours confondus. Choisis un jour pour voir le trajet détaillé.",
+        // Popups de carte
+        zoneLabel: "{type} · {name} ({radius} m)",
+        traceDotLabel: "{date} · ±{accuracy} m",
+        positionLabel: "Position · {date} · ±{accuracy} m",
+        sosPositionLabel: "SOS — Position · {date} · ±{accuracy} m",
+      },
+      events: {
+        title: "Arrivées & départs",
+        titleHint: "(zones de sécurité)",
+        emptyTitle: "Aucun passage de zone",
+        emptyHint: "Les alertes « bien arrivé » (école, maison) s'affichent ici dès qu'une zone est définie et franchie.",
+        colEvent: "Événement",
+        colZone: "Zone",
+        colWhen: "Quand",
+        deletedZone: "Zone supprimée",
+      },
+    },
+    map: {
+      // Attribution des tuiles (HTML autorisé : entité &copy;)
+      attribution: "&copy; contributeurs OpenStreetMap",
+    },
+    privacy: {
+      cancel: "Annuler",
+      deleting: "Suppression…",
+
+      // Droit d'accès (export JSON).
+      export: {
+        title: "Exporter les données de {name} <muted>(droit d'accès)</muted>",
+        intro: "Télécharge au format JSON toutes les données enregistrées pour cet enfant (métadonnées et agrégats — jamais le contenu de tiers). L'export est journalisé dans l'audit, visible de l'enfant.",
+        preparing: "Préparation…",
+        button: "⬇ Télécharger l'export JSON",
+        done: "Export téléchargé.",
+      },
+
+      // Politique de rétention (purge automatique).
+      retention: {
+        title: "Conservation des données <muted>(purge automatique)</muted>",
+        intro: "Les données anciennes sont supprimées automatiquement selon leur type (minimisation RGPD). Détail et justification : <code>docs/12-RETENTION-RGPD.md</code>.",
+        colData: "Donnée",
+        colRetention: "Conservation",
+        // Durée de conservation en jours (« j » = jours).
+        days: "{days} j",
+        perChildDefault: "réglable par enfant — défaut {days} j",
+        rows: {
+          locations: "Positions (localisation)",
+          domainLog: "Journal des domaines (filtrage)",
+          deviceState: "État de l'appareil (batterie/stockage)",
+          callSmsMetadata: "Métadonnées d'appels/SMS",
+          zoneTransitions: "Transitions de zones",
+          safetySignals: "Signaux de sécurité (ado, on-device)",
+          alerts: "Alertes (batterie faible…)",
+          screenTime: "Temps d'écran (agrégats quotidiens)",
+          timeBonuses: "Bonus de temps accordés",
+          commands: "Commandes",
+          messaging: "Messagerie interne",
+          sosEpisodes: "Épisodes SOS",
+          auditLog: "Journal d'audit (traçabilité)",
+        },
+      },
+
+      // Droit à l'effacement — un enfant. {name} = prénom de l'enfant, que le parent
+      // doit ressaisir à l'identique pour confirmer (comparaison non traduite).
+      deleteChild: {
+        title: "Supprimer les données de {name} <muted>(droit à l'effacement)</muted>",
+        intro: "Efface <b>définitivement</b> cet enfant et toutes ses données (positions, temps d'écran, messages, signaux…). Les autres membres de la famille ne sont pas affectés. <b>Action irréversible.</b>",
+        button: "Supprimer cet enfant…",
+        confirmPrompt: "Confirmation : saisissez le prénom <b>{name}</b> pour confirmer.",
+        confirmButton: "Confirmer la suppression définitive",
+      },
+
+      // Droit à l'effacement — toute la famille. {name} = nom du foyer, à ressaisir.
+      deleteFamily: {
+        title: "Supprimer toute la famille « {name} » <muted>(réservé au propriétaire)</muted>",
+        intro: "Efface <b>définitivement</b> la famille entière : tous les enfants, appareils, règles et données. Seul le <b>propriétaire</b> du foyer peut le faire.<b> Action irréversible.</b>",
+        button: "Supprimer toute la famille…",
+        confirmPrompt: "Confirmation : saisissez le nom du foyer <b>{name}</b> pour confirmer.",
+        confirmButton: "Confirmer la suppression de la famille",
+      },
+    },
+    family: {
+      childrenTitle: "Enfants & appareils",
+      noChildTitle: "Aucun enfant pour l'instant",
+      noChildHint: "Ajoutez un profil, puis générez un code d'appairage pour son appareil.",
+      noDevice: "Aucun appareil appairé.",
+      // Badge d'un appareil appairé : {name} = nom/modèle, {mode} = libellé du mode.
+      deviceBadge: "📱 {name} · {mode}",
+      deviceBadgeRevoked: "📱 {name} · {mode} (révoqué)",
+      // Mode d'appareil (valeurs de l'enum DeviceMode).
+      deviceMode: {
+        standard: "Standard",
+        reinforced: "Renforcé",
+      },
+
+      // Journal d'audit : <muted>…</muted> = précision atténuée.
+      auditTitle: "Journal d'audit <muted>(transparence)</muted>",
+      auditEmpty: "Aucune activité.",
+      // Suite d'une ligne du journal, après le libellé de l'action (espace initiale voulue).
+      auditMeta: " · {role} · {date}",
+
+      addChild: {
+        nameLabel: "Prénom de l'enfant",
+        namePlaceholder: "Prénom",
+        birthLabel: "Date de naissance",
+        submit: "+ Enfant",
+        birthHint: "La date de naissance adapte automatiquement les protections à l'âge de l'enfant (profil « jeune enfant » / « préado » / « ado »). Elle est facultative.",
+      },
+
+      pairing: {
+        modeStandard: "Standard",
+        modeReinforced: "Renforcé (appareil dédié)",
+        generate: "Générer un code d'appairage",
+        code: "Code : <b>{code}</b>",
+        // Suite de la ligne du code (espace initiale voulue) ; {time} = heure d'expiration.
+        expires: " · expire {time}",
+      },
+    },
+    messages: {
+      // {name} = prénom de l'enfant ; <muted>…</muted> = partie atténuée du titre.
+      title: "Messages <muted>avec {name}</muted>",
+      intro: "Messagerie interne, visible par l'enfant. On n'accède jamais à ses autres applications de messagerie.",
+      emptyTitle: "Aucun message",
+      emptyHint: "Écrivez un premier mot — il apparaîtra sur l'appareil de l'enfant.",
+      // Horodatage d'un message du parent déjà lu par l'enfant ; {date} = date/heure.
+      sentAtRead: "{date} · lu",
+      placeholder: "Écrire un message…",
+      send: "Envoyer",
+    },
+    overview: {
+      tiles: {
+        screenTimeToday: "Temps d'écran aujourd'hui",
+        installedApps: "Applications installées",
+        battery: "Batterie",
+        // Niveau de batterie en pourcentage.
+        batteryValue: "{level}%",
+        freeStorage: "Stockage libre",
+      },
+      last7Days: "7 derniers jours",
+      noScreenTimeTitle: "Pas encore de données de temps d'écran",
+      noScreenTimeHint: "Elles apparaîtront après l'activation de l'accès à l'usage sur l'appareil.",
+      todayByCategory: "Aujourd'hui par catégorie",
+      // Sous-titre au centre de l'anneau, sous la durée totale du jour.
+      donutToday: "aujourd'hui",
+      noActivityToday: "Aucune activité aujourd'hui",
+      topAppsToday: "Applications les plus utilisées aujourd'hui",
+      storage: {
+        title: "Stockage de l'appareil",
+        // {used}, {total}, {free} = tailles déjà formatées (« 12 Go »).
+        used: "{used} utilisés sur {total}",
+        free: "{free} libres",
+      },
+    },
+    screenTime: {
+      // Période d'analyse (boutons 7 / 30 jours, sous-titre de l'anneau).
+      periodDays: { one: "{count} jour", other: "{count} jours" },
+      tiles: {
+        // {days} = durée de la période (« j » = jours).
+        total: "Temps total ({days} j)",
+        averagePerDay: "Moyenne par jour",
+        appLaunches: "Ouvertures d'apps",
+      },
+      dailyTrend: "Tendance quotidienne",
+      noDataInPeriod: "Aucune donnée sur la période",
+      byCategory: "Répartition par catégorie",
+      noActivity: "Aucune activité",
+      topApps: "Top applications",
+    },
+    applications: {
+      emptyTitle: "Aucune application inventoriée",
+      emptyHint: "L'inventaire (apps installées) remonte depuis l'appareil enfant une fois la supervision active.",
+      // {count} = nombre d'applications listées ; <muted>…</muted> = partie atténuée.
+      listTitle: "Applications <muted>({count})</muted>",
+      searchPlaceholder: "Rechercher une application…",
+      // Ligne de méta d'une app système : {category} = catégorie de l'app.
+      categorySystem: "{category} · système",
+      noMatch: "Aucune application ne correspond.",
+      detail: {
+        systemApp: "Application système",
+        installedOn: "Installée le {date}",
+        // « j » = jours.
+        time7d: "Temps (7 j)",
+        launches7d: "Ouvertures (7 j)",
+        usage7d: "Usage des 7 derniers jours",
+        noUsage: "Pas d'usage mesuré cette semaine.",
+        lastUsed: "Dernière utilisation : {date}",
+      },
+    },
+    calls: {
+      // Bandeau de transparence : <b>…</b> = en gras, <muted>…</muted> = texte atténué.
+      notice: "<b>Métadonnées uniquement.</b> <muted>Qui (numéro jamais stocké en clair), quand et combien de temps — jamais le contenu des appels, qui n'est ni écouté ni enregistré. Ces informations sont aussi visibles par l'enfant.</muted>",
+      emptyTitle: "Aucune métadonnée d'appel",
+      emptyHint: "Cette fonction est facultative et sensible (permission READ_CALL_LOG). Elle est désactivée par défaut dans l'app enfant et n'est collectée qu'avec le consentement explicite.",
+      tiles: {
+        incoming: "Entrants",
+        outgoing: "Sortants",
+        unanswered: "Manqués / rejetés",
+        totalDuration: "Durée totale",
+      },
+      // {total} = nombre total d'événements ; <muted>…</muted> = partie atténuée.
+      logTitle: "Journal des appels <muted>(métadonnées · {total} au total)</muted>",
+      columns: {
+        direction: "Sens",
+        counterparty: "Correspondant",
+        duration: "Durée",
+        date: "Date",
+      },
+      // Sens d'un appel (valeurs de l'enum CommDirection).
+      direction: {
+        incoming: "Entrant",
+        outgoing: "Sortant",
+        missed: "Manqué",
+        rejected: "Rejeté",
+        blocked: "Bloqué",
+      },
+      hiddenNumber: "Numéro masqué",
+      // {id} = identifiant de regroupement anonyme (préfixe de hash).
+      hiddenNumberWithId: "Numéro masqué · {id}",
+    },
+    charts: {
+      // aria-label du graphique en anneau ; {total} = total déjà formaté (ex. « 2 h 35 »).
+      donutAriaLabel: "Répartition : total {total}",
+      // Infobulles au survol : <k>…</k> = libellé atténué, <v>…</v> = valeur mise en avant.
+      tooltip: "<k>{label} · </k><v>{value}</v>",
+      tooltipWithPercent: "<k>{label} · </k><v>{value}</v><k> ({pct}%)</k>",
+      noData: "Aucune donnée.",
+    },
   },
 
   // Actions du journal d'audit → phrases lisibles.

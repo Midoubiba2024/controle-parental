@@ -25,8 +25,10 @@ function toDate(d: DateInput): Date {
   return d instanceof Date ? d : new Date(d);
 }
 
-/** Date/heure avec options Intl libres (ex. { weekday: "short", day: "numeric" }). */
-export function date(d: DateInput, opts: Intl.DateTimeFormatOptions = { dateStyle: "medium" }): string {
+/** Date/heure avec options Intl libres ; par défaut comme toLocaleDateString() : « 04/10/2026 ». */
+export function date(
+  d: DateInput, opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" },
+): string {
   return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(toDate(d));
 }
 
@@ -35,8 +37,10 @@ export function dateTime(d: DateInput): string {
   return date(d, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Heure : « 07:43 » (ou avec secondes si demandé). */
-export function time(d: DateInput, opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" }): string {
+/** Heure ; par défaut comme toLocaleTimeString() : « 07:43:12 ». */
+export function time(
+  d: DateInput, opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit" },
+): string {
   return date(d, opts);
 }
 
@@ -102,13 +106,6 @@ export function dayLabel(day: string): string {
   return date(new Date(day + "T00:00:00"), { weekday: "short", day: "numeric" });
 }
 
-/** Liste lisible : « a, b et c » (Intl.ListFormat). */
-export function list(items: string[], type: "conjunction" | "disjunction" | "unit" = "conjunction"): string {
-  const ListFormat = (Intl as unknown as { ListFormat?: new (l: string, o: object) => { format(i: string[]): string } }).ListFormat;
-  if (!ListFormat) return items.join(", ");
-  return new ListFormat(getLocale(), { style: "long", type }).format(items);
-}
-
 /** Nom d'une langue dans SA propre langue (« français », « العربية »). */
 export function languageName(code: string): string {
   try {
@@ -119,5 +116,5 @@ export function languageName(code: string): string {
   }
 }
 
-export const fmt = { date, dateTime, time, number, duration, durationShort, bytes, ago, dayLabel, list, languageName };
+export const fmt = { date, dateTime, time, number, duration, durationShort, bytes, ago, dayLabel, languageName };
 export type Fmt = typeof fmt;

@@ -4,11 +4,19 @@ import {
   appInitials, appLabelOf, categoryColor, categoryLabel, fmtDayLabel,
   fmtDuration, shiftDay,
 } from "../../lib/format";
+import { Trans, useI18n } from "../../i18n";
 import { Bars, type Slice } from "../charts/ChartKit";
 import { EmptyState } from "../Ui";
 import type { AppInventory } from "../../lib/types";
 
+// Équivalents de toLocaleDateString() / toLocaleString() (date seule / date + heure).
+const DATE_NUMERIC: Intl.DateTimeFormatOptions = { year: "numeric", month: "numeric", day: "numeric" };
+const DATE_TIME_FULL: Intl.DateTimeFormatOptions = {
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+};
+
 export function ApplicationsView({ obs }: { obs: ObservationData }) {
+  const { t } = useI18n();
   const { inventory, usage, anchorDay } = obs;
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -37,15 +45,16 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
 
   if (inventory.length === 0) {
     return <div className="card"><EmptyState icon="📱"
-      title="Aucune application inventoriée"
-      hint="L'inventaire (apps installées) remonte depuis l'appareil enfant une fois la supervision active." /></div>;
+      title={t("views.applications.emptyTitle")}
+      hint={t("views.applications.emptyHint")} /></div>;
   }
 
   return (
     <div className="grid dash" style={{ gap: 18 }}>
       <div className="card">
-        <h2>Applications <span className="muted small">({apps.length})</span></h2>
-        <input placeholder="Rechercher une application…" value={query}
+        <h2><Trans k="views.applications.listTitle" params={{ count: apps.length }}
+          tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
+        <input placeholder={t("views.applications.searchPlaceholder")} value={query}
           onChange={(e) => setQuery(e.target.value)} style={{ width: "100%", marginBottom: 10 }} />
         <div className="scroll">
           {apps.map((a) => {
@@ -61,13 +70,17 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
                   <div className="nm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {appLabelOf(a.app_label, a.package_name)}
                   </div>
-                  <div className="meta">{categoryLabel(a.category)}{a.is_system ? " · système" : ""}</div>
+                  <div className="meta">
+                    {a.is_system
+                      ? t("views.applications.categorySystem", { category: categoryLabel(a.category) })
+                      : categoryLabel(a.category)}
+                  </div>
                 </span>
-                <span className="dur">{ms > 0 ? fmtDuration(ms) : "—"}</span>
+                <span className="dur">{ms > 0 ? fmtDuration(ms) : t("common.none")}</span>
               </button>
             );
           })}
-          {apps.length === 0 && <EmptyState title="Aucune application ne correspond." />}
+          {apps.length === 0 && <EmptyState title={t("views.applications.noMatch")} />}
         </div>
       </div>
 
@@ -77,6 +90,7 @@ export function ApplicationsView({ obs }: { obs: ObservationData }) {
 }
 
 function AppDetail({ app, usage, anchorDay }: { app: AppInventory; usage: ObservationData["usage"]; anchorDay: string }) {
+  const { t, fmt } = useI18n();
   const to = anchorDay;
   const from7 = shiftDay(anchorDay, -6);
   const pkgUsage = useMemo(() => usage.filter((u) => u.package_name === app.package_name), [usage, app.package_name]);
@@ -102,21 +116,21 @@ function AppDetail({ app, usage, anchorDay }: { app: AppInventory; usage: Observ
 
       <div className="row" style={{ gap: 8, margin: "14px 0 4px" }}>
         <span className="badge" style={{ color: categoryColor(app.category) }}>{categoryLabel(app.category)}</span>
-        {app.is_system && <span className="badge">Application système</span>}
-        {app.installed_at && <span className="badge">Installée le {new Date(app.installed_at).toLocaleDateString("fr-FR")}</span>}
+        {app.is_system && <span className="badge">{t("views.applications.detail.systemApp")}</span>}
+        {app.installed_at && <span className="badge">{t("views.applications.detail.installedOn", { date: fmt.date(app.installed_at, DATE_NUMERIC) })}</span>}
       </div>
 
       <div className="grid cols-2" style={{ margin: "14px 0" }}>
-        <div><div className="muted small">Temps (7 j)</div><div style={{ fontSize: "1.3rem", fontWeight: 700 }}>{fmtDuration(total7)}</div></div>
-        <div><div className="muted small">Ouvertures (7 j)</div><div style={{ fontSize: "1.3rem", fontWeight: 700 }}>{launches7 || "—"}</div></div>
+        <div><div className="muted small">{t("views.applications.detail.time7d")}</div><div style={{ fontSize: "1.3rem", fontWeight: 700 }}>{fmtDuration(total7)}</div></div>
+        <div><div className="muted small">{t("views.applications.detail.launches7d")}</div><div style={{ fontSize: "1.3rem", fontWeight: 700 }}>{launches7 || t("common.none")}</div></div>
       </div>
 
-      <h3>Usage des 7 derniers jours</h3>
+      <h3>{t("views.applications.detail.usage7d")}</h3>
       {total7 > 0 ? <Bars data={bars} fmt={fmtDuration} height={150} highlightKey={to} />
-        : <EmptyState title="Pas d'usage mesuré cette semaine." />}
+        : <EmptyState title={t("views.applications.detail.noUsage")} />}
 
       {lastUsed && <p className="muted small" style={{ marginTop: 12 }}>
-        Dernière utilisation : {new Date(lastUsed).toLocaleString("fr-FR")}
+        {t("views.applications.detail.lastUsed", { date: fmt.date(lastUsed, DATE_TIME_FULL) })}
       </p>}
     </div>
   );

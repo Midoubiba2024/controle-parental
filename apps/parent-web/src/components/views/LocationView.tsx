@@ -4,6 +4,7 @@ import { useLocation, requestLocate, GEOFENCE_TRANSITION_LABEL, LOCATION_MODE_LA
 import { GEOFENCE_TYPE_LABEL } from "../../lib/location";
 import { fmtAgo, fmtDateTime, localDayKey } from "../../lib/format";
 import { Tile, EmptyState } from "../Ui";
+import { useI18n, Trans } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
 import type { Child, LocationFix } from "../../lib/types";
 
@@ -16,6 +17,7 @@ import type { Child, LocationFix } from "../../lib/types";
    ============================================================================= */
 
 export function LocationView({ familyId, child }: { familyId: string; child: Child }) {
+  const { t, fmt, locale } = useI18n();
   const loc = useLocation(child.id);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -46,8 +48,8 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
   const circles: MapCircle[] = useMemo(() => loc.geofences.filter((g) => g.enabled).map((g) => ({
     id: g.id, lat: g.center_lat, lng: g.center_lng, radiusM: g.radius_m,
     color: geofenceColor(g.type),
-    label: `${GEOFENCE_TYPE_LABEL[g.type]} · ${g.name} (${g.radius_m} m)`,
-  })), [loc.geofences]);
+    label: t("views.location.map.zoneLabel", { type: GEOFENCE_TYPE_LABEL[g.type], name: g.name, radius: g.radius_m }),
+  })), [loc.geofences, locale]);
 
   const markers: MapMarker[] = useMemo(() => {
     const out: MapMarker[] = [];
@@ -57,7 +59,7 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
       if (isLastOfTrace) return; // le dernier est rendu comme « position »
       out.push({
         id: f.id, lat: f.latitude, lng: f.longitude, color: "var(--series-1)",
-        kind: "dot", label: `${fmtDateTime(f.captured_at)} · ±${Math.round(f.accuracy_m ?? 0)} m`,
+        kind: "dot", label: t("views.location.map.traceDotLabel", { date: fmtDateTime(f.captured_at), accuracy: Math.round(f.accuracy_m ?? 0) }),
       });
     });
     // Dernière position connue (du trajet affiché, ou globale).
@@ -67,11 +69,12 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
         id: `pos-${head.id}`, lat: head.latitude, lng: head.longitude,
         color: sos ? "var(--danger)" : "var(--primary)",
         kind: sos ? "sos" : "position",
-        label: `${sos ? "SOS — " : ""}Position · ${fmtDateTime(head.captured_at)} · ±${Math.round(head.accuracy_m ?? 0)} m`,
+        label: t(sos ? "views.location.map.sosPositionLabel" : "views.location.map.positionLabel",
+          { date: fmtDateTime(head.captured_at), accuracy: Math.round(head.accuracy_m ?? 0) }),
       });
     }
     return out;
-  }, [shown, last, selectedDay, sos]);
+  }, [shown, last, selectedDay, sos, locale]);
 
   const path = useMemo(() => shown.map((f) => ({ lat: f.latitude, lng: f.longitude })), [shown]);
 
@@ -82,61 +85,64 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
     setBusy(true); setMsg(null);
     const { error } = await requestLocate(familyId, child.id, device.id);
     setBusy(false);
-    setMsg(error ? error : "Check-in demandé — la position arrivera dès que l'appareil répond.");
+    setMsg(error ? error : t("views.location.checkInRequested"));
   }
 
-  if (loc.loading) return <p className="muted">Chargement de la localisation…</p>;
+  if (loc.loading) return <p className="muted">{t("views.location.loading")}</p>;
 
   return (
     <div className="grid" style={{ gap: 18 }}>
       {loc.error && <p className="msg error">{loc.error}</p>}
 
-      <div className="card" style={{ borderLeft: "3px solid var(--primary)" }}>
-        <strong>Localisation transparente.</strong>{" "}
-        <span className="muted">Seules les positions de cette application sont partagées —
-        jamais à l'insu de l'enfant : il voit dans « mes données » quand et comment sa position
-        est transmise. Partage actuel : <b>{loc.settings ? LOCATION_MODE_LABEL[loc.settings.mode] : "à la demande"}</b>.
-        Les positions sont conservées {loc.settings?.retention_days ?? 30} jours puis supprimées.</span>
+      <div className="card" style={{ borderInlineStart: "3px solid var(--primary)" }}>
+        <strong>{t("views.location.transparency.title")}</strong>{" "}
+        <span className="muted"><Trans k="views.location.transparency.body"
+          tags={{ b: (c) => <b>{c}</b> }}
+          params={{
+            mode: loc.settings ? LOCATION_MODE_LABEL[loc.settings.mode] : t("views.location.transparency.defaultMode"),
+            days: loc.settings?.retention_days ?? 30,
+          }} /></span>
       </div>
 
       {sos && (
         <div className="card sos-banner">
           <span className="dot-pulse" />
-          <strong>SOS en cours</strong> — déclenché {fmtAgo(sos.started_at)}.{" "}
-          <span className="muted">La position est diffusée en direct ci-dessous. Détails et accusé de réception dans l'onglet <b>Sécurité / SOS</b>.</span>
+          <Trans k="views.location.sos.title" tags={{ strong: (c) => <strong>{c}</strong> }}
+            params={{ ago: fmtAgo(sos.started_at) }} />{" "}
+          <span className="muted"><Trans k="views.location.sos.hint" tags={{ b: (c) => <b>{c}</b> }} /></span>
         </div>
       )}
 
       <div className="grid cols-4">
-        <Tile label="Dernière position" icon="📍"
+        <Tile label={t("views.location.tiles.lastPosition")} icon="📍"
           iconBg="color-mix(in srgb, var(--primary) 16%, transparent)"
-          value={last ? fmtAgo(last.captured_at) : "—"} />
-        <Tile label="Précision" icon="🎯"
+          value={last ? fmtAgo(last.captured_at) : t("common.none")} />
+        <Tile label={t("views.location.tiles.accuracy")} icon="🎯"
           iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)"
-          value={last?.accuracy_m != null ? `±${Math.round(last.accuracy_m)} m` : "—"} />
-        <Tile label="Zones de sécurité" icon="🏠"
+          value={last?.accuracy_m != null ? t("views.location.tiles.accuracyValue", { accuracy: Math.round(last.accuracy_m) }) : t("common.none")} />
+        <Tile label={t("views.location.tiles.zones")} icon="🏠"
           iconBg="color-mix(in srgb, var(--series-1) 18%, transparent)"
           value={loc.geofences.filter((g) => g.enabled).length} />
-        <Tile label="Suivi temps réel" icon={loc.live ? "🟢" : "⚪"}
+        <Tile label={t("views.location.tiles.realtime")} icon={loc.live ? "🟢" : "⚪"}
           iconBg="color-mix(in srgb, var(--series-6) 18%, transparent)"
-          value={loc.live ? "Connecté" : "Repli polling"} />
+          value={loc.live ? t("views.location.tiles.connected") : t("views.location.tiles.pollingFallback")} />
       </div>
 
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Carte</h2>
+          <h2 style={{ margin: 0 }}>{t("views.location.map.title")}</h2>
           <div className="row" style={{ gap: 8 }}>
-            {loc.live && <span className="muted small"><span className="dot-live" />temps réel</span>}
-            <button disabled={busy || !device} onClick={doLocate} title={device ? "" : "Aucun appareil appairé"}>
-              {busy ? "…" : "📍 Demander un check-in"}
+            {loc.live && <span className="muted small"><span className="dot-live" />{t("views.location.map.realtime")}</span>}
+            <button disabled={busy || !device} onClick={doLocate} title={device ? "" : t("views.location.map.noDevice")}>
+              {busy ? t("common.busy") : t("views.location.map.requestCheckIn")}
             </button>
           </div>
         </div>
         {msg && <p className="msg" style={{ marginTop: 0 }}>{msg}</p>}
 
         {loc.fixes.length === 0 && circles.length === 0 ? (
-          <EmptyState icon="🗺️" title="Aucune position pour l'instant"
-            hint="Dès que l'appareil enfant partage une position (périodique ou à la demande), elle apparaît ici. Les zones de sécurité se dessinent même sans position." />
+          <EmptyState icon="🗺️" title={t("views.location.map.emptyTitle")}
+            hint={t("views.location.map.emptyHint")} />
         ) : (
           <MapCanvas markers={markers} circles={circles} path={path} height={440} />
         )}
@@ -145,32 +151,32 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
           <>
             <div className="seg" style={{ marginTop: 14, flexWrap: "wrap" }}>
               <button className={selectedDay === null ? "on" : ""} onClick={() => setSelectedDay(null)}>
-                Récent
+                {t("views.location.map.recent")}
               </button>
               {days.slice(0, 7).map(([d, n]) => (
                 <button key={d} className={selectedDay === d ? "on" : ""} onClick={() => setSelectedDay(d)}>
-                  {new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                  {fmt.date(new Date(d + "T00:00:00"), { weekday: "short", day: "numeric", month: "short" })}
                   <span className="muted small"> · {n}</span>
                 </button>
               ))}
             </div>
             <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>
               {selectedDay
-                ? `Trajet du jour sélectionné (${shown.length} point${shown.length > 1 ? "s" : ""}).`
-                : "Points récents, tous jours confondus. Choisis un jour pour voir le trajet détaillé."}
+                ? t("views.location.map.dayTrace", { count: shown.length })
+                : t("views.location.map.recentHint")}
             </p>
           </>
         )}
       </div>
 
       <div className="card">
-        <h2>Arrivées & départs <span className="muted small">(zones de sécurité)</span></h2>
+        <h2>{t("views.location.events.title")} <span className="muted small">{t("views.location.events.titleHint")}</span></h2>
         {loc.events.length === 0 ? (
-          <EmptyState icon="🚪" title="Aucun passage de zone"
-            hint="Les alertes « bien arrivé » (école, maison) s'affichent ici dès qu'une zone est définie et franchie." />
+          <EmptyState icon="🚪" title={t("views.location.events.emptyTitle")}
+            hint={t("views.location.events.emptyHint")} />
         ) : (
           <table className="tbl">
-            <thead><tr><th>Événement</th><th>Zone</th><th>Quand</th></tr></thead>
+            <thead><tr><th>{t("views.location.events.colEvent")}</th><th>{t("views.location.events.colZone")}</th><th>{t("views.location.events.colWhen")}</th></tr></thead>
             <tbody>
               {loc.events.slice(0, 20).map((e) => (
                 <tr key={e.id}>
@@ -178,7 +184,7 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
                     {GEOFENCE_TRANSITION_LABEL[e.transition]}</span></td>
                   <td>{e.geofence_name
                     ?? loc.geofences.find((g) => g.id === e.geofence_id)?.name
-                    ?? "Zone supprimée"}</td>
+                    ?? t("views.location.events.deletedZone")}</td>
                   <td className="muted">{fmtDateTime(e.occurred_at)} · {fmtAgo(e.occurred_at)}</td>
                 </tr>
               ))}

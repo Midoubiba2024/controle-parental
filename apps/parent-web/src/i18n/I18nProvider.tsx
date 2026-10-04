@@ -22,8 +22,15 @@ const I18nContext = createContext<I18nValue | null>(null);
  */
 export function I18nProvider({ children }: { children: ReactNode }) {
   const locale = useSyncExternalStore(subscribe, getLocale);
-  // Nouvel objet à chaque changement de langue → les consommateurs se re-rendent.
-  const value = useMemo<I18nValue>(() => ({ locale, setLocale, t, fmt }), [locale]);
+  // Nouvel objet — et nouvelles références de `t`/`fmt` — à chaque changement de
+  // langue : les consommateurs se re-rendent ET les useMemo/useCallback qui
+  // dépendent de `t` ou `fmt` se recalculent.
+  const value = useMemo<I18nValue>(() => ({
+    locale,
+    setLocale,
+    t: ((key, ...args) => t(key, ...args)) as typeof t,
+    fmt: { ...fmt },
+  }), [locale]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

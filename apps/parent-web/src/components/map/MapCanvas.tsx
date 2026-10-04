@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { t } from "../../i18n";
 
 /* =============================================================================
    Carte Leaflet + tuiles OpenStreetMap (MIT, sans clé API — meilleur choix archi
@@ -85,7 +86,7 @@ export function MapCanvas({
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: "&copy; contributeurs OpenStreetMap",
+      attribution: t("views.map.attribution"),   // lu au montage de la carte
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     map.on("click", (e: L.LeafletMouseEvent) => {

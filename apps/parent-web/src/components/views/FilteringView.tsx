@@ -6,6 +6,7 @@ import {
 } from "../../lib/filter";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
 import { EmptyState } from "../Ui";
+import { Trans, errorMessage, useI18n } from "../../i18n";
 import type {
   AccessRequest, AgeProfile, Child, FilterCategory, FilterPolicy,
   FilterRuleAction, YoutubeMode,
@@ -26,11 +27,12 @@ const STALE_MS = 5 * 60_000;
 
 export function FilteringView({ familyId, child }: { familyId: string; child: Child }) {
   const childId = child.id;
+  const { t } = useI18n();
   const f = useFilter(familyId, childId);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  if (f.loading) return <p className="muted">Chargement du filtrage…</p>;
+  if (f.loading) return <p className="muted">{t("views.filtering.loading")}</p>;
 
   async function run(fn: () => Promise<{ error?: string | null } | void>) {
     setBusy(true); setMsg(null);
@@ -44,7 +46,7 @@ export function FilteringView({ familyId, child }: { familyId: string; child: Ch
     const base = toPolicyUpsert(f.policy, familyId, childId);
     const { error } = await supabase.from("filter_policy")
       .upsert({ ...base, ...patch }, { onConflict: "child_id" });
-    return { error: error?.message ?? null };
+    return { error: error ? errorMessage(error) : null };
   }
 
   return (
@@ -68,6 +70,7 @@ interface Base { f: ReturnType<typeof useFilter>; busy: boolean; run: RunFn; sav
 
 /* ------------------------- État + interrupteur général + presets --------- */
 function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }) {
+  const { t } = useI18n();
   const policy = f.policy;
   const enabled = policy?.enabled ?? true;
 
@@ -86,23 +89,21 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
 
   return (
     <div className="card">
-      <h2>Filtrage du web</h2>
+      <h2>{t("views.filtering.status.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Filtrage par <b>nom de domaine (DNS) sur l'appareil</b> — aucune inspection du contenu,
-        aucun déchiffrement. Visible par l'enfant dans « mes données ».
+        <Trans k="views.filtering.status.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
 
       <label className="row" style={{ gap: 8, marginTop: 8 }}>
         <input type="checkbox" checked={enabled} disabled={busy}
           onChange={(e) => run(() => savePolicy({ enabled: e.target.checked }))} />
-        <span><b>Activer le filtrage</b> pour {child.display_name}</span>
+        <span><Trans k="views.filtering.status.enableToggle" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} /></span>
       </label>
 
-      <h3 style={{ marginTop: 18 }}>État de la protection</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.filtering.status.protectionTitle")}</h3>
       {f.status.length === 0 ? (
         <p className="muted small">
-          Aucun appareil n'a encore signalé l'état du filtrage. Il apparaîtra ici une fois le
-          filtrage autorisé sur l'appareil enfant.
+          {t("views.filtering.status.noDevice")}
         </p>
       ) : (
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -112,21 +113,21 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
             const stale = Date.now() - new Date(s.updated_at).getTime() > STALE_MS;
             return (
               <li key={s.id} className="row" style={{ gap: 8, padding: "6px 0", justifyContent: "space-between" }}>
-                <span className="small">Appareil</span>
+                <span className="small">{t("views.filtering.status.device")}</span>
                 <span>
                   {!s.vpn_active ? (
-                    <span className="badge" style={{ color: "var(--danger)" }}>⚠️ désactivé</span>
+                    <span className="badge" style={{ color: "var(--danger)" }}>{t("views.filtering.status.badgeDisabled")}</span>
                   ) : stale ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>⚠️ état incertain</span>
+                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.filtering.status.badgeUncertain")}</span>
                   ) : (
-                    <span className="badge" style={{ color: "var(--good)" }}>🛡️ actif</span>
+                    <span className="badge" style={{ color: "var(--good)" }}>{t("views.filtering.status.badgeActive")}</span>
                   )}
-                  <span className="muted small" style={{ marginLeft: 8 }}>
+                  <span className="muted small" style={{ marginInlineStart: 8 }}>
                     {!s.vpn_active
-                      ? (s.last_revoked_at ? `coupé ${fmtAgo(s.last_revoked_at)}` : "")
+                      ? (s.last_revoked_at ? t("views.filtering.status.cutAgo", { ago: fmtAgo(s.last_revoked_at) }) : "")
                       : stale
-                        ? `silencieux depuis ${fmtAgo(s.updated_at)}`
-                        : `dernière nouvelle ${fmtDateTime(s.updated_at)}`}
+                        ? t("views.filtering.status.silentSince", { ago: fmtAgo(s.updated_at) })
+                        : t("views.filtering.status.lastSeen", { when: fmtDateTime(s.updated_at) })}
                   </span>
                 </span>
               </li>
@@ -135,11 +136,10 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
         </ul>
       )}
       <p className="muted small" style={{ marginTop: 6 }}>
-        Anti-contournement <b>transparent</b> (C9) : si le filtrage est désactivé (ou silencieux
-        trop longtemps), c'est signalé ici et à l'enfant — jamais en cachette.
+        <Trans k="views.filtering.status.antiBypass" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
 
-      <h3 style={{ marginTop: 18 }}>Préréglages par âge</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.filtering.status.presetsTitle")}</h3>
       <div className="row" style={{ gap: 8 }}>
         {(Object.keys(FILTER_PRESETS) as AgeProfile[]).map((k) => (
           <button key={k} className={policy?.age_preset === k ? "" : "ghost"} disabled={busy}
@@ -147,7 +147,7 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
         ))}
       </div>
       <p className="muted small" style={{ marginTop: 6 }}>
-        Jeune enfant → liste blanche stricte ; (pré)ado → catégories + Ask-to-Browse. Ajustable ci-contre.
+        {t("views.filtering.status.presetsHint")}
       </p>
     </div>
   );
@@ -155,56 +155,57 @@ function StatusCard({ f, busy, run, savePolicy, child }: Base & { child: Child }
 
 /* ------------------------- SafeSearch / YouTube / modes ------------------ */
 function SafeSearchCard({ f, busy, run, savePolicy }: Base) {
+  const { t } = useI18n();
   const policy = f.policy;
   return (
     <div className="card">
-      <h2>SafeSearch & modes</h2>
+      <h2>{t("views.filtering.safeSearch.title")}</h2>
 
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.safe_search ?? true} disabled={busy}
           onChange={(e) => run(() => savePolicy({ safe_search: e.target.checked }))} />
-        <span>Forcer <b>SafeSearch</b> (Google, Bing, DuckDuckGo) — réécriture DNS (C3)</span>
+        <span><Trans k="views.filtering.safeSearch.forceSafeSearch" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
-      <h3 style={{ marginTop: 16 }}>YouTube mode restreint (C4)</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.youtubeTitle")}</h3>
       <div className="inline">
         <select value={policy?.youtube_restriction ?? "moderate"} disabled={busy}
           onChange={(e) => run(() => savePolicy({ youtube_restriction: e.target.value as YoutubeMode }))}>
           {(Object.keys(YOUTUBE_MODE_LABEL) as YoutubeMode[]).map((m) =>
             <option key={m} value={m}>{YOUTUBE_MODE_LABEL[m]}</option>)}
         </select>
-        <span className="muted small">via restrict(moderate).youtube.com</span>
+        <span className="muted small">{t("views.filtering.safeSearch.youtubeVia")}</span>
       </div>
 
-      <h3 style={{ marginTop: 16 }}>Liste blanche stricte (C5)</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.whitelistTitle")}</h3>
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.whitelist_only ?? false} disabled={busy}
           onChange={(e) => run(() => savePolicy({ whitelist_only: e.target.checked }))} />
-        <span>N'autoriser <b>que</b> les domaines de la liste blanche (+ services essentiels)</span>
+        <span><Trans k="views.filtering.safeSearch.whitelistOnly" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
       <p className="muted small" style={{ marginTop: -2 }}>
-        Recommandé pour le jeune enfant. Les services système et les urgences restent toujours accessibles.
+        {t("views.filtering.safeSearch.whitelistHint")}
       </p>
 
-      <h3 style={{ marginTop: 16 }}>Ask-to-Browse (C6)</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.askToBrowseTitle")}</h3>
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.ask_to_browse ?? false} disabled={busy}
           onChange={(e) => run(() => savePolicy({ ask_to_browse: e.target.checked }))} />
-        <span>Permettre à l'enfant de <b>demander l'accès</b> à un site bloqué</span>
+        <span><Trans k="views.filtering.safeSearch.askToBrowse" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
-      <h3 style={{ marginTop: 16 }}>Journal des domaines</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.filtering.safeSearch.journalTitle")}</h3>
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.log_allowed ?? false} disabled={busy}
           onChange={(e) => run(() => savePolicy({ log_allowed: e.target.checked }))} />
-        <span>Consigner aussi les domaines <b>autorisés</b> (sinon : seulement les blocages)</span>
+        <span><Trans k="views.filtering.safeSearch.logAllowed" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
       <div className="inline" style={{ marginTop: 8 }}>
-        <label className="fld">Rétention (jours)
+        <label className="fld">{t("views.filtering.safeSearch.retentionLabel")}
           <input type="number" min={1} max={365} defaultValue={policy?.retention_days ?? 30} style={{ width: 90 }}
             onBlur={(e) => run(() => savePolicy({ retention_days: Math.min(365, Math.max(1, parseInt(e.target.value, 10) || 30)) }))} />
         </label>
-        <span className="muted small">métadonnées seulement — jamais d'URL ni de contenu</span>
+        <span className="muted small">{t("views.filtering.safeSearch.retentionHint")}</span>
       </div>
     </div>
   );
@@ -212,6 +213,7 @@ function SafeSearchCard({ f, busy, run, savePolicy }: Base) {
 
 /* ------------------------- Catégories (C1/C7) ---------------------------- */
 function CategoriesCard({ f, busy, run, savePolicy }: Base) {
+  const { t } = useI18n();
   const blocked = new Set(f.policy?.blocked_categories ?? []);
 
   function toggle(cat: FilterCategory, on: boolean) {
@@ -222,9 +224,9 @@ function CategoriesCard({ f, busy, run, savePolicy }: Base) {
 
   return (
     <div className="card">
-      <h2>Catégories bloquées</h2>
+      <h2>{t("views.filtering.categories.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Le contenu adulte (C7) est bloqué par défaut dans tous les préréglages.
+        {t("views.filtering.categories.intro")}
       </p>
       <div style={{ marginTop: 8 }}>
         {FILTER_CATEGORIES.map((c) => (
@@ -250,6 +252,7 @@ function CategoriesCard({ f, busy, run, savePolicy }: Base) {
 function AskToBrowseCard({ f, familyId, busy, run }: {
   f: ReturnType<typeof useFilter>; familyId: string; busy: boolean; run: RunFn;
 }) {
+  const { t } = useI18n();
   async function decide(req: AccessRequest, approve: boolean) {
     const { data: auth } = await supabase.auth.getUser();
     const decided_by = auth.user?.id ?? null;
@@ -259,32 +262,32 @@ function AskToBrowseCard({ f, familyId, busy, run }: {
       const { error: rErr } = await supabase.from("filter_rules").upsert(
         { family_id: familyId, child_id: req.child_id, domain, action: "allow", note: "ask_to_browse" },
         { onConflict: "child_id,domain" });
-      if (rErr) return { error: rErr.message };
+      if (rErr) return { error: errorMessage(rErr) };
     }
     const { error } = await supabase.from("requests")
       .update({ status: approve ? "approved" : "denied", decided_by, decided_at: new Date().toISOString() })
       .eq("id", req.id);
-    return { error: error?.message ?? null };
+    return { error: error ? errorMessage(error) : null };
   }
 
   return (
     <div className="card">
-      <h2>Demandes d'accès <span className="muted small">({f.browseRequests.length})</span></h2>
+      <h2>{t("views.filtering.askToBrowse.title")} <span className="muted small">{t("views.filtering.askToBrowse.count", { count: f.browseRequests.length })}</span></h2>
       {f.browseRequests.length === 0 ? (
-        <EmptyState icon="🙌" title="Aucune demande en attente"
-          hint="Quand l'enfant demande l'accès à un site bloqué, il apparaît ici." />
+        <EmptyState icon="🙌" title={t("views.filtering.askToBrowse.emptyTitle")}
+          hint={t("views.filtering.askToBrowse.emptyHint")} />
       ) : (
         f.browseRequests.map((req) => (
           <div key={req.id} style={{ borderTop: "1px solid var(--border)", padding: "12px 0" }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <strong>{String(req.payload?.domain ?? "domaine inconnu")}</strong>
-              <span className="badge">Ask-to-Browse</span>
+              <strong>{String(req.payload?.domain ?? t("views.filtering.askToBrowse.unknownDomain"))}</strong>
+              <span className="badge">{t("views.filtering.askToBrowse.badge")}</span>
             </div>
-            {req.child_note && <p className="muted small" style={{ margin: "4px 0" }}>« {req.child_note} »</p>}
+            {req.child_note && <p className="muted small" style={{ margin: "4px 0" }}>{t("views.filtering.askToBrowse.childNote", { note: req.child_note })}</p>}
             <div className="muted small">{fmtDateTime(req.created_at)}</div>
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
-              <button disabled={busy} onClick={() => run(() => decide(req, true))}>Autoriser le domaine</button>
-              <button className="ghost" disabled={busy} onClick={() => run(() => decide(req, false))}>Refuser</button>
+              <button disabled={busy} onClick={() => run(() => decide(req, true))}>{t("views.filtering.askToBrowse.allowButton")}</button>
+              <button className="ghost" disabled={busy} onClick={() => run(() => decide(req, false))}>{t("views.filtering.askToBrowse.denyButton")}</button>
             </div>
           </div>
         ))
@@ -297,6 +300,7 @@ function AskToBrowseCard({ f, familyId, busy, run }: {
 function ListsCard({ f, familyId, childId, busy, run }: {
   f: ReturnType<typeof useFilter>; familyId: string; childId: string; busy: boolean; run: RunFn;
 }) {
+  const { t } = useI18n();
   const [domain, setDomain] = useState("");
   const [action, setAction] = useState<FilterRuleAction>("block");
   const [inputErr, setInputErr] = useState<string | null>(null);
@@ -307,44 +311,43 @@ function ListsCard({ f, familyId, childId, busy, run }: {
   function submit() {
     // Valide AVANT d'appeler run (un domaine invalide ne doit pas déclencher de reload).
     const d = normalizeDomain(domain);
-    if (!d) { setInputErr("Domaine invalide (ex. exemple.com)."); return; }
+    if (!d) { setInputErr(t("views.filtering.lists.invalidDomain")); return; }
     setInputErr(null);
     run(async () => {
       const { error } = await supabase.from("filter_rules").upsert(
         { family_id: familyId, child_id: childId, domain: d, action },
         { onConflict: "child_id,domain" });
       if (!error) setDomain("");
-      return { error: error?.message ?? null };
+      return { error: error ? errorMessage(error) : null };
     });
   }
   async function remove(id: string) {
     const { error } = await supabase.from("filter_rules").delete().eq("id", id);
-    return { error: error?.message ?? null };
+    return { error: error ? errorMessage(error) : null };
   }
 
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h2>Listes de domaines</h2>
+      <h2>{t("views.filtering.lists.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Une règle s'applique au domaine <b>et à ses sous-domaines</b>. « Autoriser » surclasse un
-        blocage de catégorie ; « Bloquer » interdit un domaine précis.
+        <Trans k="views.filtering.lists.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); submit(); }} style={{ marginBottom: 6 }}>
-        <input placeholder="exemple.com" value={domain} onChange={(e) => setDomain(e.target.value)}
+        <input placeholder={t("views.filtering.lists.domainPlaceholder")} value={domain} onChange={(e) => setDomain(e.target.value)}
           style={{ flex: 1, minWidth: 200 }} />
         <select value={action} onChange={(e) => setAction(e.target.value as FilterRuleAction)}>
-          <option value="block">Bloquer (liste noire)</option>
-          <option value="allow">Autoriser (liste blanche)</option>
+          <option value="block">{t("views.filtering.lists.actionBlock")}</option>
+          <option value="allow">{t("views.filtering.lists.actionAllow")}</option>
         </select>
-        <button disabled={busy || !domain.trim()} type="submit">+ Ajouter</button>
+        <button disabled={busy || !domain.trim()} type="submit">{t("views.filtering.lists.addButton")}</button>
       </form>
       {inputErr && <p className="msg error" style={{ marginTop: 0 }}>{inputErr}</p>}
 
       <div className="grid cols-2" style={{ gap: 16, marginTop: 10 }}>
-        <DomainList title="Liste blanche" icon="✅" rules={allow} busy={busy}
-          onRemove={(id) => run(() => remove(id))} empty="Aucun domaine explicitement autorisé." />
-        <DomainList title="Liste noire" icon="⛔" rules={block} busy={busy}
-          onRemove={(id) => run(() => remove(id))} empty="Aucun domaine explicitement bloqué." />
+        <DomainList title={t("views.filtering.lists.allowTitle")} icon="✅" rules={allow} busy={busy}
+          onRemove={(id) => run(() => remove(id))} empty={t("views.filtering.lists.allowEmpty")} />
+        <DomainList title={t("views.filtering.lists.blockTitle")} icon="⛔" rules={block} busy={busy}
+          onRemove={(id) => run(() => remove(id))} empty={t("views.filtering.lists.blockEmpty")} />
       </div>
     </div>
   );
@@ -354,9 +357,10 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
   title: string; icon: string; rules: ReturnType<typeof useFilter>["rules"];
   busy: boolean; onRemove: (id: string) => void; empty: string;
 }) {
+  const { t } = useI18n();
   return (
     <div>
-      <h3>{icon} {title} <span className="muted small">({rules.length})</span></h3>
+      <h3>{icon} {title} <span className="muted small">{t("views.filtering.lists.count", { count: rules.length })}</span></h3>
       {rules.length === 0 ? <p className="muted small">{empty}</p> : (
         <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: 240 }}>
           {rules.map((r) => (
@@ -364,7 +368,7 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
               style={{ gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)", justifyContent: "space-between" }}>
               <code style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{r.domain}</code>
               <span>
-                {r.note === "ask_to_browse" && <span className="muted small" style={{ marginRight: 8 }}>demandé</span>}
+                {r.note === "ask_to_browse" && <span className="muted small" style={{ marginInlineEnd: 8 }}>{t("views.filtering.lists.requested")}</span>}
                 <button className="link" disabled={busy} onClick={() => onRemove(r.id)}>✕</button>
               </span>
             </li>
@@ -377,19 +381,23 @@ function DomainList({ title, icon, rules, busy, onRemove, empty }: {
 
 /* ------------------------- Journal de domaines (F4-F6) ------------------- */
 function JournalCard({ f }: { f: ReturnType<typeof useFilter> }) {
+  const { t } = useI18n();
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h2>Journal des domaines <span className="muted small">(métadonnées)</span></h2>
+      <h2>{t("views.filtering.journal.title")} <span className="muted small">{t("views.filtering.journal.subtitle")}</span></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu.
-        Conservé {f.policy?.retention_days ?? 30} jours (purge automatique).
+        <Trans k="views.filtering.journal.intro" tags={{ b: (c) => <b>{c}</b> }}
+          params={{ days: f.policy?.retention_days ?? 30 }} />
       </p>
       {f.events.length === 0 ? (
-        <EmptyState icon="🗂" title="Aucun événement"
-          hint="Les domaines bloqués (et autorisés, si activé) remonteront ici." />
+        <EmptyState icon="🗂" title={t("views.filtering.journal.emptyTitle")}
+          hint={t("views.filtering.journal.emptyHint")} />
       ) : (
         <table className="tbl">
-          <thead><tr><th>Domaine</th><th>Catégorie</th><th>Action</th><th>Quand</th></tr></thead>
+          <thead><tr>
+            <th>{t("views.filtering.journal.colDomain")}</th><th>{t("views.filtering.journal.colCategory")}</th>
+            <th>{t("views.filtering.journal.colAction")}</th><th>{t("views.filtering.journal.colWhen")}</th>
+          </tr></thead>
           <tbody>
             {f.events.map((ev) => (
               <tr key={ev.id}>
