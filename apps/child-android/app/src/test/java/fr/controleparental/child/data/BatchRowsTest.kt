@@ -8,8 +8,12 @@ import org.junit.Test
 
 /**
  * Tests de la construction PURE des lots PostgREST (LOT 10b). PostgREST rejette un
- * lot entier si ses objets n'ont pas tous le même jeu de clés (PGRST102) : une
- * colonne facultative doit être PRÉSENTE avec null, jamais omise.
+ * lot entier si ses objets n'ont pas tous le même jeu de clés (PGRST102). Deux cas :
+ *  - colonne qui DOIT valoir NULL (counterparty_hash d'un appel masqué, removed_at,
+ *    catégorie de domaine inconnue…) : clé PRÉSENTE avec null ;
+ *  - colonne FACULTATIVE d'un upsert en fusion (app_label, category, installed_at) :
+ *    clé RETIRÉE si inconnue (pas d'écrasement par NULL), puis un upsert par jeu de
+ *    clés (groupByKeys), chaque sous-lot restant homogène.
  *
  * Données FICTIVES uniquement (identifiants et paquets d'exemple).
  */

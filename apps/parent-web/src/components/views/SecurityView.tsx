@@ -232,7 +232,7 @@ function ZonesCard({ familyId, child, loc, run }: {
       </div>
 
       <label className="check">
-        <input type="checkbox" checked={alertsOn} disabled={columnMissing}
+        <input type="checkbox" checked={alertsOn} disabled={columnMissing} aria-describedby="zone-alerts-help"
           onChange={(e) => {
             const enabled = e.target.checked;
             run(async () => {
@@ -243,7 +243,7 @@ function ZonesCard({ familyId, child, loc, run }: {
           }} />
         <span><Trans k="views.security.zones.alertsToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
-      <p className="muted small" style={{ marginTop: -2 }}>
+      <p id="zone-alerts-help" className="muted small" style={{ marginTop: -2 }}>
         {columnMissing
           ? t("views.security.zones.alertsUnavailable")
           : t("views.security.zones.alertsHint", { name: child.display_name })}
