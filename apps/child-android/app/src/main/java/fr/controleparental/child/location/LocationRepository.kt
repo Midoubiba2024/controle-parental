@@ -3,6 +3,7 @@ package fr.controleparental.child.location
 import android.location.Location
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.Unenrollment
 import java.time.Instant
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,6 +55,7 @@ class LocationRepository(private val store: SupervisionStore) {
 
     private suspend fun fetchSettings(): Settings? {
         val e = store.load() ?: return null
+        val deviceId = e.deviceId
         val res = client.get("location_settings",
             // select=* : tolère une base où la colonne geofence_alerts_enabled n'existe
             // pas encore (migration 0030) — elle vaut alors true, comme avant.
@@ -61,7 +63,8 @@ class LocationRepository(private val store: SupervisionStore) {
         val body = (res as? SupabaseClient.GetResult.Ok)?.body ?: return null
         val arr = runCatching { JSONArray(body) }.getOrNull() ?: return null
         val row = (if (arr.length() > 0) arr.optJSONObject(0) else null) ?: JSONObject()
-        store.lastLocationSettingsJson = row.toString()
+        // Jamais écrit après (ou pendant) un démontage : sinon hérité par l'appairage suivant.
+        Unenrollment.ifStillEnrolled(deviceId) { store.lastLocationSettingsJson = row.toString() }
         return parseSettings(row)
     }
 
@@ -114,6 +117,9 @@ class LocationRepository(private val store: SupervisionStore) {
     /** Insère un relevé de position (idempotent sur device_id+captured_at). */
     suspend fun insertFix(loc: Location, source: String, batteryLevel: Int?, capturedAtMs: Long = loc.time.takeIf { it > 0 } ?: System.currentTimeMillis()): Boolean {
         val e = store.load() ?: return false
+        // Minimisation (LOT 12b) : jamais une position antérieure à l'appairage
+        // (repli lastLocation du cache système sans limite d'âge).
+        if (capturedAtMs < store.enrolledAt) return false
         val row = JSONObject()
             .put("family_id", e.familyId)
             .put("child_id", e.childId)

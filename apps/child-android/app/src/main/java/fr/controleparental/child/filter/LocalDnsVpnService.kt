@@ -118,6 +118,14 @@ class LocalDnsVpnService : VpnService() {
         }
         vpn = pfd
         isRunning = true
+        // Désenrôlé pendant l'établissement du tunnel (course avec le démontage) :
+        // ne JAMAIS reposer filterDesired ni le VPN always-on.
+        if (!store.isEnrolled) {
+            store.filterDesired = false
+            runCatching { ReinforcedEnforcer(this).setAlwaysOnVpn(false) }
+            stopVpn(reportInactive = false)
+            return
+        }
         // Mémorise que le filtrage est voulu (relance au boot/MAJ — report L8a) et,
         // en device owner, délègue la persistance au VPN always-on système (fiable).
         store.filterDesired = true
@@ -227,7 +235,7 @@ class LocalDnsVpnService : VpnService() {
         // l'appareil courant (lecture mémoire, sans déchiffrement par paquet DNS).
         val deviceId = SupervisionStore.current.value?.deviceId ?: return
         // Aucune journalisation sans notification de supervision visible (LOT 12b).
-        if (!SupervisionService.foregroundActive) return
+        if (!SupervisionService.supervisionVisible(this)) return
         synchronized(pending) {
             if (pending.size >= MAX_BUFFER) pending.removeFirst()
             pending.addLast(FilterClient.DomainEvent(domain, category, action, Instant.now().toString(), deviceId))

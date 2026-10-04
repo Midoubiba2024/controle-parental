@@ -6,6 +6,7 @@ import android.content.Context
 import android.telecom.TelecomManager
 import android.telephony.TelephonyManager
 import fr.controleparental.child.data.AppMeta
+import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.data.UsageStatsCollector
 import java.util.Calendar
 import org.json.JSONObject
@@ -23,6 +24,7 @@ import org.json.JSONObject
 class EnforcementManager(private val context: Context) {
 
     private val cache = PolicyCache(context)
+    private val store = SupervisionStore(context)
     private val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
     private val pm = context.packageManager
 
@@ -140,7 +142,9 @@ class EnforcementManager(private val context: Context) {
 
     private fun refreshUsageIfStale(now: Long) {
         if (now - usageAt < 60_000 && usageAt != 0L) return
-        val rows = runCatching { UsageStatsCollector(context).collect(daysBack = 1) }.getOrDefault(emptyList())
+        // Quotas : seul l'usage depuis l'appairage compte (LOT 12b).
+        val rows = runCatching { UsageStatsCollector(context).collect(daysBack = 1, notBefore = store.enrolledAt) }
+            .getOrDefault(emptyList())
         val pkg = HashMap<String, Long>()
         val cat = HashMap<String, Long>()
         var total = 0L

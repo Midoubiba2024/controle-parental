@@ -27,7 +27,7 @@ class MetricsWorker(
         if (!SupervisionStore(applicationContext).isEnrolled) return Result.success()
         // Invariant de transparence (LOT 12b) : aucune collecte sans notification de
         // supervision visible. Le prochain cycle rattrapera (bornes d'appairage).
-        if (!SupervisionService.foregroundActive) return Result.success()
+        if (!SupervisionService.supervisionVisible(applicationContext)) return Result.success()
         val report = MetricsCollector(applicationContext).collectAndUpload()
         // Les remontées sont idempotentes (upsert on_conflict pour usage_daily/
         // app_inventory/comm_events/device_status), donc un rejeu ne crée pas de

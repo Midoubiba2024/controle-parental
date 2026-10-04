@@ -3,6 +3,7 @@ package fr.controleparental.child.safety
 import fr.controleparental.child.data.BatchRows
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.Unenrollment
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,6 +38,9 @@ class SafetyClient(private val store: SupervisionStore) {
     suspend fun syncSettings(cache: SafetyCache): SafetyConfig? {
         val e = store.load() ?: return null
         val cid = e.childId
+        // Enrôlement capturé AVANT le réseau : le cache n'est écrit que s'il est
+        // toujours le courant (même verrou que le démontage — LOT 12b).
+        val deviceId = e.deviceId
 
         val settingsRes = client.get("safety_settings", "child_id=eq.$cid&select=analysis_enabled,mutual_visibility")
         val childRes = client.get("children", "id=eq.$cid&select=age_profile")
@@ -47,22 +51,28 @@ class SafetyClient(private val store: SupervisionStore) {
         val pauseOk = pauseRes is SupabaseClient.GetResult.Ok
         if (!settingsOk && !childOk && !pauseOk) return null
 
-        if (settingsRes is SupabaseClient.GetResult.Ok) {
-            // Absence de ligne = jamais configuré ⇒ défauts (analyse OFF — privacy by default).
-            val row = firstOf(settingsRes.body)
-            cache.analysisEnabled = row?.optBoolean("analysis_enabled", false) ?: false
-            cache.mutualVisibility = row?.optBoolean("mutual_visibility", true) ?: true
+        return Unenrollment.ifStillEnrolled(deviceId) {
+            if (settingsRes is SupabaseClient.GetResult.Ok) {
+                // Absence de ligne = jamais configuré ⇒ défauts (analyse OFF — privacy by default).
+                val row = firstOf(settingsRes.body)
+                cache.analysisEnabled = row?.optBoolean("analysis_enabled", false) ?: false
+                cache.mutualVisibility = row?.optBoolean("mutual_visibility", true) ?: true
+            }
+            if (childRes is SupabaseClient.GetResult.Ok) {
+                val profile = firstOf(childRes.body)?.optString("age_profile", "young_child") ?: "young_child"
+                cache.teenProfile = profile == "preteen" || profile == "teen"
+            }
+            if (pauseRes is SupabaseClient.GetResult.Ok) {
+                cache.pauseActive = bodyArray(pauseRes.body).length() > 0
+            }
+            // "Synchronisé" (neverSynced=false) et rattaché à CET enrôlement seulement
+            // si les gardes (consentement + profil) sont connues.
+            if (settingsOk && childOk) {
+                cache.lastSyncAt = System.currentTimeMillis()
+                cache.syncedDeviceId = deviceId
+            }
+            cache.toConfig()
         }
-        if (childRes is SupabaseClient.GetResult.Ok) {
-            val profile = firstOf(childRes.body)?.optString("age_profile", "young_child") ?: "young_child"
-            cache.teenProfile = profile == "preteen" || profile == "teen"
-        }
-        if (pauseRes is SupabaseClient.GetResult.Ok) {
-            cache.pauseActive = bodyArray(pauseRes.body).length() > 0
-        }
-        // "Synchronisé" (neverSynced=false) seulement si les gardes sont connues.
-        if (settingsOk && childOk) cache.lastSyncAt = System.currentTimeMillis()
-        return cache.toConfig()
     }
 
     /**
@@ -124,7 +134,7 @@ class SafetyClient(private val store: SupervisionStore) {
             .put("device_id", e.deviceId)
         val ok = client.upsert("privacy_pauses", JSONArray().put(row)) is SupabaseClient.Result.Ok
         if (ok) {
-            cache.pauseActive = true
+            Unenrollment.ifStillEnrolled(e.deviceId) { cache.pauseActive = true }
             reportStatus(false)
         }
         return ok
@@ -136,7 +146,7 @@ class SafetyClient(private val store: SupervisionStore) {
         val patch = JSONObject().put("ended_at", nowIso())
         val ok = client.patch("privacy_pauses", "device_id=eq.${e.deviceId}&ended_at=is.null", patch) is SupabaseClient.Result.Ok
         if (ok) {
-            cache.pauseActive = false
+            Unenrollment.ifStillEnrolled(e.deviceId) { cache.pauseActive = false }
             // Rétablit l'état d'analyse si consenti + profil ado.
             reportStatus(cache.toConfig().active)
         }

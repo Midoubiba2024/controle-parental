@@ -23,7 +23,8 @@ class LocationCoordinator(context: Context) {
 
     private val appContext = context.applicationContext
     private val client = LocationClient(appContext)
-    private val repo = LocationRepository(SupervisionStore(appContext))
+    private val store = SupervisionStore(appContext)
+    private val repo = LocationRepository(store)
     private val geofences = GeofenceManager(appContext)
 
     // Dernier réglage CONNU (lu ou mémorisé) ; null = jamais lu. Pour les positions,
@@ -127,7 +128,10 @@ class LocationCoordinator(context: Context) {
         val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return
         val battery = batteryLevel()
-        val loc = client.lastKnown() ?: client.currentFix(highAccuracy = false)
+        // Jamais une position mise en cache AVANT l'appairage (LOT 12b).
+        val enrolledAt = store.enrolledAt
+        val loc = client.lastKnown()?.takeIf { it.time >= enrolledAt }
+            ?: client.currentFix(highAccuracy = false)
         if (loc != null) repo.insertFix(loc, source = "periodic", batteryLevel = battery)
         repo.insertSafetyAlert("low_battery", battery)
     }

@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import fr.controleparental.child.location.LocationClient
@@ -179,6 +180,10 @@ class SupervisionService : Service() {
             // est donc bon marché.
             runCatching { location.onTick() }
 
+            // Notification balayée (possible en mode Standard sous Android 14+) :
+            // on la republie — la supervision doit rester visible.
+            runCatching { republishIfDismissed() }
+
             val res = runCatching { manager.evaluateForeground() }.getOrNull()
             withContext(Dispatchers.Main) { applyDecision(res) }
 
@@ -230,6 +235,11 @@ class SupervisionService : Service() {
         }
     }
 
+    private fun republishIfDismissed() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (nm.activeNotifications.none { it.id == NOTIF_ID }) nm.notify(NOTIF_ID, buildNotification())
+    }
+
     private fun buildNotification(): Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -265,14 +275,53 @@ class SupervisionService : Service() {
         const val EXTRA_FROM_BOOT = "from_boot"
 
         /**
-         * Notification de supervision RÉELLEMENT affichée dans ce processus (vrai
-         * après un startForeground réussi, faux à la destruction). Invariant de
-         * transparence (LOT 12b) : collecte (MetricsWorker), analyse bien-être et
-         * journal DNS ne font rien tant qu'il est faux.
+         * Service au premier plan dans ce processus (vrai après un startForeground
+         * réussi, faux à la destruction). Nécessaire mais PAS suffisant : voir
+         * [supervisionVisible].
          */
         @Volatile
         var foregroundActive: Boolean = false
             private set
+
+        @Volatile private var visibleCheckedAt = 0L
+        @Volatile private var visibleCached = false
+        private const val VISIBLE_TTL_MS = 5_000L
+
+        /**
+         * La notification de supervision est-elle RÉELLEMENT visible ? Service au
+         * premier plan ET notifications autorisées (POST_NOTIFICATIONS, Android 13+)
+         * ET canal « supervision » non coupé ET notification présente (non balayée,
+         * Android 14+). Invariant de transparence (LOT 12b) : collecte, analyse
+         * bien-être, journal DNS et transitions de zones ÉCHOUENT FERMÉ si faux
+         * (rien n'est mis en file pour plus tard). Résultat gardé 5 s (appelé par
+         * paquet DNS et par notification reçue).
+         */
+        fun supervisionVisible(context: Context): Boolean {
+            if (!foregroundActive) return false
+            val now = System.currentTimeMillis()
+            if (now - visibleCheckedAt < VISIBLE_TTL_MS) return visibleCached
+            val visible = runCatching { notificationShown(context) && notificationsAllowed(context) }
+                .getOrDefault(false)
+            visibleCached = visible
+            visibleCheckedAt = now
+            return visible
+        }
+
+        /** Notifications de l'app autorisées et canal « supervision » non coupé. */
+        fun notificationsAllowed(context: Context): Boolean {
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val ch = nm.getNotificationChannel(CHANNEL_ID)
+                if (ch != null && ch.importance == NotificationManager.IMPORTANCE_NONE) return false
+            }
+            return true
+        }
+
+        private fun notificationShown(context: Context): Boolean {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            return nm.activeNotifications.any { it.id == NOTIF_ID }
+        }
 
         /** Arrêt (désenrôlement) : la notification de supervision disparaît. */
         fun stop(context: Context) {

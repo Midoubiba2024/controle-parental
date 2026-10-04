@@ -84,6 +84,11 @@ class SupervisionStore(context: Context) {
             // Minimisation (LOT 12b) : toute collecte commence à l'appairage.
             .putLong(KEY_ENROLLED_AT, now)
             .putLong(KEY_CALL_WM, now)
+            // Rien d'un appairage précédent (écriture tardive d'un client en vol).
+            .remove(KEY_LOC_SETTINGS)
+            .remove(KEY_FILTER_DESIRED)
+            .remove(KEY_STATUS_TS)
+            .remove(KEY_MSG_WM)
             .remove(KEY_PENDING_ACCESS)
             .remove(KEY_PENDING_REFRESH)
             .remove(KEY_PENDING_EXPIRES_AT)

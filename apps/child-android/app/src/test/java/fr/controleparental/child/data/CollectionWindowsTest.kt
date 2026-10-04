@@ -40,4 +40,13 @@ class CollectionWindowsTest {
         val enrolledAt = d0 - 3_600_000L
         assertEquals(d0 to d0 + day, CollectionWindows.usageWindow(d0, d0 + day, enrolledAt))
     }
+
+    @Test fun quotaUsageOfPairingDayCountsOnlySincePairing() {
+        // Quotas (EnforcementManager) : appairage à 14 h, usage du matin exclu.
+        val enrolledAt = d0 + 14 * 3_600_000L
+        val now = d0 + 18 * 3_600_000L
+        val (start, end) = CollectionWindows.usageWindow(d0, now, enrolledAt)!!
+        assertEquals(enrolledAt, start)
+        assertEquals(4 * 3_600_000L, end - start)
+    }
 }

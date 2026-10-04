@@ -7,7 +7,27 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,6 +45,14 @@ import fr.controleparental.child.ui.PairingScreen
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    /** Notifications autorisées (app + canal « supervision ») — relu à chaque reprise. */
+    private var notificationsAllowed by mutableStateOf(true)
+
+    override fun onResume() {
+        super.onResume()
+        notificationsAllowed = SupervisionService.notificationsAllowed(this)
+    }
 
     private val requestNotif = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -67,12 +95,50 @@ class MainActivity : ComponentActivity() {
                         if (current != null) SupervisionService.start(this@MainActivity)
                     }
                     if (enrollment != null) {
-                        MyDataScreen(enrollment = enrollment)
+                        Column {
+                            // Transparence (LOT 12b) : sans notification, la supervision
+                            // ne se voit plus — rien n'est alors collecté ; on explique
+                            // pourquoi et comment la rétablir.
+                            if (!notificationsAllowed) NotificationsOffBanner { openNotificationSettings() }
+                            MyDataScreen(enrollment = enrollment)
+                        }
                     } else {
                         PairingScreen(store = store, notice = unenrolled)
                     }
                 }
             }
+        }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        runCatching { startActivity(intent) }
+            .onFailure {
+                runCatching {
+                    startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+                    )
+                }
+            }
+    }
+}
+
+/** Bandeau : notifications refusées ou canal de supervision coupé. */
+@Composable
+private fun NotificationsOffBanner(onOpenSettings: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.notifications_off_banner),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onOpenSettings) { Text(stringResource(R.string.notifications_off_button)) }
         }
     }
 }

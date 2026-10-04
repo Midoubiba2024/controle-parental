@@ -76,6 +76,8 @@
     <string name="pairing_error_network_rate_limited">Trop de tentatives depuis ce réseau. Réessaie dans une heure.</string>
     <string name="pairing_session_expired">La connexion de cet appareil a expiré : demande un nouveau code à ton parent.</string>
     <string name="pairing_device_revoked">Cet appareil a été retiré par ton parent. Pour le relier à nouveau, demande un nouveau code.</string>
+    <string name="notifications_off_banner">Active les notifications : elles indiquent que la supervision est en cours.</string>
+    <string name="notifications_off_button">Ouvrir les réglages des notifications</string>
     <string name="unenroll_channel">État de l\'appairage</string>
     <string name="unenroll_notification_title">Supervision arrêtée sur cet appareil</string>
     <string name="pairing_error_generic">Échec de l\'association (%1$s).</string>
