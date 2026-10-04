@@ -80,7 +80,8 @@ class MetricsCollector(private val context: Context) {
         var callCount = 0
         val callCollector = CallLogCollector(context)
         if (callCollector.isEnabledAndGranted()) {
-            val since = CollectionWindows.callsSince(store.callLogWatermark, enrolledAt)
+            // Jamais avant l'appairage, ni avant une coupure purgée (plus excluable — V4).
+            val since = CollectionWindows.callsSince(store.callLogWatermark, store.callsFloor())
             val read = callCollector.collect(since)
             // Appels tombant dans une coupure : jamais remontés ; le filigrane avance
             // quand même sur tout ce qui a été lu (pas de relecture ultérieure).

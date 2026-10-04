@@ -75,35 +75,25 @@ class UsageStatsCollector(private val context: Context) {
             if (windows.isEmpty()) continue
             // Agrégation à partir des évènements (durée de premier plan + lancements),
             // sous-fenêtre visible par sous-fenêtre visible.
-            val agg = HashMap<String, Agg>()
+            val agg = HashMap<String, UsageAggregation.Agg>()
             for ((start, end) in windows) {
                 val events = usm.queryEvents(start, end)
                 val ev = UsageEvents.Event()
-                val resumedAt = HashMap<String, Long>()
+                val list = ArrayList<UsageAggregation.Event>()
                 while (events.getNextEvent(ev)) {
                     val pkg = ev.packageName ?: continue
-                    when (ev.eventType) {
+                    val type = when (ev.eventType) {
                         UsageEvents.Event.ACTIVITY_RESUMED,
-                        UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-                            resumedAt[pkg] = ev.timeStamp
-                            val a = agg.getOrPut(pkg) { Agg() }
-                            a.launches++
-                            if (ev.timeStamp > a.lastUsed) a.lastUsed = ev.timeStamp
-                        }
+                        UsageEvents.Event.MOVE_TO_FOREGROUND -> UsageAggregation.Type.RESUMED
                         UsageEvents.Event.ACTIVITY_PAUSED,
-                        UsageEvents.Event.MOVE_TO_BACKGROUND -> {
-                            val startedAt = resumedAt.remove(pkg) ?: continue
-                            val a = agg.getOrPut(pkg) { Agg() }
-                            a.foregroundMs += (ev.timeStamp - startedAt).coerceAtLeast(0)
-                            if (ev.timeStamp > a.lastUsed) a.lastUsed = ev.timeStamp
-                        }
+                        UsageEvents.Event.MOVE_TO_BACKGROUND -> UsageAggregation.Type.PAUSED
+                        else -> continue
                     }
+                    list += UsageAggregation.Event(pkg, type, ev.timeStamp)
                 }
-                // Fermer les sessions encore ouvertes à la fin de la sous-fenêtre.
-                for ((pkg, startedAt) in resumedAt) {
-                    val a = agg.getOrPut(pkg) { Agg() }
-                    a.foregroundMs += (end - startedAt).coerceAtLeast(0)
-                }
+                // Session à cheval sur le début de la sous-fenêtre (fin de coupure)
+                // comptée depuis ce début ; sessions ouvertes closes à la fin (V5).
+                UsageAggregation.aggregate(list, start, end, agg)
             }
 
             for ((pkg, a) in agg) {
@@ -122,12 +112,6 @@ class UsageStatsCollector(private val context: Context) {
             }
         }
         return rows
-    }
-
-    private class Agg {
-        var foregroundMs: Long = 0
-        var launches: Int = 0
-        var lastUsed: Long = 0
     }
 
     /** Bornes [minuit, minuit+1j) du jour à J-[offset], + libellé YYYY-MM-DD. */

@@ -79,28 +79,30 @@ class LocationCoordinator(context: Context) {
         // et BORNÉE en temps écoulé (T1) : une ligne repassée en « active » côté
         // serveur ne déclenche jamais de suivi en direct. Au-delà de la fenêtre,
         // l'épisode reste ouvert jusqu'à clôture, mais plus de captation.
-        // Sans SOS local dans sa fenêtre : aucune requête.
-        val local = store.localSos ?: run { sosId = null; return }
-        val inWindow = SosWindow.isLive(
-            rowId = local.id, localId = local.id,
-            localBoot = local.boot, currentBoot = BootClock.bootCount(appContext),
-            startedElapsedMs = local.startedElapsedMs, nowElapsedMs = BootClock.elapsedMs(),
-            maxMs = MAX_SOS_LIVE_MS,
+        // Sans SOS local (courant ou précédent) dans sa fenêtre : aucune requête.
+        val boot = BootClock.bootCount(appContext)
+        val nowElapsed = BootClock.elapsedMs()
+        fun inWindow(s: SupervisionStore.LocalSos?) = s != null && SosWindow.isLive(
+            rowId = s.id, localId = s.id, localBoot = s.boot, currentBoot = boot,
+            startedElapsedMs = s.startedElapsedMs, nowElapsedMs = nowElapsed, maxMs = MAX_SOS_LIVE_MS,
         )
-        if (!inWindow) { sosId = null; return }
-        // État de CE SOS (clos par l'enfant ou le parent ?), à cadence modérée.
+        val current = store.localSos?.takeIf { inWindow(it) }
+        val previous = store.localSosPrevious?.takeIf { inWindow(it) && it.id != current?.id }
+        if (current == null && previous == null) { sosId = null; return }
+        // État de CES SOS (clos ? jamais créé ?), à cadence modérée. Erreur réseau :
+        // on garde le choix courant ; ligne courante absente : relais du précédent (V2).
         if (now - lastSosPollMs >= SOS_POLL_MS) {
             lastSosPollMs = now
-            sosId = runCatching { repo.sosById(local.id) }.getOrNull()?.optString("id")
+            val cs = current?.let { runCatching { repo.sosState(it.id) }.getOrDefault(SosChoice.RowState.ERROR) }
+                ?: SosChoice.RowState.ABSENT
+            val ps = if (cs == SosChoice.RowState.ABSENT && previous != null) {
+                runCatching { repo.sosState(previous.id) }.getOrDefault(SosChoice.RowState.ERROR)
+            } else null
+            sosId = SosChoice.next(current?.id, cs, previous?.id, ps, kept = sosId)
         }
         val active = sosId ?: return
-        if (!SosWindow.isLive(
-                rowId = active, localId = local.id,
-                localBoot = local.boot, currentBoot = BootClock.bootCount(appContext),
-                startedElapsedMs = local.startedElapsedMs, nowElapsedMs = BootClock.elapsedMs(),
-                maxMs = MAX_SOS_LIVE_MS,
-            )
-        ) return
+        // Toujours un SOS LOCAL encore dans sa fenêtre.
+        if (active != current?.id && active != previous?.id) return
         if (now - lastSosFixMs < SOS_FIX_MS) return
         lastSosFixMs = now
         val loc = client.currentFix(highAccuracy = true) ?: return

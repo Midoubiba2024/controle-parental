@@ -91,10 +91,15 @@ class SupervisionStore(context: Context) {
             .remove(KEY_STATUS_TS)
             .remove(KEY_MSG_WM)
             .remove(KEY_LAST_VISIBLE_AT)
-            .remove(KEY_INVISIBLE_FROM)
+            // La période [appairage, premier constat visible) est une coupure (V3).
+            .putLong(KEY_INVISIBLE_FROM, now)
             .remove(KEY_VIS_TOKEN)
             .remove(KEY_VIS_BOOT)
             .remove(KEY_INVISIBLE_GAPS)
+            .remove(KEY_PURGED_THROUGH)
+            .remove(KEY_SOS_PREV_ID)
+            .remove(KEY_SOS_PREV_BOOT)
+            .remove(KEY_SOS_PREV_ELAPSED)
             .remove(KEY_SOS_LOCAL_ID)
             .remove(KEY_SOS_LOCAL_BOOT)
             .remove(KEY_SOS_LOCAL_ELAPSED)
@@ -237,6 +242,7 @@ class SupervisionStore(context: Context) {
         processToken = prefs.getString(KEY_VIS_TOKEN, null),
         boot = prefs.getInt(KEY_VIS_BOOT, -1),
         gaps = VisibilityGaps.gapsFromJson(prefs.getString(KEY_INVISIBLE_GAPS, null)),
+        purgedThrough = prefs.getLong(KEY_PURGED_THROUGH, 0L),
     )
 
     /**
@@ -257,8 +263,12 @@ class SupervisionStore(context: Context) {
             .putString(KEY_VIS_TOKEN, st.processToken)
             .putInt(KEY_VIS_BOOT, st.boot)
             .putString(KEY_INVISIBLE_GAPS, VisibilityGaps.gapsToJson(st.gaps))
+            .putLong(KEY_PURGED_THROUGH, st.purgedThrough)
             .apply()
     }
+
+    /** Borne basse de lecture des appels : appairage ET coupures purgées (V4). */
+    fun callsFloor(): Long = VisibilityGaps.callsFloor(enrolledAt, visibilityState())
 
     /** Intervalles à EXCLURE de la collecte (coupures closes + coupure en cours). */
     fun excludedGaps(now: Long = System.currentTimeMillis()): List<VisibilityGaps.Gap> =
@@ -266,6 +276,23 @@ class SupervisionStore(context: Context) {
 
     /** SOS déclenché SUR CET APPAREIL (T1) : seul lui peut être diffusé en direct. */
     data class LocalSos(val id: String, val boot: Int, val startedElapsedMs: Long)
+
+    /** SOS local PRÉCÉDENT : relais si un nouveau SOS n'a jamais été créé côté serveur (V2). */
+    var localSosPrevious: LocalSos?
+        get() {
+            val id = prefs.getString(KEY_SOS_PREV_ID, null) ?: return null
+            return LocalSos(id, prefs.getInt(KEY_SOS_PREV_BOOT, -1), prefs.getLong(KEY_SOS_PREV_ELAPSED, 0L))
+        }
+        set(v) {
+            val e = prefs.edit()
+            if (v == null) {
+                e.remove(KEY_SOS_PREV_ID).remove(KEY_SOS_PREV_BOOT).remove(KEY_SOS_PREV_ELAPSED)
+            } else {
+                e.putString(KEY_SOS_PREV_ID, v.id).putInt(KEY_SOS_PREV_BOOT, v.boot)
+                    .putLong(KEY_SOS_PREV_ELAPSED, v.startedElapsedMs)
+            }
+            e.commit()
+        }
 
     var localSos: LocalSos?
         get() {
@@ -366,6 +393,10 @@ class SupervisionStore(context: Context) {
         private const val KEY_VIS_TOKEN = "supervision_process_token"
         private const val KEY_VIS_BOOT = "supervision_boot"
         private const val KEY_INVISIBLE_GAPS = "supervision_invisible_gaps"
+        private const val KEY_PURGED_THROUGH = "supervision_gaps_purged_through"
+        private const val KEY_SOS_PREV_ID = "sos_prev_id"
+        private const val KEY_SOS_PREV_BOOT = "sos_prev_boot"
+        private const val KEY_SOS_PREV_ELAPSED = "sos_prev_started_elapsed"
 
         /** Jeton de CE processus : un processus neuf est une coupure (VisibilityGaps). */
         private val PROCESS_TOKEN: String = java.util.UUID.randomUUID().toString()

@@ -19,7 +19,8 @@ import org.json.JSONObject
 object VisibilityGaps {
 
     const val HEARTBEAT_MS = 60_000L
-    const val RETENTION_MS = 3 * 24 * 3_600_000L
+    /** 4 jours (journée de 25 h au passage à l'heure d'hiver comprise). */
+    const val RETENTION_MS = 4 * 24 * 3_600_000L
 
     data class Gap(val from: Long, val to: Long)
 
@@ -30,6 +31,11 @@ object VisibilityGaps {
         val processToken: String? = null,
         val boot: Int = -1,
         val gaps: List<Gap> = emptyList(),
+        /**
+         * Fin la plus tardive des coupures PURGÉES : les appels plus anciens ne
+         * peuvent plus être exclus, ils ne sont donc jamais relus (tour 6 V4).
+         */
+        val purgedThrough: Long = 0L,
     )
 
     data class Step(val state: State, val persist: Boolean)
@@ -61,7 +67,11 @@ object VisibilityGaps {
         }
         // Purge (et intervalles incohérents après un recul d'horloge).
         val kept = st.gaps.filter { it.to > it.from && it.to >= now - RETENTION_MS }
-        if (kept.size != st.gaps.size) { st = st.copy(gaps = kept); persist = true }
+        if (kept.size != st.gaps.size) {
+            val purged = st.gaps.filter { it !in kept && it.to > it.from }.maxOfOrNull { it.to } ?: 0L
+            st = st.copy(gaps = kept, purgedThrough = maxOf(st.purgedThrough, purged))
+            persist = true
+        }
         return Step(st, persist)
     }
 
@@ -69,6 +79,9 @@ object VisibilityGaps {
      * Intervalles à EXCLURE de la collecte : coupures closes + coupure en cours
      * (jusqu'à [now]).
      */
+    /** Borne basse de lecture des appels : appairage ET coupures purgées (V4). */
+    fun callsFloor(enrolledAt: Long, s: State): Long = maxOf(enrolledAt, s.purgedThrough)
+
     fun excluded(s: State, now: Long): List<Gap> =
         if (s.invisibleFrom != 0L) s.gaps + Gap(s.invisibleFrom, now) else s.gaps
 

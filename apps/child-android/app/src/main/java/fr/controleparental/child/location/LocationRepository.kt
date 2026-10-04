@@ -2,6 +2,7 @@ package fr.controleparental.child.location
 
 import android.content.Context
 import android.location.Location
+import android.os.SystemClock
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.service.Unenrollment
@@ -113,10 +114,12 @@ class LocationRepository(private val store: SupervisionStore) {
     suspend fun insertFix(loc: Location, source: String, batteryLevel: Int?, capturedAtMs: Long = loc.time.takeIf { it > 0 } ?: System.currentTimeMillis()): Boolean {
         val e = store.load() ?: return false
         // Minimisation (LOT 12b) : jamais une position antérieure à l'appairage
-        // (repli lastLocation du cache système sans limite d'âge). Le SOS en est
-        // EXEMPTÉ : position actuelle par construction, et il n'est jamais bloqué
-        // (même si l'horloge est en retard sur l'instant d'appairage).
-        if (source != "sos" && capturedAtMs < store.enrolledAt) return false
+        // (repli lastLocation du cache système SANS limite d'âge). Un relevé SOS est
+        // aussi accepté s'il est FRAIS en temps monotone (≤ 2 min) : une horloge en
+        // retard sur l'appairage ne bloque pas un SOS, mais un relevé en cache
+        // d'avant l'appairage est refusé (FixPolicy, tour 6 V1).
+        val ageNs = loc.elapsedRealtimeNanos.takeIf { it > 0 }?.let { SystemClock.elapsedRealtimeNanos() - it }
+        if (!FixPolicy.accept(source, capturedAtMs, store.enrolledAt, ageNs)) return false
         val row = JSONObject()
             .put("family_id", e.familyId)
             .put("child_id", e.childId)
@@ -156,10 +159,17 @@ class LocationRepository(private val store: SupervisionStore) {
         return withContext(NonCancellable) {
             // Mémorisé AVANT l'envoi : une réponse perdue ou un délai dépassé laisse
             // un SOS peut-être créé côté serveur — il doit rester diffusable.
+            // L'ancien SOS local devient le « précédent » : relais tant qu'il est
+            // dans sa fenêtre si celui-ci n'est jamais créé côté serveur (V2).
             val previous = Unenrollment.ifStillEnrolled(e.deviceId) {
-                store.localSos.also { store.localSos = SupervisionStore.LocalSos(id, boot, startedElapsed) }
+                store.localSos.also { old ->
+                    if (old != null) store.localSosPrevious = old
+                    store.localSos = SupervisionStore.LocalSos(id, boot, startedElapsed)
+                }
             }
-            val res = client.upsert("sos_events", JSONArray().put(row))
+            // Idempotent sur l'identifiant local : un rejeu (OkHttp ou manuel) ne
+            // donne jamais de conflit 409.
+            val res = client.upsert("sos_events", JSONArray().put(row), onConflict = "id", ignoreDuplicates = true)
             // Échec CERTAIN (refus 4xx reçu) seulement : on restaure l'ancien SOS local.
             if (res is SupabaseClient.Result.Error && res.code.startsWith("http_4")) {
                 Unenrollment.ifStillEnrolled(e.deviceId) {
@@ -171,14 +181,15 @@ class LocationRepository(private val store: SupervisionStore) {
     }
 
     /**
-     * État d'UN SOS précis (le SOS local), ou null s'il n'est plus actif/acquitté
-     * ou en cas d'erreur — jamais « le plus récent de l'enfant », qui peut venir
-     * d'un autre appareil.
+     * État d'UN SOS précis (un SOS local) : présent (actif/acquitté), absent, ou
+     * erreur — jamais « le plus récent de l'enfant », qui peut venir d'un autre
+     * appareil.
      */
-    suspend fun sosById(id: String): JSONObject? {
+    suspend fun sosState(id: String): SosChoice.RowState {
         val res = client.get("sos_events", "id=eq.$id&status=in.(active,acked)&select=id,status&limit=1")
-        val arr = asArray(res) ?: return null
-        return if (arr.length() > 0) arr.optJSONObject(0) else null
+        // Erreur (réseau, HTTP) ≠ ligne absente (2xx, tableau vide) — V2.
+        val arr = asArray(res) ?: return SosChoice.RowState.ERROR
+        return if (arr.length() > 0) SosChoice.RowState.PRESENT else SosChoice.RowState.ABSENT
     }
 
     /** L'enfant clôt son propre SOS (status → resolved). */

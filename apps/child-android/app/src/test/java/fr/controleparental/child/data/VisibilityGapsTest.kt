@@ -87,4 +87,28 @@ class VisibilityGapsTest {
         assertEquals(g, VisibilityGaps.gapsFromJson(VisibilityGaps.gapsToJson(g)))
         assertEquals(emptyList<VisibilityGaps.Gap>(), VisibilityGaps.gapsFromJson("pas du json"))
     }
+
+    @Test fun periodBetweenPairingAndFirstVisibleIsExcluded() {
+        // V3 : completeEnrollment pose invisibleFrom = enrolledAt.
+        val enrolledAt = d0 + 9 * h
+        val s = visible(VisibilityGaps.State(invisibleFrom = enrolledAt), enrolledAt + 5_000)
+        assertEquals(listOf(gap(enrolledAt, enrolledAt + 5_000)), s.gaps)
+    }
+
+    @Test fun purgedGapsRaiseTheCallsFloor() {
+        // V4 : une coupure purgée ne peut plus être exclue → les appels antérieurs ne sont plus relus.
+        val old = gap(d0 - 6 * 24 * h, d0 - 5 * 24 * h)
+        var s = VisibilityGaps.State(lastVisibleAt = d0, processToken = p, boot = boot, gaps = listOf(old))
+        s = visible(s, d0 + 1)
+        assertEquals(emptyList<VisibilityGaps.Gap>(), s.gaps)
+        assertEquals(old.to, s.purgedThrough)
+        assertEquals(old.to, VisibilityGaps.callsFloor(enrolledAt = d0 - 10 * 24 * h, s = s))
+        assertEquals(d0, VisibilityGaps.callsFloor(enrolledAt = d0, s = s))
+    }
+
+    @Test fun gapsAreKeptFourDays() {
+        val recent = gap(d0 - 3 * 24 * h - h, d0 - 3 * 24 * h)     // 3 j 1 h : conservée (< 4 j)
+        val s = visible(VisibilityGaps.State(lastVisibleAt = d0, processToken = p, boot = boot, gaps = listOf(recent)), d0 + 1)
+        assertEquals(listOf(recent), s.gaps)
+    }
 }
