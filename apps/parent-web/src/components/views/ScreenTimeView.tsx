@@ -5,10 +5,12 @@ import {
 import {
   appLabelOf, categoryColor, categoryLabel, fmtDayLabel, fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
+import { useI18n } from "../../i18n";
 import { Bars, Donut, HBars, Legend, type Slice } from "../charts/ChartKit";
 import { EmptyState, Tile } from "../Ui";
 
 export function ScreenTimeView({ obs }: { obs: ObservationData }) {
+  const { t } = useI18n();
   const { usage, anchorDay } = obs;
   const [period, setPeriod] = useState<7 | 30>(7);
 
@@ -46,39 +48,39 @@ export function ScreenTimeView({ obs }: { obs: ObservationData }) {
     <div className="grid" style={{ gap: 18 }}>
       <div className="row">
         <div className="seg">
-          <button className={period === 7 ? "on" : ""} onClick={() => setPeriod(7)}>7 jours</button>
-          <button className={period === 30 ? "on" : ""} onClick={() => setPeriod(30)}>30 jours</button>
+          <button className={period === 7 ? "on" : ""} onClick={() => setPeriod(7)}>{t("views.screenTime.periodDays", { count: 7 })}</button>
+          <button className={period === 30 ? "on" : ""} onClick={() => setPeriod(30)}>{t("views.screenTime.periodDays", { count: 30 })}</button>
         </div>
       </div>
 
       <div className="grid cols-3">
-        <Tile label={`Temps total (${period} j)`} value={fmtDuration(total)} icon="⏱"
+        <Tile label={t("views.screenTime.tiles.total", { days: period })} value={fmtDuration(total)} icon="⏱"
           iconBg="color-mix(in srgb, var(--primary) 18%, transparent)" delta={{ pct: delta }} />
-        <Tile label="Moyenne par jour" value={fmtDuration(avgPerDay)} icon="📅"
+        <Tile label={t("views.screenTime.tiles.averagePerDay")} value={fmtDuration(avgPerDay)} icon="📅"
           iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)" />
-        <Tile label="Ouvertures d'apps" value={totalLaunches || "—"} icon="👆"
+        <Tile label={t("views.screenTime.tiles.appLaunches")} value={totalLaunches || t("common.none")} icon="👆"
           iconBg="color-mix(in srgb, var(--series-5) 20%, transparent)" />
       </div>
 
       <div className="card">
-        <h2>Tendance quotidienne</h2>
+        <h2>{t("views.screenTime.dailyTrend")}</h2>
         {hasData ? <Bars data={barData} fmt={fmtDuration} highlightKey={to} />
-          : <EmptyState icon="📈" title="Aucune donnée sur la période" />}
+          : <EmptyState icon="📈" title={t("views.screenTime.noDataInPeriod")} />}
       </div>
 
       <div className="grid dash">
         <div className="card">
-          <h2>Répartition par catégorie</h2>
+          <h2>{t("views.screenTime.byCategory")}</h2>
           {catSlices.length > 0 ? (
             <>
               <Donut data={catSlices} fmt={fmtDuration}
-                center={{ primary: fmtDurationShort(total), secondary: `${period} jours` }} />
+                center={{ primary: fmtDurationShort(total), secondary: t("views.screenTime.periodDays", { count: period }) }} />
               <Legend items={catSlices.map((s) => ({ label: s.label, color: s.color }))} />
             </>
-          ) : <EmptyState icon="🍩" title="Aucune activité" />}
+          ) : <EmptyState icon="🍩" title={t("views.screenTime.noActivity")} />}
         </div>
         <div className="card">
-          <h2>Top applications</h2>
+          <h2>{t("views.screenTime.topApps")}</h2>
           <HBars data={appSlices} fmt={fmtDuration} maxRows={10} />
         </div>
       </div>

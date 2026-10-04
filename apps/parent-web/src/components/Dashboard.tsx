@@ -4,6 +4,8 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
 import { useObservation } from "../lib/observation";
 import { fmtBytes } from "../lib/format";
+import { errorMessage, Trans, useI18n } from "../i18n";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import type { Child, Device, DeviceStatus, Family } from "../lib/types";
 import { OverviewView } from "./views/OverviewView";
 import { ScreenTimeView } from "./views/ScreenTimeView";
@@ -23,31 +25,25 @@ type View =
   | "overview" | "screen" | "apps" | "calls" | "rules" | "filter"
   | "location" | "security" | "wellbeing" | "requests" | "messages" | "family" | "privacy";
 
-const NAV: { key: View; label: string; icon: string }[] = [
-  { key: "overview", label: "Vue d'ensemble", icon: "◎" },
-  { key: "screen", label: "Temps d'écran", icon: "⏱" },
-  { key: "apps", label: "Applications", icon: "▦" },
-  { key: "calls", label: "Appels", icon: "☏" },
-  { key: "rules", label: "Règles d'accès", icon: "⛬" },
-  { key: "filter", label: "Filtrage", icon: "🛡" },
-  { key: "location", label: "Localisation", icon: "📍" },
-  { key: "security", label: "Sécurité / SOS", icon: "🆘" },
-  { key: "wellbeing", label: "Sécurité ado", icon: "🫶" },
-  { key: "requests", label: "Demandes", icon: "✉" },
-  { key: "messages", label: "Messages", icon: "💬" },
-  { key: "family", label: "Famille", icon: "⌂" },
-  { key: "privacy", label: "Confidentialité", icon: "🔒" },
+// Libellés de navigation : nav.<vue> ; titres de page : dashboard.viewTitle.<vue>.
+const NAV: { key: View; icon: string }[] = [
+  { key: "overview", icon: "◎" },
+  { key: "screen", icon: "⏱" },
+  { key: "apps", icon: "▦" },
+  { key: "calls", icon: "☏" },
+  { key: "rules", icon: "⛬" },
+  { key: "filter", icon: "🛡" },
+  { key: "location", icon: "📍" },
+  { key: "security", icon: "🆘" },
+  { key: "wellbeing", icon: "🫶" },
+  { key: "requests", icon: "✉" },
+  { key: "messages", icon: "💬" },
+  { key: "family", icon: "⌂" },
+  { key: "privacy", icon: "🔒" },
 ];
 
-const VIEW_TITLE: Record<View, string> = {
-  overview: "Vue d'ensemble", screen: "Temps d'écran", apps: "Applications",
-  calls: "Appels", rules: "Règles d'accès", filter: "Filtrage web & contenu",
-  location: "Localisation", security: "Sécurité & SOS", wellbeing: "Sécurité ado — bien-être",
-  requests: "Demandes", messages: "Messages", family: "Famille & appareils",
-  privacy: "Confidentialité & RGPD",
-};
-
 export function Dashboard({ session }: { session: Session }) {
+  const { t } = useI18n();
   const [families, setFamilies] = useState<Family[]>([]);
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
@@ -69,7 +65,7 @@ export function Dashboard({ session }: { session: Session }) {
     // On ne retombe sur une liste vide (→ écran « Créer une famille ») QUE sur un
     // succès. Une erreur (réseau/RLS) ne doit pas masquer les familles existantes.
     const { data, error } = await supabase.from("families").select("id,name,created_at").order("created_at");
-    if (error) { setError(error.message); setLoading(false); return; }
+    if (error) { setError(errorMessage(error)); setLoading(false); return; }
     const list = (data ?? []) as Family[];
     setFamilies(list);
     setFamilyId((cur) => cur ?? list[0]?.id ?? null);
@@ -80,7 +76,7 @@ export function Dashboard({ session }: { session: Session }) {
   const loadChildren = useCallback(async () => {
     if (!familyId) { setChildren([]); return; }
     const { data, error } = await supabase.from("children").select("*").eq("family_id", familyId).order("created_at");
-    if (error) { setError(error.message); return; }
+    if (error) { setError(errorMessage(error)); return; }
     const list = (data ?? []) as Child[];
     setChildren(list);
     setChildId((cur) => (cur && list.some((c) => c.id === cur)) ? cur : list[0]?.id ?? null);
@@ -94,16 +90,16 @@ export function Dashboard({ session }: { session: Session }) {
   const obs = useObservation(childId);
   const st = obs.status[0];
 
-  if (loading) return <div className="center muted">Chargement…</div>;
+  if (loading) return <div className="center muted">{t("app.loading")}</div>;
   // En cas d'erreur de chargement sans aucune famille connue, afficher l'erreur
   // (et proposer de réessayer) plutôt que l'écran « Créer une famille » à tort.
   if (error && families.length === 0) {
     return (
       <div className="center">
         <div className="card" style={{ width: 360 }}>
-          <h2>Chargement impossible</h2>
+          <h2>{t("dashboard.loadFailed")}</h2>
           <p className="msg error">{error}</p>
-          <button onClick={() => { setError(null); void loadFamilies(); }}>Réessayer</button>
+          <button onClick={() => { setError(null); void loadFamilies(); }}>{t("dashboard.retry")}</button>
         </div>
       </div>
     );
@@ -113,33 +109,34 @@ export function Dashboard({ session }: { session: Session }) {
   }
 
   const themeIcon = theme === "light" ? "☀" : theme === "dark" ? "☾" : "⌁";
-  const themeTitle = theme === "light" ? "Thème clair" : theme === "dark" ? "Thème sombre" : "Thème système";
+  const themeTitle = t(`dashboard.theme.${theme}`);
   const currentChild = children.find((c) => c.id === childId) ?? null;
   const currentFamily = families.find((f) => f.id === familyId) ?? null;
 
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand"><span className="dot">✦</span> Supervision</div>
+        <div className="brand"><span className="dot">✦</span> {t("dashboard.brand")}</div>
         {NAV.map((n) => (
           <button key={n.key} className={`nav-item ${view === n.key ? "active" : ""}`} onClick={() => setView(n.key)}>
-            <span className="ic">{n.icon}</span> {n.label}
+            <span className="ic">{n.icon}</span> {t(`nav.${n.key}`)}
           </button>
         ))}
         <div className="foot">
           <div style={{ marginBottom: 8, color: "var(--sidebar-text)", wordBreak: "break-all" }}>{session.user.email}</div>
-          Contrôle parental transparent.<br />
-          Métadonnées & agrégats seulement — jamais le contenu.
+          {t("dashboard.footerTagline")}<br />
+          {t("dashboard.footerPrivacy")}
+          <LanguageSwitcher />
         </div>
       </aside>
 
       <main className="content">
         <div className="topbar">
           <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
-            <h1 style={{ margin: 0 }}>{VIEW_TITLE[view]}</h1>
+            <h1 style={{ margin: 0 }}>{t(`dashboard.viewTitle.${view}`)}</h1>
             {currentFamily && (
               <span
-                title="Famille"
+                title={t("dashboard.familyBadgeTitle")}
                 style={{
                   fontSize: "1.3rem", fontWeight: 800, color: "var(--primary)",
                   background: "color-mix(in srgb, var(--primary) 12%, transparent)",
@@ -163,12 +160,12 @@ export function Dashboard({ session }: { session: Session }) {
             </select>
           )}
           {st && (
-            <span className="badge" title="État de l'appareil (dernier relevé)">
-              {st.is_charging ? "⚡" : "🔋"} {st.battery_level ?? "—"}% · 💾 {fmtBytes(st.storage_free_bytes)}
+            <span className="badge" title={t("dashboard.deviceStatusTitle")}>
+              {st.is_charging ? "⚡" : "🔋"} {t("dashboard.deviceStatus", { battery: st.battery_level ?? t("common.none"), storage: fmtBytes(st.storage_free_bytes) })}
             </span>
           )}
-          <button className="ghost" title={themeTitle} onClick={cycleTheme}>{themeIcon}</button>
-          <button className="link" onClick={() => supabase.auth.signOut()}>Déconnexion</button>
+          <button className="ghost" title={themeTitle} aria-label={themeTitle} onClick={cycleTheme}>{themeIcon}</button>
+          <button className="link" onClick={() => supabase.auth.signOut()}>{t("dashboard.signOut")}</button>
         </div>
 
         {error && <p className="msg error">{error}</p>}
@@ -180,7 +177,7 @@ export function Dashboard({ session }: { session: Session }) {
         ) : view === "requests" ? (
           <RequestsView familyId={familyId!} children={children} />
         ) : !childId || !currentChild ? (
-          <div className="card"><p className="empty">Ajoutez un enfant dans l'onglet <b>Famille</b> pour voir ses données.</p></div>
+          <div className="card"><p className="empty"><Trans k="dashboard.noChild" tags={{ b: (c) => <b>{c}</b> }} /></p></div>
         ) : view === "rules" ? (
           <RulesView familyId={familyId!} child={currentChild} obs={obs} />
         ) : view === "messages" ? (
@@ -197,7 +194,7 @@ export function Dashboard({ session }: { session: Session }) {
           <PrivacyView family={currentFamily!} child={currentChild}
             onChanged={() => { void loadFamilies(); void loadChildren(); }} />
         ) : obs.loading ? (
-          <p className="muted">Chargement des données…</p>
+          <p className="muted">{t("dashboard.loadingData")}</p>
         ) : view === "overview" ? <OverviewView obs={obs} />
           : view === "screen" ? <ScreenTimeView obs={obs} />
           : view === "apps" ? <ApplicationsView obs={obs} />
@@ -219,18 +216,14 @@ export function Dashboard({ session }: { session: Session }) {
 //   - superposition (overlay) : seulement en mode Standard (en Renforcé le blocage
 //     passe par Device Policy Manager, l'overlay est légitimement absent).
 // On ignore aussi les appareils RÉVOQUÉS (cohérent avec les autres vues).
-const PROTECTION_LABEL: Record<string, string> = {
-  perm_usage_access: "Accès au temps d'écran",
-  perm_overlay: "Écran de pause (superposition)",
-  perm_notifications: "Notifications",
-  perm_location: "Localisation",
-};
+type ProtectionKey = "perm_usage_access" | "perm_overlay" | "perm_notifications" | "perm_location";
 
 function ProtectionBanner({ childId, status, devices }: {
   childId: string | null;
   status: DeviceStatus[];
   devices: Device[];
 }) {
+  const { t } = useI18n();
   // La localisation n'est « attendue » que si le partage est activé pour l'enfant.
   const [locationExpected, setLocationExpected] = useState(false);
   useEffect(() => {
@@ -248,7 +241,7 @@ function ProtectionBanner({ childId, status, devices }: {
   // maintenir la bannière rouge jusqu'à la purge de rétention.
   const liveDevices = new Map(devices.filter((d) => !d.revoked_at).map((d) => [d.id, d]));
 
-  const off = new Set<string>();
+  const off = new Set<ProtectionKey>();
   for (const s of status) {
     const dev = liveDevices.get(s.device_id);
     if (!dev) continue;                       // appareil révoqué / inconnu → ignoré
@@ -258,20 +251,19 @@ function ProtectionBanner({ childId, status, devices }: {
     if (s.perm_overlay === false && dev.mode === "standard") off.add("perm_overlay");
   }
   if (off.size === 0) return null;
-  const labels = [...off].map((k) => PROTECTION_LABEL[k]).join(" · ");
+  const labels = [...off].map((k) => t(`enums.protection.${k}`)).join(t("dashboard.protection.separator"));
   return (
     <div className="card" style={{ borderColor: "var(--danger)", marginBottom: 14 }}>
-      <strong style={{ color: "var(--danger)" }}>⚠️ Une protection est désactivée</strong>
+      <strong style={{ color: "var(--danger)" }}>{t("dashboard.protection.title")}</strong>
       <p className="muted small" style={{ margin: "6px 0 0" }}>
-        Sur l'appareil : <b>{labels}</b>. Une autorisation nécessaire a été retirée.
-        Demandez à l'enfant de la réactiver depuis son écran « Mes données » (rien
-        n'est caché — l'app reste visible et transparente).
+        <Trans k="dashboard.protection.body" params={{ labels }} tags={{ b: (c) => <b>{c}</b> }} />
       </p>
     </div>
   );
 }
 
 function CreateFamily({ onCreated }: { onCreated: () => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -283,16 +275,16 @@ function CreateFamily({ onCreated }: { onCreated: () => void }) {
     // qui échouait faute de clé service_role fiable côté Edge Functions.
     const { error } = await supabase.rpc("create_family", { p_name: name });
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     setName("");
     onCreated();
   }
 
   return (
     <form onSubmit={create} className="card" style={{ width: 360 }}>
-      <h2>Créer une famille</h2>
-      <input placeholder="Nom du foyer" value={name} required onChange={(e) => setName(e.target.value)} />
-      <button disabled={busy || !name.trim()} type="submit">{busy ? "…" : "Créer la famille"}</button>
+      <h2>{t("dashboard.createFamily.title")}</h2>
+      <input placeholder={t("dashboard.createFamily.namePlaceholder")} value={name} required onChange={(e) => setName(e.target.value)} />
+      <button disabled={busy || !name.trim()} type="submit">{busy ? t("common.busy") : t("dashboard.createFamily.submit")}</button>
       {err && <span className="msg error">{err}</span>}
     </form>
   );

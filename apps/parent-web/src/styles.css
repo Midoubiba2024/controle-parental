@@ -1,4 +1,11 @@
 /* =============================================================================
+   RTL (LOT 9) : uniquement des propriétés LOGIQUES (margin-inline-*, padding-
+   inline-*, border-inline-*, inset-inline-*, text-align: start/end) — jamais
+   left/right — pour que la mise en page se retourne d'elle-même quand
+   <html dir="rtl"> (langues RTL, cf. src/i18n/config.ts).
+   ============================================================================= */
+
+/* =============================================================================
    Console parent — identité « chaleureuse » : fond crème, primaire corail,
    barre latérale sombre, tuiles colorées. Thème clair/sombre (data-theme sur
    <html> + repli prefers-color-scheme). Les séries de graphiques utilisent la
@@ -146,12 +153,15 @@ h3 { font-size: .95rem; margin: 0 0 8px; }
 .nav-item {
   display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px;
   color: var(--sidebar-muted); cursor: pointer; border: 0; background: none; width: 100%;
-  font-size: .92rem; text-align: left; font-family: inherit;
+  font-size: .92rem; text-align: start; font-family: inherit;
 }
 .nav-item .ic { width: 18px; text-align: center; }
 .nav-item:hover { background: var(--sidebar-2); color: var(--sidebar-text); }
 .nav-item.active { background: var(--primary); color: var(--primary-ink); font-weight: 600; }
 .sidebar .foot { margin-top: auto; color: var(--sidebar-muted); font-size: .78rem; padding: 10px; line-height: 1.5; }
+/* Sélecteur de langue (masqué tant qu'une seule langue est active). */
+.lang-switch { flex-direction: row; align-items: center; gap: 8px; margin-top: 10px; color: var(--sidebar-muted); font-size: .78rem; }
+.lang-switch select { background: var(--sidebar-2); color: var(--sidebar-text); border-color: transparent; padding: 5px 8px; font-size: .8rem; }
 
 .content { padding: 22px 28px 48px; max-width: 1180px; }
 .topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
@@ -197,19 +207,19 @@ h3 { font-size: .95rem; margin: 0 0 8px; }
 .legend .sw { width: 11px; height: 11px; border-radius: 3px; }
 
 /* --- Listes app / maître-détail ---------------------------------------- */
-.app-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; border: 0; background: none; width: 100%; font-family: inherit; text-align: left; color: inherit; }
+.app-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; border: 0; background: none; width: 100%; font-family: inherit; text-align: start; color: inherit; }
 .app-row:hover { background: var(--surface-2); }
 .app-row.active { background: var(--surface-2); outline: 2px solid var(--primary); }
 .app-ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; }
 .app-row .nm { font-weight: 600; font-size: .92rem; }
 .app-row .meta { color: var(--muted); font-size: .8rem; }
-.app-row .dur { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+.app-row .dur { margin-inline-start: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .scroll { max-height: 440px; overflow: auto; }
 
 /* --- Table -------------------------------------------------------------- */
 table.tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
-table.tbl th { text-align: left; color: var(--text-secondary); font-weight: 600; font-size: .8rem; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+table.tbl th { text-align: start; color: var(--text-secondary); font-weight: 600; font-size: .8rem; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 table.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
 table.tbl tr:last-child td { border-bottom: 0; }
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px; font-size: .76rem; font-weight: 600; background: var(--surface-2); color: var(--text-secondary); }
@@ -295,11 +305,11 @@ button.btn-danger:hover { background: color-mix(in srgb, var(--danger) 85%, #000
 /* --- Bandeau SOS actif -------------------------------------------------- */
 .sos-banner {
   border: 1px solid var(--danger);
-  border-left: 4px solid var(--danger);
+  border-inline-start: 4px solid var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, var(--surface-1));
 }
-.dot-pulse { display: inline-block; width: 9px; height: 9px; border-radius: 99px; background: var(--danger); margin-right: 7px; animation: pulse 1.2s ease-in-out infinite; }
-.dot-live { display: inline-block; width: 8px; height: 8px; border-radius: 99px; background: var(--good); margin-right: 6px; }
+.dot-pulse { display: inline-block; width: 9px; height: 9px; border-radius: 99px; background: var(--danger); margin-inline-end: 7px; animation: pulse 1.2s ease-in-out infinite; }
+.dot-live { display: inline-block; width: 8px; height: 8px; border-radius: 99px; background: var(--good); margin-inline-end: 6px; }
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(1.5); } }
 
 /* Petite pastille de type de zone (identité ≠ couleur seule : icône + libellé). */

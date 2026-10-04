@@ -20,6 +20,7 @@ d'intrusivité adaptatif selon l'âge.
 | [`04-LOTS.md`](04-LOTS.md) | Découpage en **lots** (work packages), dépendances, ordre d'attaque |
 | [`05-VEILLE-CONCURRENTIELLE.md`](05-VEILLE-CONCURRENTIELLE.md) | **Veille** (features + design) : analyse d'écart vs 15+ concurrents (dont MMGuardian), manques légaux à récupérer par lot, zone sensible → équivalents légaux |
 | [`12-RETENTION-RGPD.md`](12-RETENTION-RGPD.md) | **LOT 8b** — politique de **rétention** (purge auto pg_cron), droits RGPD (**export** & **effacement**), et **actions manuelles propriétaire** (SQL 0010, pg_cron, migrations 0021/0022/0023) |
+| [`13-I18N.md`](13-I18N.md) | **LOT 9** — **internationalisation** : architecture i18n (console web + app Android), **procédure pour ajouter une langue**, règle « plus jamais de texte en dur », sens d'écriture **RTL** |
 
 ## État du projet
 

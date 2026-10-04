@@ -3,10 +3,13 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
 import { Dashboard } from "./components/Dashboard";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useI18n } from "./i18n";
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -17,11 +20,11 @@ export function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  if (!ready) return <div className="center muted">Chargement…</div>;
+  if (!ready) return <div className="center muted">{t("app.loading")}</div>;
 
   return (
     <div className="app">
-      {session ? <Dashboard session={session} /> : <Login />}
+      {session ? <ErrorBoundary><Dashboard session={session} /></ErrorBoundary> : <Login />}
     </div>
   );
 }

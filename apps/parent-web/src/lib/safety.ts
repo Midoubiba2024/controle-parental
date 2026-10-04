@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { labelMap, t, errorMessage } from "../i18n";
 import type {
   PrivacyPause, SafetyCategory, SafetySettings, SafetySignal, SafetySeverity, SafetyStatus,
 } from "./types";
@@ -51,7 +52,7 @@ export function useSafety(familyId: string | null, childId: string | null): Safe
         .is("ended_at", null).order("started_at", { ascending: false }),
     ]);
 
-    if (sg.error) setError(sg.error.message); else setSignals(sg.data as SafetySignal[]);
+    if (sg.error) setError(errorMessage(sg.error)); else setSignals(sg.data as SafetySignal[]);
     if (!se.error) setSettings((se.data as SafetySettings) ?? null);
     if (!st.error) setStatus(st.data as SafetyStatus[]);
     if (!pa.error) setOpenPauses(pa.data as PrivacyPause[]);
@@ -96,27 +97,26 @@ export function toSafetySettingsUpsert(s: SafetySettings | null, familyId: strin
 
 /* --------------------------- Catalogue de catégories --------------------- */
 // Chaque catégorie porte son identité par le LIBELLÉ + l'icône, et une couleur
-// CVD-safe via les variables --series-N (jamais rouge/vert seuls).
-export interface SafetyCatInfo { key: SafetyCategory; label: string; icon: string; hint: string; }
+// CVD-safe via les variables --series-N (jamais rouge/vert seuls). Libellé et
+// aide traduits (enums.safetyCategory.*), relus à chaque accès (getters).
+export interface SafetyCatInfo { key: SafetyCategory; icon: string; readonly label: string; readonly hint: string; }
 
-export const SAFETY_CATEGORIES: SafetyCatInfo[] = [
-  { key: "harassment", label: "Harcèlement", icon: "💢",
-    hint: "Insultes répétées, menaces, mise à l'écart." },
-  { key: "grooming", label: "Contact suspect", icon: "🕵",
-    hint: "Motif de sollicitation par un contact inconnu (secret, rendez-vous…)." },
-  { key: "sexual_content", label: "Contenu sexuel", icon: "🔞",
-    hint: "Sollicitation de photos / propos à caractère sexuel." },
-  { key: "self_harm", label: "Mal-être", icon: "🫂",
-    hint: "Détresse, auto-agression, idées noires." },
-  { key: "drugs", label: "Drogues", icon: "🚫",
-    hint: "Substances / produits illicites." },
+const SAFETY_CATEGORY_ICONS: [SafetyCategory, string][] = [
+  ["harassment", "💢"], ["grooming", "🕵"], ["sexual_content", "🔞"], ["self_harm", "🫂"], ["drugs", "🚫"],
 ];
+
+export const SAFETY_CATEGORIES: SafetyCatInfo[] = SAFETY_CATEGORY_ICONS.map(([key, icon]) => ({
+  key,
+  icon,
+  get label() { return t(`enums.safetyCategory.${key}.label`); },
+  get hint() { return t(`enums.safetyCategory.${key}.hint`); },
+}));
 
 const SAFETY_CAT_ORDER: SafetyCategory[] =
   ["harassment", "grooming", "sexual_content", "self_harm", "drugs"];
 
 export function safetyCategoryLabel(cat: SafetyCategory | null): string {
-  return SAFETY_CATEGORIES.find((c) => c.key === cat)?.label ?? "Autre";
+  return SAFETY_CATEGORIES.find((c) => c.key === cat)?.label ?? t("enums.safetyCategory.other");
 }
 
 export function safetyCategoryColor(cat: SafetyCategory | null): string {
@@ -125,9 +125,8 @@ export function safetyCategoryColor(cat: SafetyCategory | null): string {
 }
 
 /* --------------------------- Gravité ------------------------------------- */
-export const SEVERITY_LABEL: Record<SafetySeverity, string> = {
-  low: "Faible", medium: "Moyenne", high: "Élevée",
-};
+export const SEVERITY_LABEL: Readonly<Record<SafetySeverity, string>> = labelMap(
+  ["low", "medium", "high"], (k) => t(`enums.severity.${k}`));
 
 // Couleur de gravité : on NE se repose PAS sur rouge/vert seul (CVD) — le libellé
 // porte toujours le sens ; la couleur n'est qu'un renfort.
@@ -139,14 +138,19 @@ export const SEVERITY_ORDER: SafetySeverity[] = ["high", "medium", "low"];
 
 /* --------------------------- Ressources d'aide (V12) --------------------- */
 // Contenu STATIQUE informatif (3018, 3114, PHAROS). Aucun signalement automatisé
-// en tranche 1 (voir docs/11-LOT6-BIEN-ETRE.md — reporté tranche 2).
-export interface HelpResource { name: string; contact: string; url: string; desc: string; }
+// en tranche 1 (voir docs/11-LOT6-BIEN-ETRE.md — reporté tranche 2). Services
+// FRANÇAIS : nom et URL fixes, contact/description traduits (helpResources.*).
+export interface HelpResource { name: string; url: string; readonly contact: string; readonly desc: string; }
 
-export const HELP_RESOURCES: HelpResource[] = [
-  { name: "3018", contact: "3018 (appel/chat)", url: "https://e-enfance.org/informer/3018/",
-    desc: "Cyberharcèlement et violences numériques (e-Enfance). Gratuit, anonyme." },
-  { name: "3114", contact: "3114 (24h/24)", url: "https://3114.fr/",
-    desc: "Souffrance psychique et prévention du suicide. Écoute par des soignants." },
-  { name: "PHAROS", contact: "internet-signalement.gouv.fr", url: "https://www.internet-signalement.gouv.fr/",
-    desc: "Signalement officiel de contenus et comportements illicites en ligne." },
+const HELP_RESOURCE_DEFS: { id: "r3018" | "r3114" | "pharos"; name: string; url: string }[] = [
+  { id: "r3018", name: "3018", url: "https://e-enfance.org/informer/3018/" },
+  { id: "r3114", name: "3114", url: "https://3114.fr/" },
+  { id: "pharos", name: "PHAROS", url: "https://www.internet-signalement.gouv.fr/" },
 ];
+
+export const HELP_RESOURCES: HelpResource[] = HELP_RESOURCE_DEFS.map(({ id, name, url }) => ({
+  name,
+  url,
+  get contact() { return t(`helpResources.${id}.contact`); },
+  get desc() { return t(`helpResources.${id}.desc`); },
+}));

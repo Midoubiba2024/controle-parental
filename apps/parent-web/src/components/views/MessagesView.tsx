@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { errorMessage, Trans, useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { fmtDateTime } from "../../lib/format";
 import { EmptyState } from "../Ui";
@@ -12,6 +13,7 @@ import type { Child, Message } from "../../lib/types";
    ============================================================================= */
 
 export function MessagesView({ familyId, child }: { familyId: string; child: Child }) {
+  const { t } = useI18n();
   const childId = child.id;
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
@@ -31,7 +33,7 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("messages").select("*")
       .eq("child_id", childId).order("created_at", { ascending: true }).limit(300);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     const list = (data ?? []) as Message[];
     setMessages(list);
     setErr(null);
@@ -70,7 +72,7 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
       family_id: familyId, child_id: childId, sender: "parent", body: text,
     });
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     setBody("");
     void load();
     // Accélération best-effort (ignore l'échec : le polling prendra le relais).
@@ -79,14 +81,15 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
 
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", maxWidth: 720 }}>
-      <h2>Messages <span className="muted small">avec {child.display_name}</span></h2>
+      <h2><Trans k="views.messages.title" params={{ name: child.display_name }}
+        tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Messagerie interne, visible par l'enfant. On n'accède jamais à ses autres applications de messagerie.
+        {t("views.messages.intro")}
       </p>
 
       <div className="scroll" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 2px", maxHeight: 460 }}>
-        {messages.length === 0 && !err && <EmptyState icon="💬" title="Aucun message"
-          hint="Écrivez un premier mot — il apparaîtra sur l'appareil de l'enfant." />}
+        {messages.length === 0 && !err && <EmptyState icon="💬" title={t("views.messages.emptyTitle")}
+          hint={t("views.messages.emptyHint")} />}
         {messages.map((m) => {
           const mine = m.sender === "parent";
           return (
@@ -96,8 +99,10 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
                 color: mine ? "var(--primary-ink)" : "var(--text-primary)",
                 borderRadius: 14, padding: "8px 12px", fontSize: ".92rem", wordBreak: "break-word",
               }}>{m.body}</div>
-              <div className="muted small" style={{ textAlign: mine ? "right" : "left", marginTop: 2 }}>
-                {fmtDateTime(m.created_at)}{mine && m.read_at ? " · lu" : ""}
+              <div className="muted small" style={{ textAlign: mine ? "end" : "start", marginTop: 2 }}>
+                {mine && m.read_at
+                  ? t("views.messages.sentAtRead", { date: fmtDateTime(m.created_at) })
+                  : fmtDateTime(m.created_at)}
               </div>
             </div>
           );
@@ -107,9 +112,9 @@ export function MessagesView({ familyId, child }: { familyId: string; child: Chi
 
       {err && <p className="msg error">{err}</p>}
       <form onSubmit={send} className="inline" style={{ marginTop: 10 }}>
-        <input placeholder="Écrire un message…" value={body} maxLength={2000}
+        <input placeholder={t("views.messages.placeholder")} value={body} maxLength={2000}
           onChange={(e) => setBody(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-        <button type="submit" disabled={busy || !body.trim()}>{busy ? "…" : "Envoyer"}</button>
+        <button type="submit" disabled={busy || !body.trim()}>{busy ? t("common.busy") : t("views.messages.send")}</button>
       </form>
     </div>
   );

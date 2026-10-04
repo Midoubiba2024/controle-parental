@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { errorMessage, labelMap, t } from "../i18n";
 import type {
   Device, Geofence, GeofenceEvent, LocationFix, LocationSettings,
   SafetyAlert, SosEvent,
@@ -75,7 +76,7 @@ export function useLocation(childId: string | null): LocationData {
       if (!active) return;   // sélection changée → on jette ce résultat (vie privée)
 
       // location_settings : une erreur réseau ne doit pas écraser un réglage connu.
-      if (se.error) setError(se.error.message); else setSettings((se.data as LocationSettings) ?? null);
+      if (se.error) setError(errorMessage(se.error)); else setSettings((se.data as LocationSettings) ?? null);
       if (!fx.error) setFixes(fx.data as LocationFix[]);
       if (!gf.error) setGeofences(gf.data as Geofence[]);
       if (!ev.error) setEvents(ev.data as GeofenceEvent[]);
@@ -144,7 +145,7 @@ export async function saveLocationSettings(
   const { error } = await supabase.from("location_settings").upsert(
     { family_id: familyId, child_id: childId, ...patch },
     { onConflict: "child_id" });
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 export interface GeofenceInput {
@@ -173,12 +174,12 @@ export async function saveGeofence(
     notify_exit: g.notify_exit ?? false,
   };
   const { error } = await supabase.from("geofences").upsert(row);
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 export async function deleteGeofence(id: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("geofences").delete().eq("id", id);
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 /** Demande un check-in de position ponctuel (D2) via une commande 'locate'. */
@@ -189,7 +190,7 @@ export async function requestLocate(
     family_id: familyId, child_id: childId, device_id: deviceId,
     type: "locate", payload: {},
   });
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 /** Accuse réception d'un SOS (« aide en route », E6). */
@@ -198,7 +199,7 @@ export async function ackSos(sosId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("sos_events")
     .update({ status: "acked", acked_at: new Date().toISOString(), acked_by: u.user?.id ?? null })
     .eq("id", sosId);
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 /** Clôture un épisode SOS (côté parent). */
@@ -206,7 +207,7 @@ export async function resolveSos(sosId: string): Promise<{ error: string | null 
   const { error } = await supabase.from("sos_events")
     .update({ status: "resolved", ended_at: new Date().toISOString() })
     .eq("id", sosId);
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 /** Marque une alerte de sécurité comme vue. */
@@ -215,24 +216,19 @@ export async function acknowledgeAlert(alertId: string): Promise<{ error: string
   const { error } = await supabase.from("safety_alerts")
     .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: u.user?.id ?? null })
     .eq("id", alertId);
-  return { error: error?.message ?? null };
+  return { error: error ? errorMessage(error) : null };
 }
 
 /* ----------------------------- Helpers ---------------------------------- */
 
-export const GEOFENCE_TYPE_LABEL: Record<Geofence["type"], string> = {
-  home: "Maison", school: "École", custom: "Lieu",
-};
+export const GEOFENCE_TYPE_LABEL: Readonly<Record<Geofence["type"], string>> = labelMap(
+  ["home", "school", "custom"], (k) => t(`enums.geofenceType.${k}`));
 
-export const GEOFENCE_TRANSITION_LABEL: Record<GeofenceEvent["transition"], string> = {
-  enter: "Arrivée", exit: "Départ", dwell: "Présence",
-};
+export const GEOFENCE_TRANSITION_LABEL: Readonly<Record<GeofenceEvent["transition"], string>> = labelMap(
+  ["enter", "exit", "dwell"], (k) => t(`enums.geofenceTransition.${k}`));
 
-export const LOCATION_MODE_LABEL: Record<LocationSettings["mode"], string> = {
-  off: "Désactivé",
-  on_demand: "À la demande (check-in)",
-  periodic: "Périodique (suivi de fond)",
-};
+export const LOCATION_MODE_LABEL: Readonly<Record<LocationSettings["mode"], string>> = labelMap(
+  ["off", "on_demand", "periodic"], (k) => t(`enums.locationMode.${k}`));
 
 /** Marqueur d'un épisode SOS actif (non clos) dans la liste. */
 export function activeSos(sos: SosEvent[]): SosEvent | null {

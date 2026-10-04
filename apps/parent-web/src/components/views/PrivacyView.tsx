@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { errorMessage, Trans, useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import type { Child, Family } from "../../lib/types";
 
@@ -13,21 +14,30 @@ import type { Child, Family } from "../../lib/types";
    ============================================================================= */
 
 // Durées de conservation par type (miroir de app.run_data_retention / docs/12).
-const RETENTION: { label: string; days: string }[] = [
-  { label: "Positions (localisation)", days: "réglable par enfant — défaut 30 j" },
-  { label: "Journal des domaines (filtrage)", days: "réglable par enfant — défaut 30 j" },
-  { label: "État de l'appareil (batterie/stockage)", days: "30 j" },
-  { label: "Métadonnées d'appels/SMS", days: "90 j" },
-  { label: "Transitions de zones", days: "90 j" },
-  { label: "Signaux de sécurité (ado, on-device)", days: "90 j" },
-  { label: "Alertes (batterie faible…)", days: "90 j" },
-  { label: "Temps d'écran (agrégats quotidiens)", days: "180 j" },
-  { label: "Bonus de temps accordés", days: "180 j" },
-  { label: "Commandes", days: "30 j" },
-  { label: "Messagerie interne", days: "365 j" },
-  { label: "Épisodes SOS", days: "365 j" },
-  { label: "Journal d'audit (traçabilité)", days: "730 j" },
+// Libellés : views.privacy.retention.rows.<key>. `days` null = réglable par enfant.
+const RETENTION: { key: RetentionKey; days: number | null }[] = [
+  { key: "locations", days: null },
+  { key: "domainLog", days: null },
+  { key: "deviceState", days: 30 },
+  { key: "callSmsMetadata", days: 90 },
+  { key: "zoneTransitions", days: 90 },
+  { key: "safetySignals", days: 90 },
+  { key: "alerts", days: 90 },
+  { key: "screenTime", days: 180 },
+  { key: "timeBonuses", days: 180 },
+  { key: "commands", days: 30 },
+  { key: "messaging", days: 365 },
+  { key: "sosEpisodes", days: 365 },
+  { key: "auditLog", days: 730 },
 ];
+type RetentionKey =
+  | "locations" | "domainLog" | "deviceState" | "callSmsMetadata" | "zoneTransitions"
+  | "safetySignals" | "alerts" | "screenTime" | "timeBonuses" | "commands"
+  | "messaging" | "sosEpisodes" | "auditLog";
+
+/** Balise <muted> des titres de carte : précision entre parenthèses, atténuée. */
+const MUTED_TAG = { muted: (c: ReactNode) => <span className="muted small">{c}</span> };
+const B_TAG = { b: (c: ReactNode) => <b>{c}</b> };
 
 export function PrivacyView({ family, child, onChanged }: {
   family: Family;
@@ -51,6 +61,7 @@ export function PrivacyView({ family, child, onChanged }: {
 
 /* ------------------------------ Export (droit d'accès) ------------------ */
 function ExportCard({ child }: { child: Child }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -58,7 +69,7 @@ function ExportCard({ child }: { child: Child }) {
     setBusy(true); setMsg(null);
     const { data, error } = await supabase.rpc("export_child_data", { p_child_id: child.id });
     setBusy(false);
-    if (error) { setMsg(error.message); return; }
+    if (error) { setMsg(errorMessage(error)); return; }
     // Téléchargement côté navigateur (aucune donnée ne transite ailleurs).
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -68,18 +79,16 @@ function ExportCard({ child }: { child: Child }) {
     a.download = `export-${slug(child.display_name)}-${stamp}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    setMsg("Export téléchargé.");
+    setMsg(t("views.privacy.export.done"));
   }
 
   return (
     <div className="card">
-      <h2>Exporter les données de {child.display_name} <span className="muted small">(droit d'accès)</span></h2>
+      <h2><Trans k="views.privacy.export.title" params={{ name: child.display_name }} tags={MUTED_TAG} /></h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Télécharge au format JSON toutes les données enregistrées pour cet enfant
-        (métadonnées et agrégats — jamais le contenu de tiers). L'export est journalisé
-        dans l'audit, visible de l'enfant.
+        {t("views.privacy.export.intro")}
       </p>
-      <button disabled={busy} onClick={exportJson}>{busy ? "Préparation…" : "⬇ Télécharger l'export JSON"}</button>
+      <button disabled={busy} onClick={exportJson}>{busy ? t("views.privacy.export.preparing") : t("views.privacy.export.button")}</button>
       {msg && <p className="msg" style={{ marginTop: 10 }}>{msg}</p>}
     </div>
   );
@@ -87,18 +96,25 @@ function ExportCard({ child }: { child: Child }) {
 
 /* ------------------------------ Politique de rétention ------------------ */
 function RetentionCard() {
+  const { t } = useI18n();
   return (
     <div className="card">
-      <h2>Conservation des données <span className="muted small">(purge automatique)</span></h2>
+      <h2><Trans k="views.privacy.retention.title" tags={MUTED_TAG} /></h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Les données anciennes sont supprimées automatiquement selon leur type
-        (minimisation RGPD). Détail et justification : <code>docs/12-RETENTION-RGPD.md</code>.
+        <Trans k="views.privacy.retention.intro" tags={{ code: (c) => <code>{c}</code> }} />
       </p>
       <table className="tbl">
-        <thead><tr><th>Donnée</th><th>Conservation</th></tr></thead>
+        <thead><tr><th>{t("views.privacy.retention.colData")}</th><th>{t("views.privacy.retention.colRetention")}</th></tr></thead>
         <tbody>
           {RETENTION.map((r) => (
-            <tr key={r.label}><td>{r.label}</td><td className="muted">{r.days}</td></tr>
+            <tr key={r.key}>
+              <td>{t(`views.privacy.retention.rows.${r.key}`)}</td>
+              <td className="muted">
+                {r.days == null
+                  ? t("views.privacy.retention.perChildDefault", { days: 30 })
+                  : t("views.privacy.retention.days", { days: r.days })}
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
@@ -108,6 +124,7 @@ function RetentionCard() {
 
 /* ------------------------------ Suppression enfant ---------------------- */
 function DeleteChildCard({ child, onChanged }: { child: Child; onChanged: () => void }) {
+  const { t } = useI18n();
   const [step, setStep] = useState<0 | 1>(0);
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -120,36 +137,34 @@ function DeleteChildCard({ child, onChanged }: { child: Child; onChanged: () => 
     setBusy(true); setErr(null);
     const { error } = await supabase.rpc("rgpd_delete_child", { p_child_id: child.id });
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     setStep(0); setConfirmText("");
     onChanged();
   }
 
   return (
     <div className="card danger-zone">
-      <h2>Supprimer les données de {child.display_name} <span className="muted small">(droit à l'effacement)</span></h2>
+      <h2><Trans k="views.privacy.deleteChild.title" params={{ name: child.display_name }} tags={MUTED_TAG} /></h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Efface <b>définitivement</b> cet enfant et toutes ses données (positions,
-        temps d'écran, messages, signaux…). Les autres membres de la famille ne sont
-        pas affectés. <b>Action irréversible.</b>
+        <Trans k="views.privacy.deleteChild.intro" tags={B_TAG} />
       </p>
       {step === 0 ? (
         <button className="btn-danger" onClick={() => { setStep(1); setErr(null); }}>
-          Supprimer cet enfant…
+          {t("views.privacy.deleteChild.button")}
         </button>
       ) : (
         <div className="confirm-box">
           <p className="small" style={{ marginTop: 0 }}>
-            Confirmation : saisissez le prénom <b>{child.display_name}</b> pour confirmer.
+            <Trans k="views.privacy.deleteChild.confirmPrompt" params={{ name: child.display_name }} tags={B_TAG} />
           </p>
           <input value={confirmText} placeholder={child.display_name}
             onChange={(e) => setConfirmText(e.target.value)} />
           <div className="row" style={{ gap: 8, marginTop: 10 }}>
             <button className="btn-danger" disabled={!canConfirm || busy} onClick={doDelete}>
-              {busy ? "Suppression…" : "Confirmer la suppression définitive"}
+              {busy ? t("views.privacy.deleting") : t("views.privacy.deleteChild.confirmButton")}
             </button>
             <button className="ghost" disabled={busy} onClick={() => { setStep(0); setConfirmText(""); setErr(null); }}>
-              Annuler
+              {t("views.privacy.cancel")}
             </button>
           </div>
         </div>
@@ -161,6 +176,7 @@ function DeleteChildCard({ child, onChanged }: { child: Child; onChanged: () => 
 
 /* ------------------------------ Suppression famille --------------------- */
 function DeleteFamilyCard({ family, onChanged }: { family: Family; onChanged: () => void }) {
+  const { t } = useI18n();
   const [step, setStep] = useState<0 | 1>(0);
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -173,36 +189,34 @@ function DeleteFamilyCard({ family, onChanged }: { family: Family; onChanged: ()
     setBusy(true); setErr(null);
     const { error } = await supabase.rpc("rgpd_delete_family", { p_family_id: family.id });
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     setStep(0); setConfirmText("");
     onChanged();
   }
 
   return (
     <div className="card danger-zone">
-      <h2>Supprimer toute la famille « {family.name} » <span className="muted small">(réservé au propriétaire)</span></h2>
+      <h2><Trans k="views.privacy.deleteFamily.title" params={{ name: family.name }} tags={MUTED_TAG} /></h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Efface <b>définitivement</b> la famille entière : tous les enfants, appareils,
-        règles et données. Seul le <b>propriétaire</b> du foyer peut le faire.
-        <b> Action irréversible.</b>
+        <Trans k="views.privacy.deleteFamily.intro" tags={B_TAG} />
       </p>
       {step === 0 ? (
         <button className="btn-danger" onClick={() => { setStep(1); setErr(null); }}>
-          Supprimer toute la famille…
+          {t("views.privacy.deleteFamily.button")}
         </button>
       ) : (
         <div className="confirm-box">
           <p className="small" style={{ marginTop: 0 }}>
-            Confirmation : saisissez le nom du foyer <b>{family.name}</b> pour confirmer.
+            <Trans k="views.privacy.deleteFamily.confirmPrompt" params={{ name: family.name }} tags={B_TAG} />
           </p>
           <input value={confirmText} placeholder={family.name}
             onChange={(e) => setConfirmText(e.target.value)} />
           <div className="row" style={{ gap: 8, marginTop: 10 }}>
             <button className="btn-danger" disabled={!canConfirm || busy} onClick={doDelete}>
-              {busy ? "Suppression…" : "Confirmer la suppression de la famille"}
+              {busy ? t("views.privacy.deleting") : t("views.privacy.deleteFamily.confirmButton")}
             </button>
             <button className="ghost" disabled={busy} onClick={() => { setStep(0); setConfirmText(""); setErr(null); }}>
-              Annuler
+              {t("views.privacy.cancel")}
             </button>
           </div>
         </div>

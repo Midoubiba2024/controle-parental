@@ -5,10 +5,12 @@ import {
   appLabelOf, categoryColor, categoryLabel, fmtBytes, fmtDayLabel,
   fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
+import { useI18n } from "../../i18n";
 import { Bars, Donut, HBars, Legend, type Slice } from "../charts/ChartKit";
 import { EmptyState, Meter, Tile } from "../Ui";
 
 export function OverviewView({ obs }: { obs: ObservationData }) {
+  const { t } = useI18n();
   const { usage, inventory, status, anchorDay } = obs;
   const today = anchorDay;                 // jour de référence issu des données
   const todayMs = totalForDay(usage, today);
@@ -37,49 +39,50 @@ export function OverviewView({ obs }: { obs: ObservationData }) {
   return (
     <div className="grid" style={{ gap: 18 }}>
       <div className="grid cols-4">
-        <Tile label="Temps d'écran aujourd'hui" value={fmtDuration(todayMs)} icon="⏱"
+        <Tile label={t("views.overview.tiles.screenTimeToday")} value={fmtDuration(todayMs)} icon="⏱"
           iconBg="color-mix(in srgb, var(--primary) 18%, transparent)" />
-        <Tile label="Applications installées" value={activeApps || "—"} icon="📱"
+        <Tile label={t("views.overview.tiles.installedApps")} value={activeApps || t("common.none")} icon="📱"
           iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)" />
-        <Tile label="Batterie" value={st?.battery_level != null ? `${st.battery_level}%` : "—"}
+        <Tile label={t("views.overview.tiles.battery")}
+          value={st?.battery_level != null ? t("views.overview.tiles.batteryValue", { level: st.battery_level }) : t("common.none")}
           icon={st?.is_charging ? "⚡" : "🔋"}
           iconBg="color-mix(in srgb, var(--series-4) 20%, transparent)" />
-        <Tile label="Stockage libre" value={fmtBytes(st?.storage_free_bytes ?? null)} icon="💾"
+        <Tile label={t("views.overview.tiles.freeStorage")} value={fmtBytes(st?.storage_free_bytes ?? null)} icon="💾"
           iconBg="color-mix(in srgb, var(--series-7) 18%, transparent)" />
       </div>
 
       <div className="grid dash">
         <div className="card">
-          <h2>7 derniers jours</h2>
-          {totals.some((t) => t > 0)
+          <h2>{t("views.overview.last7Days")}</h2>
+          {totals.some((v) => v > 0)
             ? <Bars data={barData} fmt={fmtDuration} highlightKey={today} />
-            : <EmptyState icon="📊" title="Pas encore de données de temps d'écran"
-                hint="Elles apparaîtront après l'activation de l'accès à l'usage sur l'appareil." />}
+            : <EmptyState icon="📊" title={t("views.overview.noScreenTimeTitle")}
+                hint={t("views.overview.noScreenTimeHint")} />}
         </div>
 
         <div className="card">
-          <h2>Aujourd'hui par catégorie</h2>
+          <h2>{t("views.overview.todayByCategory")}</h2>
           {catSlices.length > 0 ? (
             <>
               <Donut data={catSlices} fmt={fmtDuration}
-                center={{ primary: fmtDurationShort(todayMs), secondary: "aujourd'hui" }} />
+                center={{ primary: fmtDurationShort(todayMs), secondary: t("views.overview.donutToday") }} />
               <Legend items={catSlices.map((s) => ({ label: s.label, color: s.color }))} />
             </>
-          ) : <EmptyState icon="🍩" title="Aucune activité aujourd'hui" />}
+          ) : <EmptyState icon="🍩" title={t("views.overview.noActivityToday")} />}
         </div>
       </div>
 
       <div className="card">
-        <h2>Applications les plus utilisées aujourd'hui</h2>
+        <h2>{t("views.overview.topAppsToday")}</h2>
         <HBars data={appSlices} fmt={fmtDuration} />
       </div>
 
       {st && storageUsed != null && st.storage_total_bytes && (
         <div className="card">
-          <h2>Stockage de l'appareil</h2>
+          <h2>{t("views.overview.storage.title")}</h2>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <span className="muted small">{fmtBytes(storageUsed)} utilisés sur {fmtBytes(st.storage_total_bytes)}</span>
-            <span className="muted small">{fmtBytes(st.storage_free_bytes)} libres</span>
+            <span className="muted small">{t("views.overview.storage.used", { used: fmtBytes(storageUsed), total: fmtBytes(st.storage_total_bytes) })}</span>
+            <span className="muted small">{t("views.overview.storage.free", { free: fmtBytes(st.storage_free_bytes) })}</span>
           </div>
           <div style={{ marginTop: 8 }}>
             <Meter value={storageUsed} max={st.storage_total_bytes} color="var(--series-7)" />

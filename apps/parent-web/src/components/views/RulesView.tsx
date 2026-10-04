@@ -6,17 +6,30 @@ import { useRules, AGE_PRESETS, DOW_LABELS, DOW_ORDER, SCHEDULE_KIND_LABEL,
 import { byApp, byCategory, type ObservationData } from "../../lib/observation";
 import { appInitials, appLabelOf, categoryColor, categoryLabel, fmtDuration, shiftDay } from "../../lib/format";
 import { Meter, EmptyState } from "../Ui";
+import { errorMessage, Trans, useI18n } from "../../i18n";
 import type {
-  AccessPolicy, AgeProfile, Child, RuleAction, Schedule, ScheduleKind,
+  AccessPolicy, AgeProfile, Child, CommandStatus, RuleAction, Schedule, ScheduleKind,
 } from "../../lib/types";
 
 const CATEGORIES = ["social", "game", "video", "audio", "productivity", "maps", "news", "image"];
+
+/** Équivalent de toLocaleString() (date + heure avec secondes) dans la langue active. */
+const DATE_TIME_FULL: Intl.DateTimeFormatOptions = {
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+};
+const COMMAND_STATUSES: readonly CommandStatus[] = ["pending", "delivered", "acked", "expired", "cancelled"];
+
+/** Erreur Supabase → message traduit (jamais le message brut). */
+function toResult(error: unknown): { error: string | null } {
+  return { error: error ? errorMessage(error) : null };
+}
 
 export function RulesView({ familyId, child, obs }: {
   familyId: string;
   child: Child;
   obs: ObservationData;
 }) {
+  const { t } = useI18n();
   const childId = child.id;
   const r = useRules(familyId, childId);
   const [busy, setBusy] = useState(false);
@@ -32,7 +45,7 @@ export function RulesView({ familyId, child, obs }: {
     () => [...usageTodayByPkg.values()].reduce((s, v) => s + v, 0), [usageTodayByPkg]);
   const usageTodayByCat = useMemo(() => byCategory(obs.usage, today, today), [obs.usage, today]);
 
-  if (r.loading) return <p className="muted">Chargement des règles…</p>;
+  if (r.loading) return <p className="muted">{t("views.rules.loading")}</p>;
 
   async function run(fn: () => Promise<{ error?: string | null } | void>) {
     setBusy(true); setMsg(null);
@@ -65,6 +78,7 @@ export function RulesView({ familyId, child, obs }: {
 function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit<CardBase, "childId"> & {
   child: Child; usageTodayTotal: number;
 }) {
+  const { t } = useI18n();
   const childId = child.id;
   const policy = r.policy;
   const [global, setGlobal] = useState<string>(policy?.daily_limit_minutes?.toString() ?? "");
@@ -78,18 +92,18 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
     const base = toPolicyUpsert(policy, familyId, childId);
     const { error } = await supabase.from("access_policies")
       .upsert({ ...base, ...patch }, { onConflict: "child_id" });
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
   async function setWeekday(d: number, minutes: number | null) {
     if (minutes == null) {
       const { error } = await supabase.from("screen_time_limits")
         .delete().eq("child_id", childId).eq("day_of_week", d);
-      return { error: error?.message ?? null };
+      return toResult(error);
     }
     const { error } = await supabase.from("screen_time_limits").upsert(
       { family_id: familyId, child_id: childId, day_of_week: d, limit_minutes: minutes },
       { onConflict: "child_id,day_of_week" });
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
   async function applyPreset(profile: AgeProfile) {
     const p = AGE_PRESETS[profile];
@@ -109,19 +123,21 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
 
   return (
     <div className="card">
-      <h2>Temps d'écran</h2>
+      <h2>{t("views.rules.timeLimits.title")}</h2>
 
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-        <span className="muted small">Aujourd'hui</span>
+        <span className="muted small">{t("views.rules.timeLimits.today")}</span>
         <span style={{ fontWeight: 700 }}>
-          {fmtDuration(usageTodayTotal)}{effLimit != null && ` / ${effLimit} min`}
+          {effLimit != null
+            ? t("views.rules.timeLimits.usageOfLimit", { used: fmtDuration(usageTodayTotal), limit: effLimit })
+            : fmtDuration(usageTodayTotal)}
         </span>
       </div>
       <Meter value={usageTodayTotal / 60000} max={effLimit ?? Math.max(1, usageTodayTotal / 60000)}
         color={effLimit != null && usageTodayTotal / 60000 > effLimit ? "var(--danger)" : undefined} />
-      {bonusToday > 0 && <p className="muted small" style={{ marginTop: 6 }}>+ {bonusToday} min de bonus aujourd'hui</p>}
+      {bonusToday > 0 && <p className="muted small" style={{ marginTop: 6 }}>{t("views.rules.timeLimits.bonusToday", { minutes: bonusToday })}</p>}
 
-      <h3 style={{ marginTop: 18 }}>Préréglages par âge</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.presetsTitle")}</h3>
       <div className="row" style={{ gap: 8 }}>
         {(Object.keys(AGE_PRESETS) as AgeProfile[]).map((k) => (
           <button key={k} className="ghost" disabled={busy}
@@ -129,21 +145,21 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
         ))}
       </div>
       <p className="muted small" style={{ marginTop: 6 }}>
-        Repères d'aide à la décision — ajustables ci-dessous à tout moment.
+        {t("views.rules.timeLimits.presetsHint")}
       </p>
 
-      <h3 style={{ marginTop: 18 }}>Limite quotidienne (globale)</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.dailyLimitTitle")}</h3>
       <div className="inline">
-        <input type="number" min={0} placeholder="aucune" value={global} style={{ width: 110 }}
+        <input type="number" min={0} placeholder={t("views.rules.timeLimits.dailyLimitPlaceholder")} value={global} style={{ width: 110 }}
           onChange={(e) => setGlobal(e.target.value)} />
-        <span className="muted small">minutes / jour</span>
+        <span className="muted small">{t("views.rules.timeLimits.minutesPerDay")}</span>
         <button disabled={busy} onClick={() => run(() =>
           savePolicy({ daily_limit_minutes: global.trim() === "" ? null : Math.max(0, parseInt(global, 10) || 0) }))}>
-          Enregistrer
+          {t("views.rules.timeLimits.save")}
         </button>
       </div>
 
-      <h3 style={{ marginTop: 18 }}>Par jour de semaine (surcharge)</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.weekdayTitle")}</h3>
       <div className="row" style={{ gap: 6 }}>
         {DOW_ORDER.map((d) => (
           <WeekdayLimit key={d} label={DOW_LABELS[d]} value={limitFor(d)} busy={busy}
@@ -151,19 +167,19 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
         ))}
       </div>
 
-      <h3 style={{ marginTop: 18 }}>Délai de grâce « encore 1 min »</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.rules.timeLimits.graceTitle")}</h3>
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.grace_enabled ?? true}
           onChange={(e) => run(() => savePolicy({ grace_enabled: e.target.checked }))} />
-        <span>Autoriser une courte prolongation à l'atteinte d'un quota</span>
+        <span>{t("views.rules.timeLimits.graceToggle")}</span>
       </label>
       {(policy?.grace_enabled ?? true) && (
         <div className="inline" style={{ marginTop: 8 }}>
-          <label className="fld">Durée (min)
+          <label className="fld">{t("views.rules.timeLimits.graceDuration")}
             <input type="number" min={0} max={15} defaultValue={policy?.grace_minutes ?? 1} style={{ width: 80 }}
               onBlur={(e) => run(() => savePolicy({ grace_minutes: Math.min(15, Math.max(0, parseInt(e.target.value, 10) || 0)) }))} />
           </label>
-          <label className="fld">Fois / jour
+          <label className="fld">{t("views.rules.timeLimits.graceUsesPerDay")}
             <input type="number" min={0} defaultValue={policy?.grace_uses_per_day ?? 1} style={{ width: 80 }}
               onBlur={(e) => run(() => savePolicy({ grace_uses_per_day: Math.max(0, parseInt(e.target.value, 10) || 0) }))} />
           </label>
@@ -176,11 +192,12 @@ function TimeLimitsCard({ r, familyId, child, busy, run, usageTodayTotal }: Omit
 function WeekdayLimit({ label, value, busy, onSave }: {
   label: string; value: number | null; busy: boolean; onSave: (m: number | null) => void;
 }) {
+  const { t } = useI18n();
   const [v, setV] = useState(value?.toString() ?? "");
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
       <span className="muted small">{label}</span>
-      <input type="number" min={0} value={v} placeholder="—" disabled={busy}
+      <input type="number" min={0} value={v} placeholder={t("common.none")} disabled={busy}
         style={{ width: 58, textAlign: "center", padding: "6px 4px" }}
         onChange={(e) => setV(e.target.value)}
         onBlur={() => onSave(v.trim() === "" ? null : Math.max(0, parseInt(v, 10) || 0))} />
@@ -193,6 +210,7 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
   familyId: string; childId: string; devices: ObservationData["devices"]; busy: boolean;
   run: CardBase["run"]; commands: ReturnType<typeof useRules>["commands"];
 }) {
+  const { t, fmt } = useI18n();
   const active = devices.filter((d) => !d.revoked_at);
   const [deviceId, setDeviceId] = useState<string>(active[0]?.id ?? "");
   const [lockMsg, setLockMsg] = useState("");
@@ -204,12 +222,13 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
 
   return (
     <div className="card">
-      <h2>Pause & verrouillage</h2>
+      <h2>{t("views.rules.instantControl.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Action <b>visible</b> par l'enfant, réversible. L'appel d'urgence (112) n'est jamais bloqué.
+        <Trans k="views.rules.instantControl.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {active.length === 0 ? (
-        <EmptyState icon="📱" title="Aucun appareil appairé" hint="Appairez un appareil dans l'onglet Famille." />
+        <EmptyState icon="📱" title={t("views.rules.instantControl.noDeviceTitle")}
+          hint={t("views.rules.instantControl.noDeviceHint")} />
       ) : (
         <>
           {active.length > 1 && (
@@ -218,28 +237,30 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
             </select>
           )}
           <div className="row" style={{ gap: 8 }}>
-            <button disabled={busy} onClick={() => cmd("pause")}>⏸ Pause</button>
-            <button className="ghost" disabled={busy} onClick={() => cmd("resume")}>▶ Reprendre</button>
-            <button disabled={busy} onClick={() => cmd("lock_now")}>🔒 Verrouiller</button>
-            <button className="ghost" disabled={busy} onClick={() => cmd("ring")}>🔔 Faire sonner</button>
+            <button disabled={busy} onClick={() => cmd("pause")}>{t("views.rules.instantControl.pause")}</button>
+            <button className="ghost" disabled={busy} onClick={() => cmd("resume")}>{t("views.rules.instantControl.resume")}</button>
+            <button disabled={busy} onClick={() => cmd("lock_now")}>{t("views.rules.instantControl.lock")}</button>
+            <button className="ghost" disabled={busy} onClick={() => cmd("ring")}>{t("views.rules.instantControl.ring")}</button>
           </div>
           <div className="inline" style={{ marginTop: 10 }}>
-            <input placeholder="Message sur l'écran (ex. « À table ! »)" value={lockMsg}
+            <input placeholder={t("views.rules.instantControl.messagePlaceholder")} value={lockMsg}
               onChange={(e) => setLockMsg(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
             <button className="ghost" disabled={busy || !lockMsg.trim()}
-              onClick={() => { cmd("message", { message: lockMsg.trim() }); setLockMsg(""); }}>Envoyer</button>
+              onClick={() => { cmd("message", { message: lockMsg.trim() }); setLockMsg(""); }}>{t("views.rules.instantControl.send")}</button>
           </div>
         </>
       )}
       {commands.length > 0 && (
         <>
-          <h3 style={{ marginTop: 16 }}>Dernières commandes</h3>
+          <h3 style={{ marginTop: 16 }}>{t("views.rules.instantControl.recentCommands")}</h3>
           <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: 160 }}>
             {commands.slice(0, 8).map((c) => (
               <li key={c.id} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: ".86rem" }}>
                 <code>{c.type}</code>
-                <span className="badge" style={{ marginLeft: 8 }}>{c.status}</span>
-                <span className="muted small"> · {new Date(c.created_at).toLocaleString("fr-FR")}</span>
+                <span className="badge" style={{ marginInlineStart: 8 }}>
+                  {COMMAND_STATUSES.includes(c.status) ? t(`views.rules.instantControl.commandStatus.${c.status}`) : c.status}
+                </span>
+                <span className="muted small"> · {fmt.date(c.created_at, DATE_TIME_FULL)}</span>
               </li>
             ))}
           </ul>
@@ -251,64 +272,65 @@ function InstantControlCard({ familyId, childId, devices, busy, run, commands }:
 
 /* ------------------------- Vacances & verrous système -------------------- */
 function GuardsCard({ r, familyId, childId, busy, run }: CardBase) {
+  const { t } = useI18n();
   const policy = r.policy;
   async function savePolicy(patch: Partial<AccessPolicy>) {
     const base = toPolicyUpsert(policy, familyId, childId);
     const { error } = await supabase.from("access_policies")
       .upsert({ ...base, ...patch }, { onConflict: "child_id" });
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
   const vac = isVacationActive(policy);
   return (
     <div className="card">
-      <h2>Mode vacances & verrous</h2>
+      <h2>{t("views.rules.guards.title")}</h2>
 
-      <h3>Mode vacances / pause de planning</h3>
+      <h3>{t("views.rules.guards.vacationTitle")}</h3>
       <p className="muted small" style={{ marginTop: -6 }}>
-        Suspend temporairement les plannings (horaires, Downtime, École). Reprise automatique à la fin.
-        {vac && <b style={{ color: "var(--warning)" }}> · actif</b>}
+        {t("views.rules.guards.vacationHint")}
+        {vac && <b style={{ color: "var(--warning)" }}>{" · "}{t("views.rules.guards.vacationActive")}</b>}
       </p>
       <div className="inline">
-        <label className="fld">Du
+        <label className="fld">{t("views.rules.guards.from")}
           <input type="date" defaultValue={policy?.vacation_from ?? ""}
             onBlur={(e) => run(() => savePolicy({ vacation_from: e.target.value || null }))} />
         </label>
-        <label className="fld">Au
+        <label className="fld">{t("views.rules.guards.until")}
           <input type="date" defaultValue={policy?.vacation_until ?? ""}
             onBlur={(e) => run(() => savePolicy({ vacation_until: e.target.value || null }))} />
         </label>
         {(policy?.vacation_from || policy?.vacation_until) && (
           <button className="link" disabled={busy}
-            onClick={() => run(() => savePolicy({ vacation_from: null, vacation_until: null }))}>Effacer</button>
+            onClick={() => run(() => savePolicy({ vacation_from: null, vacation_until: null }))}>{t("views.rules.guards.clear")}</button>
         )}
       </div>
 
-      <h3 style={{ marginTop: 16 }}>Validation d'installation</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.rules.guards.installTitle")}</h3>
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.block_new_apps ?? false}
           onChange={(e) => run(() => savePolicy({ block_new_apps: e.target.checked }))} />
-        <span>Bloquer toute <b>nouvelle application</b> jusqu'à validation du parent</span>
+        <span><Trans k="views.rules.guards.blockNewApps" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
-      <h3 style={{ marginTop: 16 }}>Verrouillage des réglages système</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.rules.guards.systemLockTitle")}</h3>
       <label className="row" style={{ gap: 8 }}>
         <input type="checkbox" checked={policy?.lock_system_settings ?? false}
           onChange={(e) => run(() => savePolicy({ lock_system_settings: e.target.checked }))} />
-        <span>Empêcher la modification de l'heure, des comptes et des options développeur</span>
+        <span>{t("views.rules.guards.systemLockToggle")}</span>
       </label>
-      <p className="muted small">Effectif en mode <b>Renforcé</b> (device owner).</p>
+      <p className="muted small"><Trans k="views.rules.guards.systemLockHint" tags={{ b: (c) => <b>{c}</b> }} /></p>
 
-      <h3 style={{ marginTop: 16 }}>Classification d'âge</h3>
+      <h3 style={{ marginTop: 16 }}>{t("views.rules.guards.ratingTitle")}</h3>
       <div className="inline">
         <select defaultValue={policy?.max_content_rating ?? ""}
           onChange={(e) => run(() => savePolicy({ max_content_rating: e.target.value || null }))}>
-          <option value="">Aucune restriction</option>
+          <option value="">{t("views.rules.guards.ratingNone")}</option>
           <option value="PEGI 3">PEGI 3</option>
           <option value="PEGI 7">PEGI 7</option>
           <option value="PEGI 12">PEGI 12</option>
           <option value="PEGI 16">PEGI 16</option>
         </select>
-        <span className="muted small">niveau maximal autorisé</span>
+        <span className="muted small">{t("views.rules.guards.ratingHint")}</span>
       </div>
     </div>
   );
@@ -318,6 +340,7 @@ function GuardsCard({ r, familyId, childId, busy, run }: CardBase) {
 function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: CardBase & {
   usageByCat: Map<string, number>;
 }) {
+  const { t } = useI18n();
   const ruleFor = (cat: string) => r.appRules.find((x) => x.target_type === "category" && x.target_value === cat) ?? null;
 
   async function setCat(cat: string, action: RuleAction | null, limit?: number | null) {
@@ -325,20 +348,23 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
       const existing = ruleFor(cat);
       if (!existing) return { error: null };
       const { error } = await supabase.from("app_rules").delete().eq("id", existing.id);
-      return { error: error?.message ?? null };
+      return toResult(error);
     }
     const { error } = await supabase.from("app_rules").upsert(
       { family_id: familyId, child_id: childId, target_type: "category", target_value: cat,
         action, daily_limit_minutes: action === "limit" ? (limit ?? 30) : null },
       { onConflict: "child_id,target_type,target_value" });
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
 
   return (
     <div className="card">
-      <h2>Règles par catégorie</h2>
+      <h2>{t("views.rules.categoryRules.title")}</h2>
       <table className="tbl">
-        <thead><tr><th>Catégorie</th><th>Aujourd'hui</th><th>Règle</th><th>Quota</th></tr></thead>
+        <thead><tr>
+          <th>{t("views.rules.categoryRules.colCategory")}</th><th>{t("views.rules.categoryRules.colToday")}</th>
+          <th>{t("views.rules.categoryRules.colRule")}</th><th>{t("views.rules.categoryRules.colQuota")}</th>
+        </tr></thead>
         <tbody>
           {CATEGORIES.map((cat) => {
             const rule = ruleFor(cat);
@@ -346,14 +372,14 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
             return (
               <tr key={cat}>
                 <td><span className="badge" style={{ color: categoryColor(cat) }}>{categoryLabel(cat)}</span></td>
-                <td className="muted small">{ms > 0 ? fmtDuration(ms) : "—"}</td>
+                <td className="muted small">{ms > 0 ? fmtDuration(ms) : t("common.none")}</td>
                 <td>
                   <select value={rule?.action ?? ""} disabled={busy}
                     onChange={(e) => run(() => setCat(cat, (e.target.value || null) as RuleAction | null, rule?.daily_limit_minutes))}>
-                    <option value="">Libre</option>
-                    <option value="limit">Limiter</option>
-                    <option value="block">Bloquer</option>
-                    <option value="always_allow">Toujours autoriser</option>
+                    <option value="">{t("views.rules.ruleAction.free")}</option>
+                    <option value="limit">{t("views.rules.ruleAction.limit")}</option>
+                    <option value="block">{t("views.rules.ruleAction.block")}</option>
+                    <option value="always_allow">{t("views.rules.ruleAction.alwaysAllow")}</option>
                   </select>
                 </td>
                 <td>
@@ -375,6 +401,7 @@ function CategoryRulesCard({ r, familyId, childId, busy, run, usageByCat }: Card
 function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, anchorDay }: CardBase & {
   inventory: ObservationData["inventory"]; usageByPkg: Map<string, number>; anchorDay: string;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [onlyRecent, setOnlyRecent] = useState(false);
   const recentCut = shiftDay(anchorDay, -2); // apps vues pour la 1re fois dans les 3 derniers jours
@@ -395,30 +422,32 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
     if (action == null) {
       if (!existing) return { error: null };
       const { error } = await supabase.from("app_rules").delete().eq("id", existing.id);
-      return { error: error?.message ?? null };
+      return toResult(error);
     }
     const { error } = await supabase.from("app_rules").upsert(
       { family_id: familyId, child_id: childId, target_type: "package", target_value: pkg,
         action, daily_limit_minutes: action === "limit" ? (limit ?? 30) : null },
       { onConflict: "child_id,target_type,target_value" });
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
 
   const newCount = inventory.filter((a) => !a.removed_at && a.first_seen_at && a.first_seen_at.slice(0, 10) >= recentCut).length;
 
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h2>Règles par application</h2>
+      <h2>{t("views.rules.appRules.title")}</h2>
       <div className="inline" style={{ marginBottom: 10 }}>
-        <input placeholder="Rechercher une application…" value={query}
+        <input placeholder={t("views.rules.appRules.searchPlaceholder")} value={query}
           onChange={(e) => setQuery(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
         <label className="row" style={{ gap: 6 }}>
           <input type="checkbox" checked={onlyRecent} onChange={(e) => setOnlyRecent(e.target.checked)} />
-          <span className="small">Nouvelles apps {newCount > 0 && <b>({newCount})</b>}</span>
+          <span className="small">{newCount > 0
+            ? <Trans k="views.rules.appRules.newAppsWithCount" params={{ count: newCount }} tags={{ b: (c) => <b>{c}</b> }} />
+            : t("views.rules.appRules.newApps")}</span>
         </label>
       </div>
-      {apps.length === 0 ? <EmptyState icon="📱" title="Aucune application"
-        hint="L'inventaire remonte depuis l'appareil enfant une fois la supervision active." /> : (
+      {apps.length === 0 ? <EmptyState icon="📱" title={t("views.rules.appRules.emptyTitle")}
+        hint={t("views.rules.appRules.emptyHint")} /> : (
         <div className="scroll">
           {apps.map((a) => {
             const rule = ruleFor(a.package_name);
@@ -432,7 +461,9 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
                   <div className="nm" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {appLabelOf(a.app_label, a.package_name)}
                   </div>
-                  <div className="muted small">{categoryLabel(a.category)}{ms > 0 ? ` · ${fmtDuration(ms)} aujourd'hui` : ""}</div>
+                  <div className="muted small">{ms > 0
+                    ? t("views.rules.appRules.categoryWithUsage", { category: categoryLabel(a.category), duration: fmtDuration(ms) })
+                    : categoryLabel(a.category)}</div>
                 </span>
                 {rule?.action === "limit" && (
                   <input type="number" min={0} defaultValue={rule.daily_limit_minutes ?? 30} style={{ width: 64 }}
@@ -440,11 +471,11 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
                 )}
                 <select value={rule?.action ?? ""} disabled={busy}
                   onChange={(e) => run(() => setApp(a.package_name, (e.target.value || null) as RuleAction | null, rule?.daily_limit_minutes))}>
-                  <option value="">Libre</option>
-                  <option value="limit">Limiter</option>
-                  <option value="block">Bloquer</option>
-                  <option value="allow">Autoriser</option>
-                  <option value="always_allow">Toujours autoriser</option>
+                  <option value="">{t("views.rules.ruleAction.free")}</option>
+                  <option value="limit">{t("views.rules.ruleAction.limit")}</option>
+                  <option value="block">{t("views.rules.ruleAction.block")}</option>
+                  <option value="allow">{t("views.rules.ruleAction.allow")}</option>
+                  <option value="always_allow">{t("views.rules.ruleAction.alwaysAllow")}</option>
                 </select>
               </div>
             );
@@ -457,6 +488,7 @@ function AppRulesCard({ r, familyId, childId, busy, run, inventory, usageByPkg, 
 
 /* ------------------------- Plannings réutilisables ----------------------- */
 function SchedulesCard({ r, familyId, childId, busy, run }: CardBase) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ScheduleKind>("downtime");
 
@@ -467,38 +499,37 @@ function SchedulesCard({ r, familyId, childId, busy, run }: CardBase) {
     const { error } = await supabase.from("schedules")
       .insert({ family_id: familyId, name: name.trim(), kind });
     if (!error) setName("");
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
   async function toggleAssign(scheduleId: string, on: boolean) {
     if (on) {
       const { error } = await supabase.from("child_schedules").upsert(
         { family_id: familyId, child_id: childId, schedule_id: scheduleId, enabled: true },
         { onConflict: "child_id,schedule_id" });
-      return { error: error?.message ?? null };
+      return toResult(error);
     }
     const { error } = await supabase.from("child_schedules")
       .delete().eq("child_id", childId).eq("schedule_id", scheduleId);
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
 
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h2>Plannings <span className="muted small">(réutilisables entre enfants)</span></h2>
+      <h2><Trans k="views.rules.schedules.title" tags={{ note: (c) => <span className="muted small">{c}</span> }} /></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Horaires autorisés/interdits (A4), Downtime/coucher (A5), mode École (A6). Assignez un planning
-        à cet enfant via la case ; les fenêtres horaires s'éditent ci-dessous.
+        {t("views.rules.schedules.intro")}
       </p>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); run(createSchedule); }} style={{ marginBottom: 12 }}>
-        <input placeholder="Nom (ex. Nuit en semaine)" value={name} onChange={(e) => setName(e.target.value)} />
+        <input placeholder={t("views.rules.schedules.namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
         <select value={kind} onChange={(e) => setKind(e.target.value as ScheduleKind)}>
           {(Object.keys(SCHEDULE_KIND_LABEL) as ScheduleKind[]).map((k) =>
             <option key={k} value={k}>{SCHEDULE_KIND_LABEL[k]}</option>)}
         </select>
-        <button disabled={busy || !name.trim()} type="submit">+ Planning</button>
+        <button disabled={busy || !name.trim()} type="submit">{t("views.rules.schedules.addSchedule")}</button>
       </form>
 
-      {r.schedules.length === 0 ? <EmptyState icon="🗓" title="Aucun planning"
-        hint="Créez un premier planning (ex. Downtime du soir) puis assignez-le." /> : (
+      {r.schedules.length === 0 ? <EmptyState icon="🗓" title={t("views.rules.schedules.emptyTitle")}
+        hint={t("views.rules.schedules.emptyHint")} /> : (
         r.schedules.map((s) => (
           <ScheduleRow key={s.id} schedule={s} windows={r.windows.filter((w) => w.schedule_id === s.id)}
             assigned={assignedIds.has(s.id)} busy={busy} run={run}
@@ -513,6 +544,7 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
   schedule: Schedule; windows: ReturnType<typeof useRules>["windows"];
   assigned: boolean; busy: boolean; run: CardBase["run"]; onToggle: (on: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [start, setStart] = useState("21:00");
   const [end, setEnd] = useState("07:00");
   const [mask, setMask] = useState(127);
@@ -522,11 +554,11 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
       schedule_id: schedule.id, dow_mask: mask,
       start_minute: hhmmToMinutes(start), end_minute: hhmmToMinutes(end),
     });
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
   async function delWindow(id: string) {
     const { error } = await supabase.from("schedule_windows").delete().eq("id", id);
-    return { error: error?.message ?? null };
+    return toResult(error);
   }
 
   return (
@@ -538,16 +570,18 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
         </div>
         <label className="row" style={{ gap: 6 }}>
           <input type="checkbox" checked={assigned} disabled={busy} onChange={(e) => onToggle(e.target.checked)} />
-          <span className="small">Appliqué à cet enfant</span>
+          <span className="small">{t("views.rules.schedules.assigned")}</span>
         </label>
       </div>
 
       <div className="row" style={{ gap: 6, marginTop: 8 }}>
-        {windows.length === 0 && <span className="muted small">Aucune fenêtre horaire.</span>}
+        {windows.length === 0 && <span className="muted small">{t("views.rules.schedules.noWindows")}</span>}
         {windows.map((w) => (
           <span key={w.id} className="badge">
-            {dowMaskLabel(w.dow_mask)} · {minutesToHHMM(w.start_minute)}→{minutesToHHMM(w.end_minute)}
-            <button className="link" style={{ padding: "0 0 0 6px" }} disabled={busy}
+            {t("views.rules.schedules.window", {
+              days: dowMaskLabel(w.dow_mask), start: minutesToHHMM(w.start_minute), end: minutesToHHMM(w.end_minute),
+            })}
+            <button className="link" style={{ padding: 0, paddingInlineStart: 6 }} disabled={busy}
               onClick={() => run(() => delWindow(w.id))}>✕</button>
           </span>
         ))}
@@ -562,9 +596,9 @@ function ScheduleRow({ schedule, windows, assigned, busy, run, onToggle }: {
           ))}
         </div>
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
-        <span className="muted">→</span>
+        <span className="muted">{t("views.rules.schedules.rangeArrow")}</span>
         <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
-        <button className="ghost" disabled={busy || mask === 0} onClick={() => run(addWindow)}>+ Fenêtre</button>
+        <button className="ghost" disabled={busy || mask === 0} onClick={() => run(addWindow)}>{t("views.rules.schedules.addWindow")}</button>
       </div>
     </div>
   );

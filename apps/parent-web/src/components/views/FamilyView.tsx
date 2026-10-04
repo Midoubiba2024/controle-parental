@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
+import { errorMessage, t as tr, Trans, useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import { ageProfileFromBirth, type AuditEntry, type Child, type Device, type DeviceMode } from "../../lib/types";
 import { fmtDateTime } from "../../lib/format";
 import { ageProfileLabel, auditActionLabel, roleLabel } from "../../lib/labels";
 import { EmptyState } from "../Ui";
 
+// Équivalent de toLocaleTimeString() : heure avec secondes.
+const TIME_WITH_SECONDS: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit" };
+
+/** Libellé du mode d'appareil (valeur inconnue → affichée brute). */
+function deviceModeLabel(mode: string): string {
+  return mode === "standard" || mode === "reinforced" ? tr(`views.family.deviceMode.${mode}`) : mode;
+}
+
 export function FamilyView({ familyId, onChildrenChanged }: {
   familyId: string;
   onChildrenChanged?: () => void;
 }) {
+  const { t } = useI18n();
   const [children, setChildren] = useState<Child[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -21,7 +31,7 @@ export function FamilyView({ familyId, onChildrenChanged }: {
       supabase.from("audit_log").select("*").eq("family_id", familyId)
         .order("created_at", { ascending: false }).limit(50),
     ]);
-    if (c.error) setErr(c.error.message); else { setChildren(c.data as Child[]); onChildrenChanged?.(); }
+    if (c.error) setErr(errorMessage(c.error)); else { setChildren(c.data as Child[]); onChildrenChanged?.(); }
     if (!d.error) setDevices(d.data as Device[]);
     if (!a.error) setAudit(a.data as AuditEntry[]);
   }, [familyId, onChildrenChanged]);
@@ -31,24 +41,24 @@ export function FamilyView({ familyId, onChildrenChanged }: {
   return (
     <div className="grid dash" style={{ gap: 18 }}>
       <div className="card">
-        <h2>Enfants & appareils</h2>
+        <h2>{t("views.family.childrenTitle")}</h2>
         <AddChild familyId={familyId} onAdded={refresh} />
         {err && <p className="msg error">{err}</p>}
-        {children.length === 0 && <EmptyState icon="👧" title="Aucun enfant pour l'instant"
-          hint="Ajoutez un profil, puis générez un code d'appairage pour son appareil." />}
+        {children.length === 0 && <EmptyState icon="👧" title={t("views.family.noChildTitle")}
+          hint={t("views.family.noChildHint")} />}
         {children.map((ch) => (
           <ChildRow key={ch.id} child={ch} devices={devices.filter((d) => d.child_id === ch.id)} />
         ))}
       </div>
 
       <div className="card">
-        <h2>Journal d'audit <span className="muted small">(transparence)</span></h2>
-        {audit.length === 0 && <EmptyState title="Aucune activité." />}
+        <h2><Trans k="views.family.auditTitle" tags={{ muted: (c) => <span className="muted small">{c}</span> }} /></h2>
+        {audit.length === 0 && <EmptyState title={t("views.family.auditEmpty")} />}
         <ul className="scroll" style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {audit.map((a) => (
             <li key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
               <span style={{ fontWeight: 600 }}>{auditActionLabel(a.action)}</span>
-              <span className="muted small"> · {roleLabel(a.actor_role)} · {fmtDateTime(a.created_at)}</span>
+              <span className="muted small">{t("views.family.auditMeta", { role: roleLabel(a.actor_role), date: fmtDateTime(a.created_at) })}</span>
             </li>
           ))}
         </ul>
@@ -58,6 +68,7 @@ export function FamilyView({ familyId, onChildrenChanged }: {
 }
 
 function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [birth, setBirth] = useState("");
   const [busy, setBusy] = useState(false);
@@ -71,7 +82,7 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
       age_profile: ageProfileFromBirth(birth || null),
     });
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     setName(""); setBirth("");
     onAdded();
   }
@@ -80,18 +91,17 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
     <form onSubmit={add} style={{ marginBottom: 12 }}>
       <div className="inline" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span className="muted small">Prénom de l'enfant</span>
-          <input placeholder="Prénom" value={name} required onChange={(e) => setName(e.target.value)} />
+          <span className="muted small">{t("views.family.addChild.nameLabel")}</span>
+          <input placeholder={t("views.family.addChild.namePlaceholder")} value={name} required onChange={(e) => setName(e.target.value)} />
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span className="muted small">Date de naissance</span>
+          <span className="muted small">{t("views.family.addChild.birthLabel")}</span>
           <input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
         </label>
-        <button disabled={busy || !name.trim()} type="submit">{busy ? "…" : "+ Enfant"}</button>
+        <button disabled={busy || !name.trim()} type="submit">{busy ? t("common.busy") : t("views.family.addChild.submit")}</button>
       </div>
       <p className="muted small" style={{ marginTop: 6 }}>
-        La date de naissance adapte automatiquement les protections à l'âge de l'enfant
-        (profil « jeune enfant » / « préado » / « ado »). Elle est facultative.
+        {t("views.family.addChild.birthHint")}
       </p>
       {err && <p className="msg error">{err}</p>}
     </form>
@@ -101,6 +111,7 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
 function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
   // « Standard » par défaut : le mode Renforcé exige que l'app soit propriétaire de
   // l'appareil (device owner, via adb après réinitialisation) — docs/10-INSTALLATION.md §6.
+  const { t, fmt } = useI18n();
   const [mode, setMode] = useState<DeviceMode>("standard");
   const [code, setCode] = useState<{ code: string; expires_at: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,7 +125,7 @@ function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
       p_family_id: child.family_id, p_child_id: child.id, p_mode: mode,
     });
     setBusy(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(errorMessage(error)); return; }
     setCode(data as { code: string; expires_at: string });
   }
 
@@ -126,22 +137,26 @@ function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
       </div>
       <div className="inline" style={{ marginTop: 8 }}>
         <select value={mode} onChange={(e) => setMode(e.target.value as DeviceMode)}>
-          <option value="standard">Standard</option>
-          <option value="reinforced">Renforcé (appareil dédié)</option>
+          <option value="standard">{t("views.family.pairing.modeStandard")}</option>
+          <option value="reinforced">{t("views.family.pairing.modeReinforced")}</option>
         </select>
-        <button className="ghost" disabled={busy} onClick={genCode}>{busy ? "…" : "Générer un code d'appairage"}</button>
+        <button className="ghost" disabled={busy} onClick={genCode}>{busy ? t("common.busy") : t("views.family.pairing.generate")}</button>
       </div>
       {code && (
         <p className="code" style={{ marginTop: 10 }}>
-          Code : <b>{code.code}</b>
-          <span className="muted small"> · expire {new Date(code.expires_at).toLocaleTimeString("fr-FR")}</span>
+          <Trans k="views.family.pairing.code" params={{ code: code.code }} tags={{ b: (c) => <b>{c}</b> }} />
+          <span className="muted small">{t("views.family.pairing.expires", { time: fmt.time(code.expires_at, TIME_WITH_SECONDS) })}</span>
         </p>
       )}
       {err && <p className="msg error">{err}</p>}
       <div className="row" style={{ marginTop: 8 }}>
-        {devices.length === 0 ? <span className="muted small">Aucun appareil appairé.</span>
+        {devices.length === 0 ? <span className="muted small">{t("views.family.noDevice")}</span>
           : devices.map((d) => (
-            <span key={d.id} className="badge">📱 {d.label ?? d.model ?? d.platform} · {d.mode}{d.revoked_at ? " (révoqué)" : ""}</span>
+            <span key={d.id} className="badge">
+              {t(d.revoked_at ? "views.family.deviceBadgeRevoked" : "views.family.deviceBadge", {
+                name: d.label ?? d.model ?? d.platform, mode: deviceModeLabel(d.mode),
+              })}
+            </span>
           ))}
       </div>
     </div>

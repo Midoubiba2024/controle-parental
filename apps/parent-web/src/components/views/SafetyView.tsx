@@ -6,6 +6,7 @@ import {
 } from "../../lib/safety";
 import { fmtAgo, fmtDateTime } from "../../lib/format";
 import { EmptyState } from "../Ui";
+import { Trans, errorMessage, useI18n } from "../../i18n";
 import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
 
 /* =============================================================================
@@ -21,11 +22,12 @@ import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
 const STALE_MS = 5 * 60_000;
 
 export function SafetyView({ familyId, child }: { familyId: string; child: Child }) {
+  const { t } = useI18n();
   const s = useSafety(familyId, child.id);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  if (s.loading) return <p className="muted">Chargement de la sécurité ado…</p>;
+  if (s.loading) return <p className="muted">{t("views.wellbeing.loading")}</p>;
 
   // Gradation par âge : fonction RÉSERVÉE au profil ado (preteen/teen). Pour
   // young_child, elle est totalement OFF (ni service, ni analyse) → on ne propose rien.
@@ -43,7 +45,7 @@ export function SafetyView({ familyId, child }: { familyId: string; child: Child
     const base = toSafetySettingsUpsert(s.settings, familyId, child.id);
     const { error } = await supabase.from("safety_settings")
       .upsert({ ...base, ...patch }, { onConflict: "child_id" });
-    return { error: error?.message ?? null };
+    return { error: error ? errorMessage(error) : null };
   }
 
   async function acknowledge(id: string) {
@@ -51,7 +53,7 @@ export function SafetyView({ familyId, child }: { familyId: string; child: Child
     const { error } = await supabase.from("safety_signals")
       .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: auth.user?.id ?? null })
       .eq("id", id);
-    return { error: error?.message ?? null };
+    return { error: error ? errorMessage(error) : null };
   }
 
   return (
@@ -72,18 +74,15 @@ type SafetyHook = ReturnType<typeof useSafety>;
 
 /* ------------------------- Notice profil jeune enfant -------------------- */
 function YoungChildNotice({ child }: { child: Child }) {
+  const { t } = useI18n();
   return (
     <div className="card">
-      <h2>Sécurité ado — non applicable</h2>
+      <h2>{t("views.wellbeing.youngChild.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        L'analyse de bien-être sur l'appareil est <b>réservée au profil ado</b> (pré-ado / ado).
+        <Trans k="views.wellbeing.youngChild.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       <p>
-        Pour <b>{child.display_name}</b> (profil jeune enfant), cette fonction est
-        <b> totalement désactivée</b> : aucun service d'analyse n'est actif et aucune permission
-        n'est demandée. La protection passe par le <b>filtrage</b>, les <b>limites de temps</b> et la
-        <b> localisation transparente</b>. Elle pourra être proposée, de façon transparente et
-        co-consentie, lorsque l'enfant grandira (gradation par âge — CNIL/RGPD art. 8).
+        <Trans k="views.wellbeing.youngChild.body" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />
       </p>
     </div>
   );
@@ -94,47 +93,45 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
   s: SafetyHook; child: Child; busy: boolean; run: RunFn;
   saveSettings: (p: Partial<SafetySettings>) => Promise<{ error: string | null }>;
 }) {
+  const { t } = useI18n();
   const enabled = s.settings?.analysis_enabled ?? false;
   const mutual = s.settings?.mutual_visibility ?? true;
 
   return (
     <div className="card">
-      <h2>Analyse de bien-être (sur l'appareil)</h2>
+      <h2>{t("views.wellbeing.settings.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Le texte des notifications est analysé <b>sur le téléphone de {child.display_name}</b>. Vous ne
-        recevez qu'une <b>alerte de catégorie</b> (ci-dessous) — <b>jamais</b> ses messages, jamais le
-        texte. L'ado le voit dans « mes données » et peut la désactiver ou la mettre en pause.
+        <Trans k="views.wellbeing.settings.intro" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />
       </p>
 
       <label className="row" style={{ gap: 8, marginTop: 8 }}>
         <input type="checkbox" checked={enabled} disabled={busy}
           onChange={(e) => run(() => saveSettings({ analysis_enabled: e.target.checked }))} />
-        <span><b>Activer l'analyse</b> (nécessite le co-consentement de l'ado)</span>
+        <span><Trans k="views.wellbeing.settings.enableToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
       <p className="muted small" style={{ marginTop: -2 }}>
-        Désactivée par défaut (privacy by default). L'analyse ne tourne que si l'ado accorde aussi
-        l'accès aux notifications sur son appareil.
+        {t("views.wellbeing.settings.enableHint")}
       </p>
 
       <label className="row" style={{ gap: 8, marginTop: 10 }}>
         <input type="checkbox" checked={mutual} disabled={busy}
           onChange={(e) => run(() => saveSettings({ mutual_visibility: e.target.checked }))} />
-        <span><b>Visibilité mutuelle</b> (mode ado, K6) — l'ado voit ce que vous voyez</span>
+        <span><Trans k="views.wellbeing.settings.mutualToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
       {s.openPauses.length > 0 && (
-        <div className="msg" style={{ marginTop: 14, borderLeft: "3px solid var(--warning)", paddingLeft: 10 }}>
-          <b>⏸ Pause de confidentialité active.</b> {child.display_name} a suspendu l'analyse
-          {s.openPauses[0].started_at ? ` (depuis ${fmtAgo(s.openPauses[0].started_at)})` : ""}. Vous voyez
-          qu'une pause est en cours — <b>jamais</b> ce qu'elle masque (K8). C'est à l'ado de la lever.
+        <div className="msg" style={{ marginTop: 14, borderInlineStart: "3px solid var(--warning)", paddingInlineStart: 10 }}>
+          {s.openPauses[0].started_at
+            ? <Trans k="views.wellbeing.settings.pauseNoticeSince" tags={{ b: (c) => <b>{c}</b> }}
+                params={{ name: child.display_name, ago: fmtAgo(s.openPauses[0].started_at) }} />
+            : <Trans k="views.wellbeing.settings.pauseNotice" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />}
         </div>
       )}
 
-      <h3 style={{ marginTop: 18 }}>État de l'analyse</h3>
+      <h3 style={{ marginTop: 18 }}>{t("views.wellbeing.settings.statusTitle")}</h3>
       {s.status.length === 0 ? (
         <p className="muted small">
-          Aucun appareil n'a encore signalé l'état de l'analyse. Il apparaîtra ici une fois l'accès
-          aux notifications accordé sur l'appareil de l'ado.
+          {t("views.wellbeing.settings.noDevice")}
         </p>
       ) : (
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -142,19 +139,21 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
             const stale = Date.now() - new Date(st.updated_at).getTime() > STALE_MS;
             return (
               <li key={st.id} className="row" style={{ gap: 8, padding: "6px 0", justifyContent: "space-between" }}>
-                <span className="small">Appareil</span>
+                <span className="small">{t("views.wellbeing.settings.device")}</span>
                 <span>
                   {!st.analysis_active ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>⏸ inactive</span>
+                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.wellbeing.settings.badgeInactive")}</span>
                   ) : stale ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>⚠️ état incertain</span>
+                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.wellbeing.settings.badgeUncertain")}</span>
                   ) : (
-                    <span className="badge" style={{ color: "var(--good)" }}>🫶 active</span>
+                    <span className="badge" style={{ color: "var(--good)" }}>{t("views.wellbeing.settings.badgeActive")}</span>
                   )}
-                  <span className="muted small" style={{ marginLeft: 8 }}>
+                  <span className="muted small" style={{ marginInlineStart: 8 }}>
                     {!st.analysis_active
-                      ? (st.last_revoked_at ? `coupée ${fmtAgo(st.last_revoked_at)}` : "")
-                      : stale ? `silencieuse depuis ${fmtAgo(st.updated_at)}` : `dernière nouvelle ${fmtDateTime(st.updated_at)}`}
+                      ? (st.last_revoked_at ? t("views.wellbeing.settings.cutAgo", { ago: fmtAgo(st.last_revoked_at) }) : "")
+                      : stale
+                        ? t("views.wellbeing.settings.silentSince", { ago: fmtAgo(st.updated_at) })
+                        : t("views.wellbeing.settings.lastSeen", { when: fmtDateTime(st.updated_at) })}
                   </span>
                 </span>
               </li>
@@ -163,7 +162,7 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
         </ul>
       )}
       <p className="muted small" style={{ marginTop: 6 }}>
-        Transparence : si l'ado retire l'accès (son droit), c'est signalé ici — jamais en cachette.
+        {t("views.wellbeing.settings.transparency")}
       </p>
     </div>
   );
@@ -171,6 +170,7 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
 
 /* ------------------------- Tableau par CATÉGORIES (G6) ------------------- */
 function CategoriesCard({ s }: { s: SafetyHook }) {
+  const { t } = useI18n();
   // Agrégation par catégorie / gravité (métadonnées) — JAMAIS de contenu.
   const agg = new Map<SafetyCategory, { total: number; high: number; medium: number; low: number }>();
   for (const sig of s.signals) {
@@ -183,14 +183,13 @@ function CategoriesCard({ s }: { s: SafetyHook }) {
 
   return (
     <div className="card">
-      <h2>Par catégorie <span className="muted small">(alertes de métadonnées)</span></h2>
+      <h2>{t("views.wellbeing.categories.title")} <span className="muted small">{t("views.wellbeing.categories.subtitle")}</span></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Regroupement des signaux détectés sur l'appareil. <b>Aucun contenu</b> — seulement catégorie,
-        gravité et compte.
+        <Trans k="views.wellbeing.categories.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {!anySignal ? (
-        <EmptyState icon="🌤" title="Aucun signal"
-          hint="Tant que rien n'est détecté, rien n'apparaît ici. C'est bon signe." />
+        <EmptyState icon="🌤" title={t("views.wellbeing.categories.emptyTitle")}
+          hint={t("views.wellbeing.categories.emptyHint")} />
       ) : (
         <div style={{ marginTop: 8 }}>
           {SAFETY_CATEGORIES.map((c) => {
@@ -213,7 +212,7 @@ function CategoriesCard({ s }: { s: SafetyHook }) {
                       </span>
                     ) : null,
                   )}
-                  <b style={{ marginLeft: 6 }}>{a?.total ?? 0}</b>
+                  <b style={{ marginInlineStart: 6 }}>{a?.total ?? 0}</b>
                 </span>
               </div>
             );
@@ -228,18 +227,21 @@ function CategoriesCard({ s }: { s: SafetyHook }) {
 function SignalsCard({ s, busy, run, acknowledge }: {
   s: SafetyHook; busy: boolean; run: RunFn; acknowledge: (id: string) => Promise<{ error: string | null }>;
 }) {
+  const { t } = useI18n();
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h2>Signaux récents <span className="muted small">(métadonnées)</span></h2>
+      <h2>{t("views.wellbeing.signals.title")} <span className="muted small">{t("views.wellbeing.signals.subtitle")}</span></h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        Catégorie + gravité + application source + heure. <b>Jamais</b> le texte, l'extrait ou le message.
+        <Trans k="views.wellbeing.signals.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {s.signals.length === 0 ? (
-        <EmptyState icon="🗂" title="Aucun signal" hint="Les alertes de catégorie remonteront ici." />
+        <EmptyState icon="🗂" title={t("views.wellbeing.signals.emptyTitle")} hint={t("views.wellbeing.signals.emptyHint")} />
       ) : (
         <table className="tbl">
           <thead><tr>
-            <th>Catégorie</th><th>Gravité</th><th>Application</th><th>Occur.</th><th>Quand</th><th></th>
+            <th>{t("views.wellbeing.signals.colCategory")}</th><th>{t("views.wellbeing.signals.colSeverity")}</th>
+            <th>{t("views.wellbeing.signals.colApp")}</th><th>{t("views.wellbeing.signals.colOccurrences")}</th>
+            <th>{t("views.wellbeing.signals.colWhen")}</th><th></th>
           </tr></thead>
           <tbody>
             {s.signals.map((sig) => (
@@ -252,13 +254,13 @@ function SignalsCard({ s, busy, run, acknowledge }: {
                 <td><span className="badge" style={{ color: severityColor(sig.severity) }}>
                   {SEVERITY_LABEL[sig.severity]}
                 </span></td>
-                <td className="small"><code>{sig.source_app ?? "—"}</code></td>
+                <td className="small"><code>{sig.source_app ?? t("common.none")}</code></td>
                 <td className="small">{sig.occurrence_count}</td>
                 <td className="muted small">{fmtDateTime(sig.occurred_at)}</td>
                 <td>
                   {sig.acknowledged_at
-                    ? <span className="muted small">vu</span>
-                    : <button className="link" disabled={busy} onClick={() => run(() => acknowledge(sig.id))}>Marquer vu</button>}
+                    ? <span className="muted small">{t("views.wellbeing.signals.seen")}</span>
+                    : <button className="link" disabled={busy} onClick={() => run(() => acknowledge(sig.id))}>{t("views.wellbeing.signals.markSeen")}</button>}
                 </td>
               </tr>
             ))}
@@ -271,18 +273,19 @@ function SignalsCard({ s, busy, run, acknowledge }: {
 
 /* ------------------------- Ressources d'aide (V12) ----------------------- */
 function ResourcesCard() {
+  const { t } = useI18n();
   return (
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h2>Ressources d'aide</h2>
+      <h2>{t("views.wellbeing.resources.title")}</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
-        En cas de difficulté, ces services d'écoute et de signalement peuvent aider — vous et l'ado.
+        {t("views.wellbeing.resources.intro")}
       </p>
       <div className="grid cols-2" style={{ gap: 12 }}>
         {HELP_RESOURCES.map((r) => (
           <div key={r.name} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
               <strong>{r.name}</strong>
-              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">ouvrir ↗</a>
+              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}</a>
             </div>
             <div className="small" style={{ margin: "4px 0" }}>{r.contact}</div>
             <div className="muted small">{r.desc}</div>
