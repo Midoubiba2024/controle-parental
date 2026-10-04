@@ -51,7 +51,7 @@ function resolveColor(c: string): string {
   const m = c.match(/^var\((--[\w-]+)\)$/);
   if (!m) return c;
   const v = getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim();
-  return v || "#888888";
+  return v || "currentColor";
 }
 
 export function MapCanvas({
@@ -147,7 +147,7 @@ export function MapCanvas({
       const r = m.radiusPx ?? (m.kind === "position" ? 9 : m.kind === "sos" ? 11 : 5);
       L.circleMarker([m.lat, m.lng], {
         radius: r,
-        color: "#ffffff",
+        color: resolveColor("var(--c-map-marker-ring)"),
         weight: m.kind === "sos" ? 3 : 2,
         fillColor: resolveColor(m.color),
         fillOpacity: m.kind === "dot" ? 0.7 : 1,

@@ -153,7 +153,7 @@ export function Bars({
                 className="b bar"
                 style={{
                   height: h, background: bg,
-                  boxShadow: hot ? "0 8px 18px -10px rgba(42,27,45,.45)" : undefined,
+                  boxShadow: hot ? "var(--shadow-bar)" : undefined,
                 }}
                 onMouseMove={(e) => setTip({
                   x: e.clientX, y: e.clientY,

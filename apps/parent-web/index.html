@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-palette="cocon">
   <head>
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover : le contenu gère lui-même les zones sûres (encoche iPhone). -->
@@ -18,17 +18,28 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <script>
-      // Thème appliqué AVANT le premier rendu (pas de flash clair → sombre).
-      // Même clé que src/lib/theme.ts ; stockage indisponible → réglage système.
-      try {
-        var th = localStorage.getItem("cp-theme");
+      // Mode (cp-theme) et palette (cp.palette) appliqués AVANT le premier rendu :
+      // pas de flash clair → sombre. Même logique que src/lib/theme.ts.
+      // Palettes connues (L11 ajoutera clarte et jardin) : fond clair / sombre.
+      (function () {
+        var palettes = { cocon: ["#FAF6EF", "#170F18"] };
+        var root = document.documentElement, th = null, pal = "cocon";
+        try {
+          th = localStorage.getItem("cp-theme");
+          var p = localStorage.getItem("cp.palette");
+          if (p && palettes.hasOwnProperty(p)) pal = p;
+        } catch (e) { /* stockage indisponible */ }
+        root.setAttribute("data-palette", pal);
+        var metas = document.querySelectorAll('meta[name="theme-color"]');
         if (th === "light" || th === "dark") {
-          document.documentElement.setAttribute("data-theme", th);
-          // Barre du navigateur : une seule couleur, celle du thème choisi.
-          var color = th === "dark" ? "#170F18" : "#FAF6EF";
-          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.media = "all"; m.content = color; });
+          root.setAttribute("data-theme", th);
+          // Barre du navigateur : une seule couleur, celle du mode choisi.
+          var color = palettes[pal][th === "dark" ? 1 : 0];
+          metas.forEach(function (m) { m.media = "all"; m.content = color; });
+        } else {
+          metas.forEach(function (m) { m.content = palettes[pal][m.getAttribute("data-scheme") === "dark" ? 1 : 0]; });
         }
-      } catch (e) { /* ignore */ }
+      })();
     </script>
   </head>
   <body>
