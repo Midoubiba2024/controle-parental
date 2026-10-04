@@ -19,6 +19,9 @@ object PairingCode {
     /** Alphabet Crockford (ordre indifférent). */
     private const val ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
+    /** U+FEFF comparé par son code : jamais de BOM littéral dans la source (lint ByteOrderMark). */
+    private const val BOM = 0xFEFF
+
     /** Format attendu APRÈS normalisation (identique au serveur). */
     private val VALID = Regex("^[0-9A-HJKMNP-TV-Z]{10}$")
 
@@ -28,10 +31,10 @@ object PairingCode {
      */
     private fun isSeparator(c: Char): Boolean =
         c.isWhitespace() ||
-            c == ' ' || c == ' ' || c == ' ' ||
-            c in '​'..'‍' || c == '⁠' || c == '﻿' ||
-            c == '-' || c in '‐'..'―' || c == '−' ||
-            c == '﹘' || c == '﹣' || c == '－'
+            c == '\u00A0' || c == '\u2007' || c == '\u202F' ||
+            c in '\u200B'..'\u200D' || c == '\u2060' || c.code == BOM ||
+            c == '-' || c in '\u2010'..'\u2015' || c == '\u2212' ||
+            c == '\uFE58' || c == '\uFE63' || c == '\uFF0D'
 
     /** Majuscule ASCII puis équivalences Crockford O→0, I→1, L→1. */
     private fun canonical(c: Char): Char = when (val u = if (c in 'a'..'z') c - 32 else c) {

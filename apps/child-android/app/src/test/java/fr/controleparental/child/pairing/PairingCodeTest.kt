@@ -29,10 +29,10 @@ class PairingCodeTest {
     }
 
     @Test fun unicodeSpacesAndDashesFromClipboardAreIgnored() {
-        val pasted = " 7KQ2M–X9D4F​\n" // insécable, tiret demi-cadratin, largeur nulle
+        val pasted = "\u00A07KQ2M\u2013X9D4F\u200B\n" // insécable, tiret demi-cadratin, largeur nulle
         assertEquals("7KQ2MX9D4F", PairingCode.normalize(pasted))
         assertTrue(PairingCode.isValid(pasted))
-        assertTrue(PairingCode.isValid("7KQ2M−X9D4F﻿\t"))
+        assertTrue(PairingCode.isValid("7KQ2M\u2212X9D4F" + Char(0xFEFF) + "\t"))
     }
 
     @Test fun letterUIsRefused() {
