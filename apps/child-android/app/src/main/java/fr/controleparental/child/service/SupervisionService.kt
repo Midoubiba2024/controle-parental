@@ -20,6 +20,7 @@ import fr.controleparental.child.location.LocationClient
 import fr.controleparental.child.MainActivity
 import fr.controleparental.child.R
 import fr.controleparental.child.data.AppInventoryCollector
+import fr.controleparental.child.data.SupervisionSignal
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.enforce.BlockOverlay
 import fr.controleparental.child.enforce.CommandExecutor
@@ -183,6 +184,9 @@ class SupervisionService : Service() {
             // Notification balayée (possible en mode Standard sous Android 14+) :
             // on la republie — la supervision doit rester visible.
             runCatching { republishIfDismissed() }
+            // Notifications coupées : la collecte est suspendue (supervisionVisible) ;
+            // le parent en est informé (perm_notifications=false, au plus 1×/h).
+            if (!notificationsAllowed(this)) runCatching { SupervisionSignal.reportNotificationsOff(store) }
 
             val res = runCatching { manager.evaluateForeground() }.getOrNull()
             withContext(Dispatchers.Main) { applyDecision(res) }

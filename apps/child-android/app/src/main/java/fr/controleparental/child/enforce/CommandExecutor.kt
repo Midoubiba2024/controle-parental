@@ -12,6 +12,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.SupervisionService
+import fr.controleparental.child.data.SupervisionSignal
 import fr.controleparental.child.service.Unenrollment
 import fr.controleparental.child.location.LocationCoordinator
 
@@ -42,7 +44,8 @@ class CommandExecutor(
         // Enrôlement capturé AVANT le réseau (garde LOT 12b, voir apply()).
         val deviceId = SupervisionStore.current.value?.deviceId ?: return
         for (c in policyClient.pendingCommands()) {
-            policyClient.ackCommand(c.id, apply(c, deviceId))
+            apply(c, deviceId)
+            policyClient.ackCommand(c.id, "acked")
         }
     }
 
@@ -83,13 +86,7 @@ class CommandExecutor(
      *  commande `message` (#4/#8) → pas de collision ni de spam au re-sondage. */
     private fun messageNotifId(id: String): Int = MSG_NOTIF_BASE + ((id.hashCode() and 0x7fffffff) % 1000)
 
-    /**
-     * Applique la commande et renvoie le statut d'accusé : `acked` (traitée) ou
-     * `delivered` (reçue mais NON exécutée). Le serveur n'autorise à l'appareil que
-     * ces deux statuts (app.commands_guard_child_update) : un `locate` refusé
-     * faute de supervision visible reste donc `delivered`, jamais `acked`.
-     */
-    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String): String {
+    private suspend fun apply(c: PolicyClient.CommandRow, deviceId: String) {
         when (c.type) {
             // Écritures de cache / appels DPM : jamais après (ou pendant) un démontage.
             "pause" -> Unenrollment.ifStillEnrolled(deviceId) { cache.pauseActive = true }
@@ -99,11 +96,16 @@ class CommandExecutor(
             }
             "ring" -> ring()
             "message" -> notifyMessage(c.payload.optString("message").ifBlank { context.getString(R.string.parent_message_default) }, CMD_MSG_NOTIF_ID)
-            "locate" -> if (location?.checkInOnDemand() == LocationCoordinator.CheckIn.SUPERVISION_NOT_VISIBLE) {
-                return "delivered"
+            // Supervision non visible : AUCUNE position ; la commande est acquittée
+            // (le serveur n'autorise à l'appareil aucun statut d'échec —
+            // app.commands_guard_child_update) et, si les notifications sont
+            // coupées, le parent en est informé par le canal device_status.
+            "locate" -> if (location?.checkInOnDemand() == LocationCoordinator.CheckIn.SUPERVISION_NOT_VISIBLE &&
+                !SupervisionService.notificationsAllowed(context)
+            ) {
+                SupervisionSignal.reportNotificationsOff(store)
             }
         }
-        return "acked"
     }
 
     private fun ring() {
