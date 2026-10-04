@@ -4,10 +4,13 @@ import { fmt, t } from "../i18n";
 // Formats dépendant de la langue : délèguent au module i18n (Intl.* + langue active).
 /** Durée lisible à partir de millisecondes : « 2 h 35 », « 48 min », « 40 s ». */
 export const fmtDuration = fmt.duration;
-/** Durée courte pour axes : « 2h », « 45m ». */
+/** Durée courte (étiquettes de barres) : « 45 min », « 2 h 30 ». */
 export const fmtDurationShort = fmt.durationShort;
 export const fmtBytes = fmt.bytes;
+/** Date/heure relative des cellules : « 10:31 », « hier à 10:31 », « 2 oct. à 08:31 ». */
 export const fmtDateTime = fmt.dateTime;
+/** Même chose dans une phrase : « à 10:31 », « hier à 10:31 », « le 2 oct. à 08:31 ». */
+export const fmtAt = fmt.at;
 /** Temps écoulé lisible : « à l'instant », « il y a 5 min », « il y a 2 h ». */
 export const fmtAgo = fmt.ago;
 /** day = YYYY-MM-DD → « lun. 30 ». */
@@ -80,4 +83,30 @@ export function appLabelOf(label: string | null, pkg: string): string {
 export function appInitials(label: string | null, pkg: string): string {
   const name = appLabelOf(label, pkg);
   return name.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Libellé COURT de l'axe des jours d'un histogramme (le libellé complet reste
+ * dans l'aria-label et l'infobulle) : jour de la semaine abrégé sur 7 jours,
+ * numéro du jour un jour sur trois sur 30 jours (jamais de date tronquée).
+ */
+export function dayTick(day: string, period: number, index: number): string {
+  const d = new Date(day + "T00:00:00");
+  if (period <= 7) return fmt.date(d, { weekday: "short" });
+  return index % 3 === 0 ? fmt.date(d, { day: "numeric" }) : "";
+}
+
+const WEEKDAY_MIN = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+/** Variante TRÈS courte pour les axes étroits (< 400 px) : « L Ma Me J V S D ». */
+export function dayTickMin(day: string, period: number, index: number): string {
+  if (period > 7) return dayTick(day, period, index);
+  return t(`units.weekdayMin.${WEEKDAY_MIN[new Date(day + "T00:00:00").getDay()]}`);
+}
+
+/** Libellé complet d'un jour (infobulle, aria-label) : « lun. 30 » sur 7 jours,
+ *  « lun. 30 sept. » sur 30 jours (la période peut chevaucher deux mois). */
+export function dayLabelFor(day: string, period: number): string {
+  const d = new Date(day + "T00:00:00");
+  return period <= 7 ? fmtDayLabel(day) : fmt.date(d, { weekday: "short", day: "numeric", month: "short" });
 }

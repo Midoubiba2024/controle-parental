@@ -65,19 +65,18 @@ export function useFilter(familyId: string | null, childId: string | null): Filt
 
 /* --------------------------- Catalogue de catégories --------------------- */
 // Chaque catégorie porte son identité par le LIBELLÉ + l'icône (jamais la
-// couleur seule → CVD-safe). Le point coloré n'est que décoratif. Libellé et
-// aide sont traduits (enums.filterCategory.*) et relus à chaque accès (getters).
-export interface FilterCategoryInfo { key: FilterCategory; icon: string; readonly label: string; readonly hint: string }
+// couleur seule → CVD-safe ; icône : components/icons.tsx). Le point coloré n'est
+// que décoratif. Libellé et aide sont traduits (enums.filterCategory.*) et relus
+// à chaque accès (getters).
+export interface FilterCategoryInfo { key: FilterCategory; readonly label: string; readonly hint: string }
 
-const FILTER_CATEGORY_ICONS: [FilterCategory, string][] = [
-  ["adult", "🔞"], ["violence", "⚔️"], ["gambling", "🎰"], ["drugs", "💊"],
-  ["weapons", "🔫"], ["hate", "🚫"], ["dating", "💘"], ["social", "💬"],
-  ["piracy", "🏴‍☠️"], ["malware", "🦠"], ["ads_trackers", "📊"],
+const FILTER_CATEGORY_KEYS: FilterCategory[] = [
+  "adult", "violence", "gambling", "drugs", "weapons", "hate",
+  "dating", "social", "piracy", "malware", "ads_trackers",
 ];
 
-export const FILTER_CATEGORIES: FilterCategoryInfo[] = FILTER_CATEGORY_ICONS.map(([key, icon]) => ({
+export const FILTER_CATEGORIES: FilterCategoryInfo[] = FILTER_CATEGORY_KEYS.map((key) => ({
   key,
-  icon,
   get label() { return t(`enums.filterCategory.${key}.label`); },
   get hint() { return t(`enums.filterCategory.${key}.hint`); },
 }));
@@ -87,11 +86,17 @@ export function categoryLabel(cat: FilterCategory | null): string {
   return FILTER_CATEGORIES.find((c) => c.key === cat)?.label ?? cat;
 }
 
-// Couleur décorative stable par catégorie (série CVD-safe, cycle 1..8).
+// Couleur décorative stable par catégorie — UNE couleur par catégorie (jamais
+// deux catégories identiques), la même pour l'icône et la pastille du journal.
+const FILTER_CATEGORY_COLOR: Record<FilterCategory, string> = {
+  adult: "var(--series-8)", violence: "var(--series-1)", gambling: "var(--series-4)",
+  drugs: "var(--series-3)", weapons: "var(--series-5)", hate: "var(--series-6)",
+  dating: "var(--series-2)", social: "var(--series-7)", piracy: "var(--c-plum)",
+  malware: "var(--c-sand-3)", ads_trackers: "var(--c-muted)",
+};
 export function filterCategoryColor(cat: FilterCategory | null): string {
-  if (!cat) return "var(--muted)";
-  const idx = FILTER_CATEGORIES.findIndex((c) => c.key === cat);
-  return idx < 0 ? "var(--muted)" : `var(--series-${(idx % 8) + 1})`;
+  if (!cat) return "var(--c-muted)";
+  return FILTER_CATEGORY_COLOR[cat] ?? "var(--c-muted)";
 }
 
 /* --------------------------- Presets par âge (C5) ------------------------ */

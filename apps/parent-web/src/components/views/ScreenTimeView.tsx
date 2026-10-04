@@ -3,10 +3,11 @@ import {
   byApp, byCategory, dailyTotals, pctDelta, totalInRange, type ObservationData,
 } from "../../lib/observation";
 import {
-  appLabelOf, categoryColor, categoryLabel, fmtDayLabel, fmtDuration, fmtDurationShort, shiftDay,
+  appLabelOf, categoryColor, categoryLabel, dayLabelFor, dayTick, dayTickMin, fmtDuration, fmtDurationShort, shiftDay,
 } from "../../lib/format";
 import { useI18n } from "../../i18n";
-import { Bars, Donut, HBars, Legend, type Slice } from "../charts/ChartKit";
+import { CalendarDays, ChartColumn, ChartPie, MousePointerClick, Timer } from "lucide-react";
+import { Bars, CategoryList, Donut, HBars, type Slice } from "../charts/ChartKit";
 import { EmptyState, Tile } from "../Ui";
 
 export function ScreenTimeView({ obs }: { obs: ObservationData }) {
@@ -28,8 +29,9 @@ export function ScreenTimeView({ obs }: { obs: ObservationData }) {
   const days = Array.from({ length: period }, (_, i) => shiftDay(anchorDay, -(period - 1 - i)));
   const totals = dailyTotals(usage, days);
   const barData: Slice[] = days.map((d, i) => ({
-    key: d, label: period <= 7 ? fmtDayLabel(d) : (i % 3 === 0 ? d.slice(8) : ""),
-    value: totals[i], color: "var(--series-1)",
+    // Libellé complet (aria-label, infobulle) + graduation courte de l'axe.
+    key: d, label: dayLabelFor(d, period), tick: dayTick(d, period, i), tickMin: dayTickMin(d, period, i),
+    value: totals[i], color: "var(--chart-bar)",
   }));
 
   const catMap = byCategory(usage, from, to);
@@ -45,27 +47,27 @@ export function ScreenTimeView({ obs }: { obs: ObservationData }) {
   const hasData = total > 0;
 
   return (
-    <div className="grid" style={{ gap: 18 }}>
+    <div className="stack" style={{ gap: 20 }}>
       <div className="row">
-        <div className="seg">
-          <button className={period === 7 ? "on" : ""} onClick={() => setPeriod(7)}>{t("views.screenTime.periodDays", { count: 7 })}</button>
-          <button className={period === 30 ? "on" : ""} onClick={() => setPeriod(30)}>{t("views.screenTime.periodDays", { count: 30 })}</button>
+        <div className="seg" role="group" aria-label={t("views.screenTime.dailyTrend")}>
+          <button type="button" className={period === 7 ? "on" : ""} aria-pressed={period === 7} onClick={() => setPeriod(7)}>{t("views.screenTime.periodDays", { count: 7 })}</button>
+          <button type="button" className={period === 30 ? "on" : ""} aria-pressed={period === 30} onClick={() => setPeriod(30)}>{t("views.screenTime.periodDays", { count: 30 })}</button>
         </div>
       </div>
 
       <div className="grid cols-3">
-        <Tile label={t("views.screenTime.tiles.total", { days: period })} value={fmtDuration(total)} icon="⏱"
-          iconBg="color-mix(in srgb, var(--primary) 18%, transparent)" delta={{ pct: delta }} />
-        <Tile label={t("views.screenTime.tiles.averagePerDay")} value={fmtDuration(avgPerDay)} icon="📅"
-          iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)" />
-        <Tile label={t("views.screenTime.tiles.appLaunches")} value={totalLaunches || t("common.none")} icon="👆"
-          iconBg="color-mix(in srgb, var(--series-5) 20%, transparent)" />
+        <Tile label={t("views.screenTime.tiles.total", { days: period })} value={fmtDuration(total)} icon={Timer}
+          tone="accent" delta={{ pct: delta }} />
+        <Tile label={t("views.screenTime.tiles.averagePerDay")} value={fmtDuration(avgPerDay)} icon={CalendarDays}
+          tone="plum" />
+        <Tile label={t("views.screenTime.tiles.appLaunches")} value={totalLaunches || t("common.none")} icon={MousePointerClick}
+          tone="sand" />
       </div>
 
       <div className="card">
         <h2>{t("views.screenTime.dailyTrend")}</h2>
-        {hasData ? <Bars data={barData} fmt={fmtDuration} highlightKey={to} />
-          : <EmptyState icon="📈" title={t("views.screenTime.noDataInPeriod")} />}
+        {hasData ? <Bars data={barData} fmt={fmtDuration} valueFmt={fmtDurationShort} highlightKey={to} />
+          : <EmptyState icon={ChartColumn} title={t("views.screenTime.noDataInPeriod")} />}
       </div>
 
       <div className="grid dash">
@@ -74,10 +76,10 @@ export function ScreenTimeView({ obs }: { obs: ObservationData }) {
           {catSlices.length > 0 ? (
             <>
               <Donut data={catSlices} fmt={fmtDuration}
-                center={{ primary: fmtDurationShort(total), secondary: t("views.screenTime.periodDays", { count: period }) }} />
-              <Legend items={catSlices.map((s) => ({ label: s.label, color: s.color }))} />
+                center={{ primary: fmtDuration(total), secondary: t("views.screenTime.periodDays", { count: period }) }} />
+              <CategoryList items={catSlices} fmt={fmtDuration} />
             </>
-          ) : <EmptyState icon="🍩" title={t("views.screenTime.noActivity")} />}
+          ) : <EmptyState icon={ChartPie} title={t("views.screenTime.noActivity")} />}
         </div>
         <div className="card">
           <h2>{t("views.screenTime.topApps")}</h2>

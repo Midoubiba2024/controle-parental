@@ -2,6 +2,8 @@ import { useState, type ReactNode } from "react";
 import { errorMessage, Trans, useI18n } from "../../i18n";
 import { supabase } from "../../lib/supabase";
 import type { Child, Family } from "../../lib/types";
+import { Download, Trash2 } from "lucide-react";
+import { ic } from "../icons";
 
 /* =============================================================================
    LOT 8b — K10 : Confidentialité & RGPD. Droit d'accès (export JSON) et droit à
@@ -36,7 +38,7 @@ type RetentionKey =
   | "messaging" | "sosEpisodes" | "auditLog";
 
 /** Balise <muted> des titres de carte : précision entre parenthèses, atténuée. */
-const MUTED_TAG = { muted: (c: ReactNode) => <span className="muted small">{c}</span> };
+const MUTED_TAG = { muted: (c: ReactNode) => <span className="muted small nowrap">{c}</span> };
 const B_TAG = { b: (c: ReactNode) => <b>{c}</b> };
 
 export function PrivacyView({ family, child, onChanged }: {
@@ -50,7 +52,7 @@ export function PrivacyView({ family, child, onChanged }: {
   // active après bascule sur l'enfant B et supprimerait la MAUVAISE cible (prénoms non
   // uniques) — footgun irréversible.
   return (
-    <div className="grid" style={{ gap: 18 }}>
+    <div className="stack" style={{ gap: 20 }}>
       <ExportCard key={`exp-${child.id}`} child={child} />
       <RetentionCard />
       <DeleteChildCard key={`del-${child.id}`} child={child} onChanged={onChanged} />
@@ -88,7 +90,7 @@ function ExportCard({ child }: { child: Child }) {
       <p className="muted small" style={{ marginTop: 0 }}>
         {t("views.privacy.export.intro")}
       </p>
-      <button disabled={busy} onClick={exportJson}>{busy ? t("views.privacy.export.preparing") : t("views.privacy.export.button")}</button>
+      <button disabled={busy} onClick={exportJson}><Download {...ic} size={18} />{busy ? t("views.privacy.export.preparing") : t("views.privacy.export.button")}</button>
       {msg && <p className="msg" style={{ marginTop: 10 }}>{msg}</p>}
     </div>
   );
@@ -101,15 +103,15 @@ function RetentionCard() {
     <div className="card">
       <h2><Trans k="views.privacy.retention.title" tags={MUTED_TAG} /></h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        <Trans k="views.privacy.retention.intro" tags={{ code: (c) => <code>{c}</code> }} />
+        {t("views.privacy.retention.intro")}
       </p>
-      <table className="tbl">
+      <div className="tbl-wrap"><table className="tbl pairs">
         <thead><tr><th>{t("views.privacy.retention.colData")}</th><th>{t("views.privacy.retention.colRetention")}</th></tr></thead>
         <tbody>
           {RETENTION.map((r) => (
             <tr key={r.key}>
-              <td>{t(`views.privacy.retention.rows.${r.key}`)}</td>
-              <td className="muted">
+              <td className="wrap">{t(`views.privacy.retention.rows.${r.key}`)}</td>
+              <td className="muted" data-label={t("common.cellLabel", { label: t("views.privacy.retention.colRetention") })}>
                 {r.days == null
                   ? t("views.privacy.retention.perChildDefault", { days: 30 })
                   : t("views.privacy.retention.days", { days: r.days })}
@@ -117,7 +119,7 @@ function RetentionCard() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }
@@ -150,17 +152,18 @@ function DeleteChildCard({ child, onChanged }: { child: Child; onChanged: () => 
       </p>
       {step === 0 ? (
         <button className="btn-danger" onClick={() => { setStep(1); setErr(null); }}>
-          {t("views.privacy.deleteChild.button")}
+          <Trash2 {...ic} size={18} />{t("views.privacy.deleteChild.button")}
         </button>
       ) : (
         <div className="confirm-box">
-          <p className="small" style={{ marginTop: 0 }}>
+          <p className="small" id={`del-child-prompt-${child.id}`} style={{ marginTop: 0 }}>
             <Trans k="views.privacy.deleteChild.confirmPrompt" params={{ name: child.display_name }} tags={B_TAG} />
           </p>
-          <input value={confirmText} placeholder={child.display_name}
+          <input aria-label={t("views.privacy.deleteChild.confirmLabel", { name: child.display_name })}
+            aria-describedby={`del-child-prompt-${child.id}`} value={confirmText} placeholder={child.display_name}
             onChange={(e) => setConfirmText(e.target.value)} />
           <div className="row" style={{ gap: 8, marginTop: 10 }}>
-            <button className="btn-danger" disabled={!canConfirm || busy} onClick={doDelete}>
+            <button className="btn-danger solid" disabled={!canConfirm || busy} onClick={doDelete}>
               {busy ? t("views.privacy.deleting") : t("views.privacy.deleteChild.confirmButton")}
             </button>
             <button className="ghost" disabled={busy} onClick={() => { setStep(0); setConfirmText(""); setErr(null); }}>
@@ -202,17 +205,18 @@ function DeleteFamilyCard({ family, onChanged }: { family: Family; onChanged: ()
       </p>
       {step === 0 ? (
         <button className="btn-danger" onClick={() => { setStep(1); setErr(null); }}>
-          {t("views.privacy.deleteFamily.button")}
+          <Trash2 {...ic} size={18} />{t("views.privacy.deleteFamily.button")}
         </button>
       ) : (
         <div className="confirm-box">
-          <p className="small" style={{ marginTop: 0 }}>
+          <p className="small" id={`del-fam-prompt-${family.id}`} style={{ marginTop: 0 }}>
             <Trans k="views.privacy.deleteFamily.confirmPrompt" params={{ name: family.name }} tags={B_TAG} />
           </p>
-          <input value={confirmText} placeholder={family.name}
+          <input aria-label={t("views.privacy.deleteFamily.confirmLabel", { name: family.name })}
+            aria-describedby={`del-fam-prompt-${family.id}`} value={confirmText} placeholder={family.name}
             onChange={(e) => setConfirmText(e.target.value)} />
           <div className="row" style={{ gap: 8, marginTop: 10 }}>
-            <button className="btn-danger" disabled={!canConfirm || busy} onClick={doDelete}>
+            <button className="btn-danger solid" disabled={!canConfirm || busy} onClick={doDelete}>
               {busy ? t("views.privacy.deleting") : t("views.privacy.deleteFamily.confirmButton")}
             </button>
             <button className="ghost" disabled={busy} onClick={() => { setStep(0); setConfirmText(""); setErr(null); }}>

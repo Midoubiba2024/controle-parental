@@ -1,9 +1,46 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-palette="cocon">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover : le contenu gère lui-même les zones sûres (encoche iPhone). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Console parent — Contrôle parental</title>
+    <meta name="description" content="Console parent du contrôle parental transparent." />
+    <meta name="theme-color" data-scheme="light" content="#FAF6EF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" data-scheme="dark" content="#170F18" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Écran d'accueil iPhone : « Ajouter à l'écran d'accueil » (chemins RELATIFS, base "./"). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Supervision" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      // Mode (cp-theme) et palette (cp.palette) appliqués AVANT le premier rendu :
+      // pas de flash clair → sombre. Même logique que src/lib/theme.ts.
+      // Palettes connues (L11 ajoutera clarte et jardin) : fond clair / sombre.
+      (function () {
+        var palettes = { cocon: ["#FAF6EF", "#170F18"] };
+        var root = document.documentElement, th = null, pal = "cocon";
+        try {
+          th = localStorage.getItem("cp-theme");
+          var p = localStorage.getItem("cp.palette");
+          if (p && palettes.hasOwnProperty(p)) pal = p;
+        } catch (e) { /* stockage indisponible */ }
+        root.setAttribute("data-palette", pal);
+        var metas = document.querySelectorAll('meta[name="theme-color"]');
+        if (th === "light" || th === "dark") {
+          root.setAttribute("data-theme", th);
+          // Barre du navigateur : une seule couleur, celle du mode choisi.
+          var color = palettes[pal][th === "dark" ? 1 : 0];
+          metas.forEach(function (m) { m.media = "all"; m.content = color; });
+        } else {
+          metas.forEach(function (m) { m.content = palettes[pal][m.getAttribute("data-scheme") === "dark" ? 1 : 0]; });
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

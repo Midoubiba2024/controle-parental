@@ -3,7 +3,9 @@ import { useLocation, requestLocate, GEOFENCE_TRANSITION_LABEL, LOCATION_MODE_LA
   geofenceColor, activeSos } from "../../lib/location";
 import { GEOFENCE_TYPE_LABEL } from "../../lib/location";
 import { fmtAgo, fmtDateTime, localDayKey } from "../../lib/format";
-import { Tile, EmptyState } from "../Ui";
+import { Crosshair, DoorOpen, House, Map as MapIcon, MapPin, Radio, ShieldCheck, Siren } from "lucide-react";
+import { Tile, EmptyState, ViewSkeleton } from "../Ui";
+import { ic } from "../icons";
 import { useI18n, Trans } from "../../i18n";
 import { MapCanvas, type MapCircle, type MapMarker } from "../map/MapCanvas";
 import type { Child, LocationFix } from "../../lib/types";
@@ -88,13 +90,15 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
     setMsg(error ? error : t("views.location.checkInRequested"));
   }
 
-  if (loc.loading) return <p className="muted">{t("views.location.loading")}</p>;
+  if (loc.loading) return <ViewSkeleton compact />;
 
   return (
-    <div className="grid" style={{ gap: 18 }}>
+    <div className="stack" style={{ gap: 20 }}>
       {loc.error && <p className="msg error">{loc.error}</p>}
 
-      <div className="card" style={{ borderInlineStart: "3px solid var(--primary)" }}>
+      <div className="banner info">
+        <span className="banner-ic"><ShieldCheck {...ic} /></span>
+        <div>
         <strong>{t("views.location.transparency.title")}</strong>{" "}
         <span className="muted"><Trans k="views.location.transparency.body"
           tags={{ b: (c) => <b>{c}</b> }}
@@ -102,10 +106,12 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
             mode: loc.settings ? LOCATION_MODE_LABEL[loc.settings.mode] : t("views.location.transparency.defaultMode"),
             count: loc.settings?.retention_days ?? 30,
           }} /></span>
+        </div>
       </div>
 
       {sos && (
-        <div className="card sos-banner">
+        <div className="card sos-banner" role="alert">
+          <Siren {...ic} style={{ color: "var(--c-danger)", verticalAlign: "middle", marginInlineEnd: 8 }} />
           <span className="dot-pulse" />
           <Trans k="views.location.sos.title" tags={{ strong: (c) => <strong>{c}</strong> }}
             params={{ ago: fmtAgo(sos.started_at) }} />{" "}
@@ -114,17 +120,13 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
       )}
 
       <div className="grid cols-4">
-        <Tile label={t("views.location.tiles.lastPosition")} icon="📍"
-          iconBg="color-mix(in srgb, var(--primary) 16%, transparent)"
+        <Tile label={t("views.location.tiles.lastPosition")} icon={MapPin} tone="accent"
           value={last ? fmtAgo(last.captured_at) : t("common.none")} />
-        <Tile label={t("views.location.tiles.accuracy")} icon="🎯"
-          iconBg="color-mix(in srgb, var(--series-3) 18%, transparent)"
+        <Tile label={t("views.location.tiles.accuracy")} icon={Crosshair} tone="plum"
           value={last?.accuracy_m != null ? t("views.location.tiles.accuracyValue", { accuracy: Math.round(last.accuracy_m) }) : t("common.none")} />
-        <Tile label={t("views.location.tiles.zones")} icon="🏠"
-          iconBg="color-mix(in srgb, var(--series-1) 18%, transparent)"
+        <Tile label={t("views.location.tiles.zones")} icon={House} tone="sand"
           value={loc.geofences.filter((g) => g.enabled).length} />
-        <Tile label={t("views.location.tiles.realtime")} icon={loc.live ? "🟢" : "⚪"}
-          iconBg="color-mix(in srgb, var(--series-6) 18%, transparent)"
+        <Tile label={t("views.location.tiles.realtime")} icon={Radio} tone={loc.live ? "sage" : "neutral"}
           value={loc.live ? t("views.location.tiles.connected") : t("views.location.tiles.pollingFallback")} />
       </div>
 
@@ -134,29 +136,30 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
           <div className="row" style={{ gap: 8 }}>
             {loc.live && <span className="muted small"><span className="dot-live" />{t("views.location.map.realtime")}</span>}
             <button disabled={busy || !device} onClick={doLocate} title={device ? "" : t("views.location.map.noDevice")}>
-              {busy ? t("common.busy") : t("views.location.map.requestCheckIn")}
+              <MapPin {...ic} size={18} />{busy ? t("common.busy") : t("views.location.map.requestCheckIn")}
             </button>
           </div>
         </div>
         {msg && <p className="msg" style={{ marginTop: 0 }}>{msg}</p>}
 
         {loc.fixes.length === 0 && circles.length === 0 ? (
-          <EmptyState icon="🗺️" title={t("views.location.map.emptyTitle")}
+          <EmptyState icon={MapIcon} title={t("views.location.map.emptyTitle")}
             hint={t("views.location.map.emptyHint")} />
         ) : (
-          <MapCanvas markers={markers} circles={circles} path={path} height={440} />
+          <div className="map-frame"><MapCanvas markers={markers} circles={circles} path={path} height={440} /></div>
         )}
 
         {days.length > 0 && (
           <>
             <div className="seg" style={{ marginTop: 14, flexWrap: "wrap" }}>
-              <button className={selectedDay === null ? "on" : ""} onClick={() => setSelectedDay(null)}>
+              <button type="button" className={selectedDay === null ? "on" : ""} aria-pressed={selectedDay === null} onClick={() => setSelectedDay(null)}>
                 {t("views.location.map.recent")}
               </button>
               {days.slice(0, 7).map(([d, n]) => (
-                <button key={d} className={selectedDay === d ? "on" : ""} onClick={() => setSelectedDay(d)}>
-                  {fmt.date(new Date(d + "T00:00:00"), { weekday: "short", day: "numeric", month: "short" })}
-                  <span className="muted small"> · {n}</span>
+                <button type="button" key={d} className={selectedDay === d ? "on" : ""} aria-pressed={selectedDay === d} onClick={() => setSelectedDay(d)}>
+                  {t("views.location.map.dayChip", {
+                    count: n, day: fmt.date(new Date(d + "T00:00:00"), { weekday: "short", day: "numeric", month: "short" }),
+                  })}
                 </button>
               ))}
             </div>
@@ -172,24 +175,24 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
       <div className="card">
         <h2>{t("views.location.events.title")} <span className="muted small">{t("views.location.events.titleHint")}</span></h2>
         {loc.events.length === 0 ? (
-          <EmptyState icon="🚪" title={t("views.location.events.emptyTitle")}
+          <EmptyState icon={DoorOpen} title={t("views.location.events.emptyTitle")}
             hint={t("views.location.events.emptyHint")} />
         ) : (
-          <table className="tbl">
+          <div className="tbl-wrap"><table className="tbl compact">
             <thead><tr><th>{t("views.location.events.colEvent")}</th><th>{t("views.location.events.colZone")}</th><th>{t("views.location.events.colWhen")}</th></tr></thead>
             <tbody>
               {loc.events.slice(0, 20).map((e) => (
                 <tr key={e.id}>
                   <td><span className={`pill ${e.transition === "enter" ? "in" : e.transition === "exit" ? "out" : ""}`}>
                     {GEOFENCE_TRANSITION_LABEL[e.transition]}</span></td>
-                  <td>{e.geofence_name
+                  <td data-label={t("common.cellLabel", { label: t("views.location.events.colZone") })}>{e.geofence_name
                     ?? loc.geofences.find((g) => g.id === e.geofence_id)?.name
                     ?? t("views.location.events.deletedZone")}</td>
-                  <td className="muted">{fmtDateTime(e.occurred_at)} · {fmtAgo(e.occurred_at)}</td>
+                  <td className="muted" data-label={t("common.cellLabel", { label: t("views.location.events.colWhen") })}>{fmtDateTime(e.occurred_at)}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </div>
