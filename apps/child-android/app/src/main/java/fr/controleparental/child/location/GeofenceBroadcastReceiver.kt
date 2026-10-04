@@ -33,6 +33,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         if (!store.isEnrolled) return
         val repo = LocationRepository(store)
         val manager = GeofenceManager(context)
+        // Alertes de zones désactivées depuis : une transition encore en vol n'est pas envoyée.
+        if (!manager.isActive()) return
 
         // Travail réseau borné : on tient le receiver vivant le temps de l'insert.
         val pending = goAsync()

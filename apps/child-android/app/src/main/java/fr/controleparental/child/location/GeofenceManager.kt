@@ -47,11 +47,14 @@ class GeofenceManager(private val context: Context) {
     /** Nombre de zones enregistrées sur l'appareil au dernier sync (écran « mes données »). */
     fun registeredZoneCount(): Int = names.all.keys.count { it != KEY_SIG }
 
+    /** Des zones sont-elles enregistrées par nous (dernier sync en mode « actif ») ? */
+    fun isActive(): Boolean = names.contains(KEY_SIG)
+
     /**
-     * Resynchronise les geofences enregistrées avec celles de la base. Nécessite
-     * la permission de localisation FINE (et arrière-plan pour un déclenchement
-     * app fermée). Sans permission, on ne fait rien (échec silencieux, visible via
-     * l'écran « mes données »).
+     * Resynchronise les geofences enregistrées avec celles de la base.
+     * [shouldRegister] vient de GeofencePolicy : permission de localisation FINE
+     * (et arrière-plan pour un déclenchement app fermée) ET alertes de zones
+     * activées par le parent. Sinon, tout est désenregistré.
      *
      * [force] = true : ré-enregistrement COMPLET (après reboot). Sinon, on ne
      * re-registre QUE si l'ensemble des zones a changé (comparaison de signature) —
@@ -59,8 +62,16 @@ class GeofenceManager(private val context: Context) {
      * ce qui userait la batterie et provoquerait des pertes de transitions.
      */
     @SuppressLint("MissingPermission")
-    suspend fun sync(hasFine: Boolean, force: Boolean = false) = withContext(Dispatchers.IO) {
-        if (!hasFine) return@withContext
+    suspend fun sync(shouldRegister: Boolean, force: Boolean = false) = withContext(Dispatchers.IO) {
+        // Alertes de zones désactivées (ou pas de position précise) : on DÉSENREGISTRE
+        // tout et on vide le cache, pour qu'aucune transition ne soit plus envoyée.
+        if (!shouldRegister) {
+            if (names.all.isNotEmpty()) {
+                runCatching { Tasks.await(client.removeGeofences(pendingIntent())) }
+                names.edit().clear().apply()
+            }
+            return@withContext
+        }
         val zones = runCatching { repo.geofences() }.getOrDefault(emptyList())
 
         val signature = zones.sortedBy { it.id }

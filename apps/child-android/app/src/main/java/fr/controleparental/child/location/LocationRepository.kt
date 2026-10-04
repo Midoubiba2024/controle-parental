@@ -25,9 +25,11 @@ class LocationRepository(private val store: SupervisionStore) {
         val periodicIntervalSec: Int,
         val retentionDays: Int,
         val highAccuracy: Boolean,
+        // Alertes d'entrée/sortie de zones : réglage SÉPARÉ du partage de position.
+        val geofenceAlertsEnabled: Boolean = true,
     ) {
         companion object {
-            val DEFAULT = Settings(true, "on_demand", 900, 30, false)
+            val DEFAULT = Settings(true, "on_demand", 900, 30, false, true)
         }
     }
 
@@ -41,7 +43,9 @@ class LocationRepository(private val store: SupervisionStore) {
     suspend fun settings(): Settings {
         val e = store.load() ?: return Settings.DEFAULT
         val res = client.get("location_settings",
-            "child_id=eq.${e.childId}&select=enabled,mode,periodic_interval_sec,retention_days,high_accuracy")
+            // select=* : tolère une base où la colonne geofence_alerts_enabled n'existe
+            // pas encore (migration 0030) — elle vaut alors true, comme avant.
+            "child_id=eq.${e.childId}&select=*")
         val arr = asArray(res) ?: return Settings.DEFAULT
         val o = (if (arr.length() > 0) arr.optJSONObject(0) else null) ?: return Settings.DEFAULT
         return Settings(
@@ -50,6 +54,7 @@ class LocationRepository(private val store: SupervisionStore) {
             periodicIntervalSec = o.optInt("periodic_interval_sec", 900),
             retentionDays = o.optInt("retention_days", 30),
             highAccuracy = o.optBoolean("high_accuracy", false),
+            geofenceAlertsEnabled = o.optBoolean("geofence_alerts_enabled", true),
         )
     }
 

@@ -38,13 +38,18 @@ class LocationCoordinator(context: Context) {
     /** Rafraîchit le réglage de partage + ré-enregistre les geofences si besoin. */
     suspend fun onSync() {
         settings = runCatching { repo.settings() }.getOrDefault(LocationRepository.Settings.DEFAULT)
-        runCatching { geofences.sync(client.hasFine()) }   // re-register seulement si les zones ont changé
+        // Re-register seulement si les zones ont changé ; tout retirer si les alertes
+        // de zones sont désactivées (réglage séparé du partage de position).
+        runCatching { geofences.sync(GeofencePolicy.shouldRegister(client.hasFine(), settings.geofenceAlertsEnabled)) }
     }
 
     /** Ré-enregistrement COMPLET des geofences après reboot (les geofences OS ne
      *  survivent pas au redémarrage). Appelé par BootReceiver (borné). */
     suspend fun registerGeofencesAfterBoot() {
-        runCatching { geofences.sync(client.hasFine(), force = true) }
+        settings = runCatching { repo.settings() }.getOrDefault(settings)
+        runCatching {
+            geofences.sync(GeofencePolicy.shouldRegister(client.hasFine(), settings.geofenceAlertsEnabled), force = true)
+        }
     }
 
     /** Appelé à chaque tick de la boucle (~3 s). Gère SOS live + relevé périodique. */

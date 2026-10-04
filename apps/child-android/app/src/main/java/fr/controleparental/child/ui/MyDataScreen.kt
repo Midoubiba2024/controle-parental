@@ -113,8 +113,9 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         locSettings = runCatching { locationRepo.settings() }.getOrNull()
     }
 
-    // Zones (geofences) : actives dès que la position précise est accordée, QUEL QUE
-    // SOIT le mode de partage. On annonce la ligne s'il existe au moins une zone,
+    // Zones (geofences) : actives si la position précise est accordée ET si les
+    // alertes de zones sont activées, QUEL QUE SOIT le mode de partage de position.
+    // On annonce la ligne s'il existe au moins une zone,
     // d'après le cache local (hors ligne) OU la base (zones pas encore synchronisées).
     val geofenceManager = remember { GeofenceManager(context) }
     var zoneCount by remember { mutableStateOf(geofenceManager.registeredZoneCount()) }
@@ -276,7 +277,13 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
             },
             if (locationOff) null else stringResource(R.string.shared_location_details),
             res.getQuantityString(R.plurals.shared_sos, sosMinutes, sosMinutes),
-            if (zoneCount > 0) stringResource(R.string.shared_zones) else null,
+            // Alertes de zones : réglage SÉPARÉ du partage de position.
+            when {
+                loc?.geofenceAlertsEnabled == false -> stringResource(R.string.shared_zones_disabled)
+                zoneCount == 0 -> null
+                locationOff -> stringResource(R.string.shared_zones_location_off)
+                else -> stringResource(R.string.shared_zones)
+            },
             when {
                 !Config.featureCallLog -> null
                 callLogGranted -> stringResource(R.string.shared_call_log)
