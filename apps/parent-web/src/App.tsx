@@ -5,6 +5,7 @@ import { Login } from "./components/Login";
 import { Dashboard } from "./components/Dashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useI18n } from "./i18n";
+import { useAccountAppearanceSync } from "./lib/appearanceSync";
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -19,6 +20,9 @@ export function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Palette et mode : la valeur du compte prime à la connexion (entre appareils).
+  useAccountAppearanceSync(session);
 
   if (!ready) return <div className="center muted">{t("app.loading")}</div>;
 

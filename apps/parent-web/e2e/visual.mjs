@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 /* =============================================================================
-   LOT 10 — Captures visuelles RÉELLES de la console (hors CI) :
+   LOT 10/11 — Captures visuelles RÉELLES de la console (hors CI) :
        npm run e2e:visual            (captures dans $SHOTS_DIR, défaut : <tmp>/cocon-shots)
+
+   Paramètres (variables d'environnement, listes séparées par des virgules) :
+     E2E_PALETTES  : identités à capturer (défaut : cocon,clarte,jardin) ;
+     E2E_VIEWS     : vues (défaut : toutes, + settings) ;
+     E2E_VIEWPORTS : desktop, iphone, iphone-se, iphone-landscape (défaut : tous) ;
+     E2E_THEMES    : light, dark (défaut : les deux).
+   Captures rangées par palette : $SHOTS_DIR/<palette>/<vue>-<écran>-<mode>.png.
 
    1. Construit l'appli (vite build) avec une URL Supabase FACTICE, dans un
       dossier temporaire (jamais dans le dépôt), puis la sert avec `vite preview`.
@@ -10,8 +17,12 @@
       servis par les fixtures (e2e/fixtures.mjs) ; tuiles OSM remplacées par une
       image neutre ; toute autre requête externe est bloquée.
       → aucun mode démo dans le code de production.
-   3. Capture la connexion + les 13 vues en 1440×900 et 390×844 (iPhone), en
-      clair et en sombre, plus le tiroir mobile ouvert et le ticket d'appairage.
+   3. Capture la connexion + les vues en 1440×900 et 390×844 (iPhone), en
+      clair et en sombre, plus le tiroir mobile ouvert et le ticket d'appairage,
+      pour chaque palette.
+   4. Contrôles fonctionnels (LOT 11) : Réglages au clavier (flèches), raccourci
+      d'en-tête synchronisé, valeur du COMPTE prioritaire à la connexion, valeur
+      inconnue → cocon, et AUCUNE police Clarté/Jardin téléchargée en Cocon.
 
    Navigateur : PW_CHROMIUM (chemin d'exécutable) sinon /opt/pw-browsers/chromium
    s'il existe, sinon celui de playwright-core.
@@ -29,10 +40,15 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SUPABASE_URL = "https://demo-cocon.supabase.co";
 const STORAGE_KEY = "sb-demo-cocon-auth-token";
 const OUT = process.env.SHOTS_DIR || join(tmpdir(), "cocon-shots");
-const VIEWS = [
+const ALL_VIEWS = [
   "overview", "screen", "apps", "calls", "rules", "filter", "location",
-  "security", "wellbeing", "requests", "messages", "family", "privacy",
+  "security", "wellbeing", "requests", "messages", "family", "privacy", "settings",
 ];
+const list = (name, all) => (process.env[name] ? process.env[name].split(",").map((x) => x.trim()).filter(Boolean) : all);
+const VIEWS = list("E2E_VIEWS", ALL_VIEWS);
+const PALETTES = list("E2E_PALETTES", ["cocon", "clarte", "jardin"]);
+// Polices des identités chargées à la demande (jamais en Cocon).
+const LAZY_FONTS = /(sora|manrope|outfit|nunito-sans)-latin/;
 const IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 // Langue et fuseau FRANÇAIS : champs date/heure, dates relatives comme chez l'utilisateur.
 const CONTEXT = { locale: "fr-FR", timezoneId: "Europe/Paris", reducedMotion: "reduce" };
@@ -44,7 +60,8 @@ const VIEWPORTS = {
   // iPhone en paysage : tiroir de navigation (pointeur tactile, hauteur ≤ 500 px).
   "iphone-landscape": { viewport: { width: 932, height: 430 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IOS_UA },
 };
-const THEMES = ["light", "dark"];
+const THEMES = list("E2E_THEMES", ["light", "dark"]);
+const VIEWPORT_NAMES = list("E2E_VIEWPORTS", Object.keys(VIEWPORTS));
 // Tuile de carte unie (beige) générée localement : aucun appel à OpenStreetMap.
 const TILE = solidPng(0xEE, 0xE8, 0xDC);
 
@@ -110,7 +127,8 @@ function filterRows(rows, params) {
   return out;
 }
 
-async function mockNetwork(context) {
+/** `account` : métadonnées du compte simulé (lues par GET, fusionnées par PUT /auth/v1/user). */
+async function mockNetwork(context, account = { metadata: {} }) {
   await context.route("**/*", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -125,7 +143,14 @@ async function mockNetwork(context) {
     });
     if (req.method() === "OPTIONS") return json({}, 200);
     const path = url.pathname;
-    if (path.startsWith("/auth/v1/user")) return json(USER);
+    if (path.startsWith("/auth/v1/user")) {
+      if (req.method() === "PUT") {
+        const body = JSON.parse(req.postData() || "{}");
+        account.metadata = { ...account.metadata, ...(body.data ?? {}) };
+        account.puts = (account.puts ?? 0) + 1;
+      }
+      return json({ ...USER, user_metadata: account.metadata });
+    }
     if (path.startsWith("/auth/v1/token")) return json(session());
     if (path.startsWith("/auth/v1/logout")) return json({}, 204);
     if (path.startsWith("/functions/v1/")) return json({ ok: true });
@@ -162,13 +187,14 @@ async function settle(page) {
 const shots = [];
 async function shot(page, name) {
   const file = join(OUT, `${name}.png`);
+  mkdirSync(dirname(file), { recursive: true });
   await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
   shots.push(file);
   console.log(`  ✓ ${name}`);
 }
 
 /**
- * Contrôle T3 : l'habillage Cocon de Leaflet l'emporte bien sur leaflet.css
+ * Contrôle T3 : l'habillage de Leaflet (jetons de la palette) l'emporte bien sur leaflet.css
  * (chargé après, plus .leaflet-touch). En sombre, l'attribution doit prendre
  * --c-ink-2 sur --c-surface — pas le blanc/noir de Leaflet.
  */
@@ -191,7 +217,7 @@ async function checkLeafletTheme(page, name) {
   if (!r) { failures.push(`${name} : attribution Leaflet introuvable`); return; }
   if (r.color !== r.wantColor || r.bg !== r.wantBg) {
     failures.push(`${name} : attribution ${r.color} sur ${r.bg} (attendu ${r.wantColor} sur ${r.wantBg})`);
-  } else console.log(`  ✓ ${name} : attribution Leaflet aux couleurs Cocon`);
+  } else console.log(`  ✓ ${name} : attribution Leaflet aux couleurs de la palette`);
 }
 
 /** Contrôle : aucun défilement horizontal de la page. */
@@ -200,57 +226,134 @@ async function checkOverflow(page, name) {
   if (over > 0) console.warn(`  ⚠ ${name} : défilement horizontal de ${over}px`);
 }
 
+/** Contexte de console connecté, palette + mode posés en localStorage. */
+async function openConsole(vp, theme, palette, view, account) {
+  const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: theme === "system" ? "light" : theme });
+  await mockNetwork(context, account);
+  await context.addInitScript(([key, sess, th, v, pal]) => {
+    try {
+      // Une seule fois par contexte : un rechargement garde l'état de la page.
+      if (sessionStorage.getItem("e2e-init")) return;
+      sessionStorage.setItem("e2e-init", "1");
+      localStorage.setItem(key, JSON.stringify(sess));
+      localStorage.setItem("cp.theme", th);
+      localStorage.setItem("cp.view", v);
+      if (pal) localStorage.setItem("cp.palette", pal);
+    } catch { /* */ }
+  }, [STORAGE_KEY, session(), theme, view, palette]);
+  const page = await context.newPage();
+  const fonts = [];
+  page.on("request", (r) => { if (r.url().endsWith(".woff2")) fonts.push(r.url()); });
+  await page.goto(base);
+  await page.waitForSelector(".shell h1", { timeout: 20_000 });
+  await settle(page);
+  return { context, page, fonts };
+}
+
+const rootAttr = (page, a) => page.evaluate((x) => document.documentElement.getAttribute(x), a);
+function expect(ok, label) {
+  if (ok) console.log(`  ✓ ${label}`);
+  else failures.push(label);
+}
+
 try {
-  for (const [vpName, vp] of Object.entries(VIEWPORTS)) {
+  // --- Contrôles fonctionnels (LOT 11) ------------------------------------------
+  {
+    console.log("→ contrôles Réglages / synchronisation / polices");
+    const vp = VIEWPORTS.desktop;
+    // a) Cocon : aucune police Clarté/Jardin hors Réglages.
+    {
+      const { context, page, fonts } = await openConsole(vp, "light", "cocon", "overview");
+      expect(!fonts.some((f) => LAZY_FONTS.test(f)), "cocon : aucune police Clarté/Jardin téléchargée (vue d'ensemble)");
+      expect(await rootAttr(page, "data-palette") === "cocon", "cocon : data-palette=cocon");
+      await context.close();
+    }
+    // b) Réglages au clavier + raccourci d'en-tête synchronisé + envoi au compte.
+    {
+      const account = { metadata: {} };
+      const { context, page, fonts } = await openConsole(vp, "light", "cocon", "settings", account);
+      await page.locator('input[name="palette"][value="cocon"]').focus();
+      await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(300);
+      expect(await rootAttr(page, "data-palette") === "clarte", "Réglages : flèche droite → Clarté appliquée immédiatement");
+      expect(await page.evaluate(() => localStorage.getItem("cp.palette")) === "clarte", "Réglages : cp.palette mémorisée");
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(400);
+      expect(fonts.some((f) => /sora-latin/.test(f)), "Clarté : Sora chargée à la demande");
+      await page.locator(".mode-option", { hasText: "Sombre" }).click();   // clic sur la carte
+      expect(await rootAttr(page, "data-theme") === "dark", "Réglages : mode Sombre appliqué");
+      await page.locator(".header-actions .icon-btn").first().click();       // sombre → système
+      expect(await page.getByRole("radio", { name: /Automatique/ }).isChecked(), "en-tête : raccourci synchronisé avec Réglages (Automatique)");
+      await page.waitForTimeout(1200);
+      expect(account.metadata.palette === "clarte" && account.metadata.theme === "system", `compte : préférences envoyées (${JSON.stringify(account.metadata)})`);
+      await context.close();
+    }
+    // c) Connexion : la valeur du compte prime sur la valeur locale.
+    {
+      const account = { metadata: { palette: "jardin", theme: "dark" } };
+      const { context, page } = await openConsole(vp, "light", "cocon", "overview", account);
+      await page.waitForTimeout(500);
+      expect(await rootAttr(page, "data-palette") === "jardin", "connexion : palette du compte prioritaire (jardin)");
+      expect(await rootAttr(page, "data-theme") === "dark", "connexion : mode du compte prioritaire (sombre)");
+      expect(await page.evaluate(() => localStorage.getItem("cp.palette")) === "jardin", "connexion : valeur locale mise à jour");
+      await context.close();
+    }
+    // d) Valeur inconnue (locale et compte) → cocon.
+    {
+      const account = { metadata: { palette: "fluo" } };
+      const { context, page } = await openConsole(vp, "light", "fluo", "overview", account);
+      expect(await rootAttr(page, "data-palette") === "cocon", "valeur inconnue → cocon");
+      await context.close();
+    }
+  }
+
+  for (const palette of PALETTES) {
+  console.log(`→ palette ${palette}`);
+  for (const vpName of VIEWPORT_NAMES) {
+    const vp = VIEWPORTS[vpName];
     for (const theme of THEMES) {
       // --- Connexion (sans session) ---------------------------------------
       {
         const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: theme });
         await mockNetwork(context);
-        await context.addInitScript((th) => { try { localStorage.setItem("cp-theme", th); } catch { /* */ } }, theme);
+        await context.addInitScript(([th, pal]) => {
+          try { localStorage.setItem("cp.theme", th); localStorage.setItem("cp.palette", pal); } catch { /* */ }
+        }, [theme, palette]);
         const page = await context.newPage();
         await page.goto(base);
         await settle(page);
         await checkOverflow(page, `login-${vpName}-${theme}`);
-        await shot(page, `login-${vpName}-${theme}`);
+        await shot(page, `${palette}/login-${vpName}-${theme}`);
         await context.close();
       }
       // --- Console (session simulée) --------------------------------------
       for (const view of VIEWS) {
-        const context = await browser.newContext({ ...vp, ...CONTEXT, colorScheme: theme });
-        await mockNetwork(context);
-        await context.addInitScript(([key, sess, th, v]) => {
-          try {
-            localStorage.setItem(key, JSON.stringify(sess));
-            localStorage.setItem("cp-theme", th);
-            localStorage.setItem("cp.view", v);
-          } catch { /* */ }
-        }, [STORAGE_KEY, session(), theme, view]);
-        const page = await context.newPage();
+        const { context, page } = await openConsole(vp, theme, palette, view);
         const errors = [];
         page.on("pageerror", (e) => errors.push(String(e)));
-        await page.goto(base);
-        await page.waitForSelector(".shell h1", { timeout: 20_000 });
-        await settle(page);
+        if (await rootAttr(page, "data-palette") !== palette) failures.push(`${palette}/${view} : data-palette inattendu`);
         if (view === "family") {
           await page.getByRole("button", { name: /Générer un code d.appairage/ }).first().click();
           await page.waitForSelector(".ticket");
           await page.waitForTimeout(200);
         }
-        await checkOverflow(page, `${view}-${vpName}-${theme}`);
-        if (theme === "dark" && view === "location") await checkLeafletTheme(page, `${view}-${vpName}-${theme}`);
-        await shot(page, `${view}-${vpName}-${theme}`);
+        const name = `${palette}/${view}-${vpName}-${theme}`;
+        await checkOverflow(page, name);
+        if (theme === "dark" && view === "location") await checkLeafletTheme(page, name);
+        await shot(page, name);
         if (vpName !== "desktop" && view === "overview") {
           await page.getByRole("button", { name: /^Ouvrir le menu/ }).click();
           await page.waitForTimeout(300);
-          await page.screenshot({ path: join(OUT, `drawer-${vpName}-${theme}.png`), animations: "disabled" });
-          shots.push(join(OUT, `drawer-${vpName}-${theme}.png`));
-          console.log(`  ✓ drawer-${vpName}-${theme}`);
+          const file = join(OUT, `${palette}/drawer-${vpName}-${theme}.png`);
+          await page.screenshot({ path: file, animations: "disabled" });
+          shots.push(file);
+          console.log(`  ✓ ${palette}/drawer-${vpName}-${theme}`);
         }
-        if (errors.length) console.warn(`  ⚠ ${view}-${vpName}-${theme} : ${errors.join(" | ")}`);
+        if (errors.length) console.warn(`  ⚠ ${name} : ${errors.join(" | ")}`);
         await context.close();
       }
     }
+  }
   }
 } finally {
   await browser.close();

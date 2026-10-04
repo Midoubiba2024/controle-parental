@@ -18,14 +18,14 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <script>
-      // Mode (cp-theme) et palette (cp.palette) appliqués AVANT le premier rendu :
-      // pas de flash clair → sombre. Même logique que src/lib/theme.ts.
-      // Palettes connues (L11 ajoutera clarte et jardin) : fond clair / sombre.
+      // Mode (cp.theme) et palette (cp.palette) appliqués AVANT le premier rendu :
+      // pas de flash clair → sombre ni Cocon → autre identité. Même logique que
+      // src/lib/theme.ts (valeur inconnue → défaut). Fond clair / sombre par palette.
       (function () {
-        var palettes = { cocon: ["#FAF6EF", "#170F18"] };
+        var palettes = { cocon: ["#FAF6EF", "#170F18"], clarte: ["#EEF2F7", "#0A1322"], jardin: ["#F4F7F2", "#0E1611"] };
         var root = document.documentElement, th = null, pal = "cocon";
         try {
-          th = localStorage.getItem("cp-theme");
+          th = localStorage.getItem("cp.theme") || localStorage.getItem("cp-theme");
           var p = localStorage.getItem("cp.palette");
           if (p && palettes.hasOwnProperty(p)) pal = p;
         } catch (e) { /* stockage indisponible */ }

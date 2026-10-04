@@ -42,6 +42,7 @@ const fr = {
     messages: "Messages",
     family: "Famille",
     privacy: "Confidentialité",
+    settings: "Réglages",
   },
 
   dashboard: {
@@ -65,6 +66,7 @@ const fr = {
       messages: "Messages",
       family: "Famille & appareils",
       privacy: "Confidentialité & RGPD",
+      settings: "Réglages",
     },
     loadFailed: "Chargement impossible",
     retry: "Réessayer",
@@ -840,6 +842,40 @@ const fr = {
       // Attribution des tuiles (HTML autorisé : entité &copy;)
       attribution: "&copy; contributeurs OpenStreetMap",
     },
+    // LOT 11 — Réglages : apparence (identité visuelle + mode) et langue.
+    settings: {
+      appearance: {
+        title: "Apparence",
+        sub: "Le changement est immédiat. Il est enregistré sur cet appareil et dans votre compte, pour vous suivre sur vos autres appareils.",
+      },
+      palette: {
+        legend: "Identité visuelle",
+        // Exemple de la police de titre, dans la vignette d'aperçu.
+        sample: "Aa",
+        default: "Par défaut",
+        selected: "Choisie",
+      },
+      palettes: {
+        cocon: { name: "Cocon", desc: "Chaleureuse et rassurante : ivoire, prune et corail." },
+        clarte: { name: "Clarté", desc: "Calme et nette : bleu nuit et bleu franc." },
+        jardin: { name: "Jardin", desc: "Fraîche et douce : vert sauge et touche de soleil." },
+      },
+      mode: {
+        legend: "Mode",
+        light: "Clair",
+        dark: "Sombre",
+        system: "Automatique",
+        systemHint: "Suit le réglage de l’appareil.",
+        shortcut: "Le bouton soleil / lune de l’en-tête fait la même chose.",
+      },
+      language: {
+        title: "Langue",
+        sub: "Langue de la console sur cet appareil.",
+      },
+      // Rappel : ces réglages ne changent RIEN à ce qui est observé chez l'enfant.
+      note: "Ces réglages ne changent que l’affichage de votre console : ni les données recueillies, ni ce que voit l’enfant dans « Mes données ».",
+    },
+
     privacy: {
       cancel: "Annuler",
       deleting: "Suppression…",

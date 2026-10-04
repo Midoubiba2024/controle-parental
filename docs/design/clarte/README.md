@@ -4,7 +4,15 @@ Calme, nette, très professionnelle : l'esprit d'une application de banque ou de
 
 Les maquettes `vue-ensemble.dc.html` et `famille.dc.html` sont des **références de conception**. Leurs données sont 100 % fictives (famille DURAND, enfant Léa). Ce sont du HTML à styles en ligne, au format d'un outil de conception, qu'on ne peut pas ouvrir tel quel. Elles ne sont jamais embarquées dans l'application.
 
-## Jetons de départ (à valider et compléter en clair et en sombre)
+## Ce qui fait foi (LOT 11)
+
+L'identité est **implémentée** dans la console. En cas d'écart avec les maquettes ou les jetons de départ ci-dessous, l'application fait foi :
+
+- **jetons** (couleurs claires et sombres, rayons, ombres, polices, séries de graphiques) : `apps/parent-web/src/themes/clarte.css`, contrôlés par `npm run check:theme` (mêmes noms de jetons que Cocon, blocs sombres identiques, contrastes WCAG) ;
+- **polices** : Sora et Manrope, auto-hébergées (`@fontsource-variable`, latin et latin-ext) et **chargées à la demande** (`apps/parent-web/src/fonts/clarte.css`) : un utilisateur de Cocon ne les télécharge jamais ;
+- **textes** : le catalogue `apps/parent-web/src/i18n/locales/fr.ts`.
+
+## Jetons de départ (intention de conception)
 
 **Couleurs**
 - Fond `#EEF2F7` ; surface `#FFFFFF`.

@@ -172,9 +172,11 @@ jobs:
       - run: npm run typecheck
       # LOT 9 : catalogues de traduction cohérents (clés, paramètres, pluriels).
       - run: npm run check:i18n
-      # LOT 10 : couleur de fond par palette identique partout (CSS, theme.ts, index.html, manifeste).
+      # LOT 10/11 : identités visuelles cohérentes (fonds, mêmes jetons partout, blocs sombres, contrastes WCAG).
       - run: npm run check:theme
       - run: npm run build
+      # LOT 11 : polices Clarté/Jardin hors du chargement initial (chargées à la demande).
+      - run: npm run check:fonts
       - name: Publier la console (artefact dist/)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
