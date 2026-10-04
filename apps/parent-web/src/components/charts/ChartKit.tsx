@@ -2,10 +2,11 @@ import { useState, type ReactNode } from "react";
 import { Trans, useI18n } from "../../i18n";
 
 /* =============================================================================
-   Boîte à outils de graphiques (SVG, sans dépendance). Couleurs = variables CSS
-   --series-N (palette data-viz validée, CVD-safe). Tooltips au survol ;
-   légendes + labels directs côté vues (identité jamais portée par la couleur
-   seule). Thème clair/sombre hérité via les tokens CSS.
+   Boîte à outils de graphiques (SVG/HTML, sans dépendance). Palette « Cocon »
+   (variables CSS --series-N, validée : luminance, chroma, séparation CVD) ;
+   histogrammes en sable avec le jour de référence en corail. Tooltips au
+   survol ; légendes + libellés directs côté vues (identité jamais portée par la
+   couleur seule). Thème clair/sombre hérité via les jetons CSS.
    ============================================================================= */
 
 export interface Slice {
@@ -13,6 +14,8 @@ export interface Slice {
   label: string;
   value: number;
   color: string;      // ex. "var(--series-1)"
+  tick?: string;      // libellé court de l'axe (sinon `label`)
+  tickMin?: string;   // variante très courte pour les axes étroits (< 400 px)
 }
 
 interface Tip { x: number; y: number; node: ReactNode }
@@ -32,9 +35,9 @@ function Tooltip({ tip }: { tip: Tip | null }) {
   );
 }
 
-/** Anneau (répartition du jour par catégorie). */
+/** Anneau (répartition par catégorie). */
 export function Donut({
-  data, size = 190, thickness = 26, center, fmt,
+  data, size = 176, thickness = 22, center, fmt,
 }: {
   data: Slice[];
   size?: number;
@@ -48,10 +51,12 @@ export function Donut({
   const r = (size - thickness) / 2;
   const cx = size / 2;
   const c = 2 * Math.PI * r;
-  const gap = total > 0 ? Math.min(2, c * 0.01) : 0;
+  const visible = data.filter((d) => d.value > 0);
+  // Espace de 2 px (couleur de surface) entre segments, sauf s'il n'y en a qu'un.
+  const gap = visible.length > 1 ? 2 : 0;
 
   let offset = 0;
-  const segs = total > 0 ? data.filter((d) => d.value > 0).map((d) => {
+  const segs = total > 0 ? visible.map((d) => {
     const frac = d.value / total;
     const len = Math.max(frac * c - gap, 0.5);
     const seg = { d, len, dash: `${len} ${c - len}`, off: -offset };
@@ -60,18 +65,19 @@ export function Donut({
   }) : [];
 
   return (
-    <div style={{ position: "relative", width: size, margin: "0 auto" }}>
+    <div className="donut" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="chart" role="img"
         aria-label={t("views.charts.donutAriaLabel", { total: center?.primary ?? fmt(total) })}>
-        <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={thickness} />
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--c-track)" strokeWidth={thickness} />
         {segs.map((s) => (
           <circle
             key={s.d.key}
+            className="bar"
             cx={cx} cy={cx} r={r} fill="none"
             stroke={s.d.color} strokeWidth={thickness}
             strokeDasharray={s.dash} strokeDashoffset={s.off}
             transform={`rotate(-90 ${cx} ${cx})`}
-            style={{ cursor: "pointer", transition: "opacity .12s" }}
+            style={{ cursor: "pointer" }}
             onMouseMove={(e) => setTip({
               x: e.clientX, y: e.clientY,
               node: <Trans k="views.charts.tooltipWithPercent" tags={TIP_TAGS}
@@ -82,12 +88,9 @@ export function Donut({
         ))}
       </svg>
       {center && (
-        <div style={{
-          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", pointerEvents: "none",
-        }}>
-          <div style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-.02em" }}>{center.primary}</div>
-          {center.secondary && <div className="muted small">{center.secondary}</div>}
+        <div className="donut-center">
+          <span className="p">{center.primary}</span>
+          {center.secondary && <span className="s">{center.secondary}</span>}
         </div>
       )}
       <Tooltip tip={tip} />
@@ -95,38 +98,63 @@ export function Donut({
   );
 }
 
-/** Barres verticales (ex. 7 derniers jours). [highlightKey] ressort en corail. */
+/**
+ * Histogramme vertical (ex. 7 derniers jours).
+ * - [highlightKey] : jour de référence, en corail ;
+ * - [limits] : limite quotidienne de CHAQUE jour (même unité que value, null =
+ *   aucune) → trait pointillé par colonne, barre plus foncée si dépassée ;
+ * - valeurs affichées au-dessus des barres quand il y en a peu (≤ 10).
+ */
 export function Bars({
-  data, height = 200, fmt, highlightKey,
+  data, height = 200, fmt, valueFmt, highlightKey, limits, limitLabel,
 }: {
   data: Slice[];
   height?: number;
   fmt: (v: number) => string;
+  valueFmt?: (v: number) => string;
   highlightKey?: string;
+  limits?: (number | null)[];
+  limitLabel?: ReactNode;
 }) {
+  const { t } = useI18n();
   const [tip, setTip] = useState<Tip | null>(null);
-  const max = Math.max(1, ...data.map((d) => d.value));
   const n = data.length || 1;
-  const padB = 22;
-  const plotH = height - padB;
-  const gap = 10;
-  const bw = `calc((100% - ${(n - 1) * gap}px) / ${n})`;
+  const dense = n > 10;
+  const showValues = !dense;
+  const labelSpace = showValues ? 22 : 4;
+  const plotH = height - labelSpace;
+  const max = Math.max(1, ...data.map((d) => d.value), ...(limits ?? []).map((l) => l ?? 0));
+  const gap = dense ? 4 : 14;
+  const hasLimit = !!limits?.some((l) => l != null);
+  const constantLimit = hasLimit && limits!.every((l) => l === limits![0]) ? limits![0] : null;
+  const pad = constantLimit != null && limitLabel ? 60 : 0;
+  const aria = data.map((d) => t("views.charts.point", { label: d.label, value: fmt(d.value) }))
+    .join(t("views.charts.pointSeparator"));
 
   return (
-    <div style={{ position: "relative" }}>
-      {/* Axe TEMPOREL : toujours gauche→droite, même en RTL (convention des
-          graphiques chronologiques) ; les libellés gardent leur propre sens. */}
-      <div style={{ display: "flex", gap, alignItems: "flex-end", height, direction: "ltr" }}>
-        {data.map((d) => {
+    // Axe TEMPOREL : toujours gauche→droite, même en RTL (convention des
+    // graphiques chronologiques) ; les libellés gardent leur propre sens.
+    <div className="bars" role="img" aria-label={aria}>
+      <div className="bars-plot" style={{ height, gap, paddingInlineStart: pad }}>
+        {constantLimit != null && limitLabel && (
+          <div className="bars-limit-label" style={{ insetBlockEnd: (constantLimit / max) * plotH - 16, width: pad - 6 }}>
+            {limitLabel}
+          </div>
+        )}
+        {data.map((d, i) => {
+          const lim = limits?.[i] ?? null;
           const h = Math.max((d.value / max) * plotH, d.value > 0 ? 3 : 0);
           const hot = d.key === highlightKey;
+          const over = lim != null && d.value > lim * 1;
+          const bg = hot ? "var(--c-accent)" : over ? "var(--chart-bar-over)" : d.color;
           return (
-            <div key={d.key} style={{ width: bw, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height }}>
+            <div key={d.key} className={`bars-col${hot ? " hot" : ""}${over && !hot ? " over" : ""}${dense ? " dense" : ""}`}>
+              {showValues && <span className="val">{d.value > 0 ? (valueFmt ?? fmt)(d.value) : ""}</span>}
               <div
-                className="bar"
+                className="b bar"
                 style={{
-                  width: "100%", height: h, borderRadius: "5px 5px 0 0",
-                  background: hot ? "var(--primary)" : d.color, cursor: "pointer",
+                  height: h, background: bg,
+                  boxShadow: hot ? "var(--shadow-bar)" : undefined,
                 }}
                 onMouseMove={(e) => setTip({
                   x: e.clientX, y: e.clientY,
@@ -134,17 +162,26 @@ export function Bars({
                 })}
                 onMouseLeave={() => setTip(null)}
               />
-              <div className="tick" style={{ marginTop: 6, height: padB - 6, lineHeight: 1, unicodeBidi: "plaintext" }}>{d.label}</div>
+              {lim != null && <span className="lim" style={{ insetBlockEnd: (lim / max) * plotH }} />}
             </div>
           );
         })}
+      </div>
+      <div className="bars-x" style={{ gap, paddingInlineStart: pad }} aria-hidden="true">
+        {data.map((d) => (
+          <span key={d.key} className={d.key === highlightKey ? "hot" : undefined}>
+            {d.tickMin != null && d.tickMin !== (d.tick ?? d.label)
+              ? <><span className="tk">{d.tick ?? d.label}</span><span className="tk-min">{d.tickMin}</span></>
+              : d.tick ?? d.label}
+          </span>
+        ))}
       </div>
       <Tooltip tip={tip} />
     </div>
   );
 }
 
-/** Barres horizontales avec label direct (ex. top apps). */
+/** Barres horizontales avec libellé direct (ex. top apps). Miroir en RTL. */
 export function HBars({
   data, fmt, maxRows = 8,
 }: {
@@ -153,28 +190,21 @@ export function HBars({
   maxRows?: number;
 }) {
   const { t } = useI18n();
-  const [tip, setTip] = useState<Tip | null>(null);
   const rows = data.slice(0, maxRows);
   const max = Math.max(1, ...rows.map((d) => d.value));
+  if (rows.length === 0) return <p className="empty">{t("views.charts.noData")}</p>;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 11, position: "relative" }}>
+    <ul className="cat-list">
       {rows.map((d) => (
-        <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 120, fontSize: ".86rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</div>
-          <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 99, height: 12 }}>
-            <div
-              className="bar"
-              style={{ width: `${Math.max((d.value / max) * 100, 2)}%`, height: "100%", borderRadius: 99, background: d.color, cursor: "pointer" }}
-              onMouseMove={(e) => setTip({ x: e.clientX, y: e.clientY, node: <Trans k="views.charts.tooltip" tags={TIP_TAGS} params={{ label: d.label, value: fmt(d.value) }} /> })}
-              onMouseLeave={() => setTip(null)}
-            />
-          </div>
-          <div style={{ width: 66, textAlign: "end", fontVariantNumeric: "tabular-nums", fontSize: ".84rem", fontWeight: 600 }}>{fmt(d.value)}</div>
-        </div>
+        <li key={d.key} style={{ gap: 12 }}>
+          <span className="lbl" style={{ flex: "0 1 38%" }}>{d.label}</span>
+          <span style={{ flex: 1, height: 8, borderRadius: "var(--r-xs)", background: "var(--c-track)" }} aria-hidden="true">
+            <span style={{ display: "block", width: `${Math.max((d.value / max) * 100, 2)}%`, height: 8, borderRadius: "var(--r-xs)", background: d.color }} />
+          </span>
+          <span className="val" style={{ minWidth: 64, textAlign: "end" }}>{fmt(d.value)}</span>
+        </li>
       ))}
-      {rows.length === 0 && <p className="empty">{t("views.charts.noData")}</p>}
-      <Tooltip tip={tip} />
-    </div>
+    </ul>
   );
 }
 
@@ -188,5 +218,20 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
         </span>
       ))}
     </div>
+  );
+}
+
+/** Liste « pastille · libellé · valeur » : légende détaillée d'un anneau. */
+export function CategoryList({ items, fmt }: { items: Slice[]; fmt: (v: number) => string }) {
+  return (
+    <ul className="cat-list">
+      {items.map((s) => (
+        <li key={s.key}>
+          <span className="sw" style={{ background: s.color }} />
+          <span className="lbl">{s.label}</span>
+          <span className="val">{fmt(s.value)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

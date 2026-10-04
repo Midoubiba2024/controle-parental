@@ -2,10 +2,14 @@ import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import {
   HELP_RESOURCES, SAFETY_CATEGORIES, SEVERITY_LABEL, SEVERITY_ORDER,
-  safetyCategoryColor, safetyCategoryLabel, severityColor, toSafetySettingsUpsert, useSafety,
+  safetyCategoryColor, safetyCategoryLabel, toSafetySettingsUpsert, useSafety,
 } from "../../lib/safety";
-import { fmtAgo, fmtDateTime } from "../../lib/format";
-import { EmptyState } from "../Ui";
+import { fmtAgo, fmtAt, fmtDateTime } from "../../lib/format";
+import type { CSSProperties } from "react";
+import { CalendarClock, CirclePause, CloudSun, ExternalLink, FolderOpen, Funnel, HeartHandshake, MapPin, TriangleAlert, UserRoundCheck } from "lucide-react";
+import { EmptyState, ViewSkeleton } from "../Ui";
+import type { View } from "../Dashboard";
+import { ic, icSm, safetyCategoryIcon } from "../icons";
 import { Trans, errorMessage, useI18n } from "../../i18n";
 import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
 
@@ -21,17 +25,18 @@ import type { Child, SafetyCategory, SafetySettings } from "../../lib/types";
 
 const STALE_MS = 5 * 60_000;
 
-export function SafetyView({ familyId, child }: { familyId: string; child: Child }) {
-  const { t } = useI18n();
+export function SafetyView({ familyId, child, onNavigate }: {
+  familyId: string; child: Child; onNavigate: (v: View) => void;
+}) {
   const s = useSafety(familyId, child.id);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  if (s.loading) return <p className="muted">{t("views.wellbeing.loading")}</p>;
+  if (s.loading) return <ViewSkeleton compact />;
 
   // Gradation par âge : fonction RÉSERVÉE au profil ado (preteen/teen). Pour
   // young_child, elle est totalement OFF (ni service, ni analyse) → on ne propose rien.
-  if (child.age_profile === "young_child") return <YoungChildNotice child={child} />;
+  if (child.age_profile === "young_child") return <YoungChildNotice child={child} onNavigate={onNavigate} />;
 
   async function run(fn: () => Promise<{ error?: string | null } | void>) {
     setBusy(true); setMsg(null);
@@ -57,7 +62,7 @@ export function SafetyView({ familyId, child }: { familyId: string; child: Child
   }
 
   return (
-    <div className="grid dash" style={{ gap: 18 }}>
+    <div className="grid dash">
       {s.error && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{s.error}</p>}
       {msg && <p className="msg error" style={{ gridColumn: "1 / -1" }}>{msg}</p>}
 
@@ -73,17 +78,26 @@ type RunFn = (fn: () => Promise<{ error?: string | null } | void>) => void;
 type SafetyHook = ReturnType<typeof useSafety>;
 
 /* ------------------------- Notice profil jeune enfant -------------------- */
-function YoungChildNotice({ child }: { child: Child }) {
+function YoungChildNotice({ child, onNavigate }: { child: Child; onNavigate: (v: View) => void }) {
   const { t } = useI18n();
+  const links: { view: View; icon: typeof Funnel }[] = [
+    { view: "filter", icon: Funnel }, { view: "rules", icon: CalendarClock }, { view: "location", icon: MapPin },
+  ];
   return (
     <div className="card">
-      <h2>{t("views.wellbeing.youngChild.title")}</h2>
-      <p className="muted small" style={{ marginTop: -8 }}>
-        <Trans k="views.wellbeing.youngChild.intro" tags={{ b: (c) => <b>{c}</b> }} />
-      </p>
-      <p>
-        <Trans k="views.wellbeing.youngChild.body" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />
-      </p>
+      <div className="empty">
+        <span className="empty-ic"><UserRoundCheck {...ic} size={22} /></span>
+        <h2 className="empty-title" style={{ fontSize: "var(--fs-h2)" }}>{t("views.wellbeing.youngChild.title")}</h2>
+        <p className="empty-hint" style={{ maxWidth: "52ch" }}>{t("views.wellbeing.youngChild.body", { name: child.display_name })}</p>
+        <p className="empty-hint" style={{ marginTop: 10 }}>{t("views.wellbeing.youngChild.protectedBy")}</p>
+        <div className="row" style={{ justifyContent: "center", marginTop: 6 }}>
+          {links.map(({ view, icon: Icon }) => (
+            <button key={view} type="button" className="ghost" onClick={() => onNavigate(view)}>
+              <Icon {...ic} size={18} />{t(`nav.${view}`)}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -104,7 +118,7 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
         <Trans k="views.wellbeing.settings.intro" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />
       </p>
 
-      <label className="row" style={{ gap: 8, marginTop: 8 }}>
+      <label className="check" style={{ marginTop: 8 }}>
         <input type="checkbox" checked={enabled} disabled={busy}
           onChange={(e) => run(() => saveSettings({ analysis_enabled: e.target.checked }))} />
         <span><Trans k="views.wellbeing.settings.enableToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
@@ -113,18 +127,21 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
         {t("views.wellbeing.settings.enableHint")}
       </p>
 
-      <label className="row" style={{ gap: 8, marginTop: 10 }}>
+      <label className="check">
         <input type="checkbox" checked={mutual} disabled={busy}
           onChange={(e) => run(() => saveSettings({ mutual_visibility: e.target.checked }))} />
         <span><Trans k="views.wellbeing.settings.mutualToggle" tags={{ b: (c) => <b>{c}</b> }} /></span>
       </label>
 
       {s.openPauses.length > 0 && (
-        <div className="msg" style={{ marginTop: 14, borderInlineStart: "3px solid var(--warning)", paddingInlineStart: 10 }}>
+        <div className="note warn" role="status" style={{ marginTop: 14 }}>
+          <CirclePause {...ic} />
+          <div>
           {s.openPauses[0].started_at
             ? <Trans k="views.wellbeing.settings.pauseNoticeSince" tags={{ b: (c) => <b>{c}</b> }}
                 params={{ name: child.display_name, ago: fmtAgo(s.openPauses[0].started_at) }} />
             : <Trans k="views.wellbeing.settings.pauseNotice" tags={{ b: (c) => <b>{c}</b> }} params={{ name: child.display_name }} />}
+          </div>
         </div>
       )}
 
@@ -142,18 +159,18 @@ function SettingsCard({ s, child, busy, run, saveSettings }: {
                 <span className="small">{t("views.wellbeing.settings.device")}</span>
                 <span>
                   {!st.analysis_active ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.wellbeing.settings.badgeInactive")}</span>
+                    <span className="badge warn"><CirclePause {...icSm} size={14} />{t("views.wellbeing.settings.badgeInactive")}</span>
                   ) : stale ? (
-                    <span className="badge" style={{ color: "var(--warning)" }}>{t("views.wellbeing.settings.badgeUncertain")}</span>
+                    <span className="badge warn"><TriangleAlert {...icSm} size={14} />{t("views.wellbeing.settings.badgeUncertain")}</span>
                   ) : (
-                    <span className="badge" style={{ color: "var(--good)" }}>{t("views.wellbeing.settings.badgeActive")}</span>
+                    <span className="badge good"><HeartHandshake {...icSm} size={14} />{t("views.wellbeing.settings.badgeActive")}</span>
                   )}
                   <span className="muted small" style={{ marginInlineStart: 8 }}>
                     {!st.analysis_active
                       ? (st.last_revoked_at ? t("views.wellbeing.settings.cutAgo", { ago: fmtAgo(st.last_revoked_at) }) : "")
                       : stale
                         ? t("views.wellbeing.settings.silentSince", { ago: fmtAgo(st.updated_at) })
-                        : t("views.wellbeing.settings.lastSeen", { when: fmtDateTime(st.updated_at) })}
+                        : t("views.wellbeing.settings.lastSeen", { when: fmtAt(st.updated_at) })}
                   </span>
                 </span>
               </li>
@@ -188,26 +205,27 @@ function CategoriesCard({ s }: { s: SafetyHook }) {
         <Trans k="views.wellbeing.categories.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {!anySignal ? (
-        <EmptyState icon="🌤" title={t("views.wellbeing.categories.emptyTitle")}
+        <EmptyState icon={CloudSun} title={t("views.wellbeing.categories.emptyTitle")}
           hint={t("views.wellbeing.categories.emptyHint")} />
       ) : (
         <div style={{ marginTop: 8 }}>
           {SAFETY_CATEGORIES.map((c) => {
             const a = agg.get(c.key);
+            const Icon = safetyCategoryIcon(c.key);
             return (
               <div key={c.key} className="row"
-                style={{ gap: 10, padding: "8px 4px", borderBottom: "1px solid var(--border)", alignItems: "center" }}>
-                <span className="app-ic" style={{ background: safetyCategoryColor(c.key), width: 28, height: 28, fontSize: ".9rem" }}>
-                  {c.icon}
+                style={{ gap: 12, padding: "10px 4px", borderBottom: "1px solid var(--c-divider)", alignItems: "center" }}>
+                <span className="app-ic sm" style={{ "--ic-color": safetyCategoryColor(c.key) } as CSSProperties}>
+                  <Icon {...ic} size={18} />
                 </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>{c.label}</div>
                   <div className="muted small">{c.hint}</div>
                 </span>
                 <span className="row" style={{ gap: 6 }}>
                   {SEVERITY_ORDER.map((sev) =>
                     a && a[sev] > 0 ? (
-                      <span key={sev} className="badge" style={{ color: severityColor(sev) }}>
+                      <span key={sev} className={`badge ${sev === "high" ? "danger" : sev === "medium" ? "warn" : "good"}`}>
                         {SEVERITY_LABEL[sev]} · {a[sev]}
                       </span>
                     ) : null,
@@ -235,9 +253,9 @@ function SignalsCard({ s, busy, run, acknowledge }: {
         <Trans k="views.wellbeing.signals.intro" tags={{ b: (c) => <b>{c}</b> }} />
       </p>
       {s.signals.length === 0 ? (
-        <EmptyState icon="🗂" title={t("views.wellbeing.signals.emptyTitle")} hint={t("views.wellbeing.signals.emptyHint")} />
+        <EmptyState icon={FolderOpen} title={t("views.wellbeing.signals.emptyTitle")} hint={t("views.wellbeing.signals.emptyHint")} />
       ) : (
-        <table className="tbl">
+        <div className="tbl-wrap"><table className="tbl compact">
           <thead><tr>
             <th>{t("views.wellbeing.signals.colCategory")}</th><th>{t("views.wellbeing.signals.colSeverity")}</th>
             <th>{t("views.wellbeing.signals.colApp")}</th><th>{t("views.wellbeing.signals.colOccurrences")}</th>
@@ -246,18 +264,18 @@ function SignalsCard({ s, busy, run, acknowledge }: {
           <tbody>
             {s.signals.map((sig) => (
               <tr key={sig.id} style={{ opacity: sig.acknowledged_at ? 0.55 : 1 }}>
-                <td>
-                  <span className="badge" style={{ color: safetyCategoryColor(sig.category) }}>
-                    {safetyCategoryLabel(sig.category)}
+                <td className="wrap">
+                  <span className="badge">
+                    <span className="sw" style={{ background: safetyCategoryColor(sig.category) }} />{safetyCategoryLabel(sig.category)}
                   </span>
                 </td>
-                <td><span className="badge" style={{ color: severityColor(sig.severity) }}>
+                <td className="t-badge" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colSeverity") })}><span className={`badge ${sig.severity === "high" ? "danger" : sig.severity === "medium" ? "warn" : "good"}`}>
                   {SEVERITY_LABEL[sig.severity]}
                 </span></td>
-                <td className="small"><code>{sig.source_app ?? t("common.none")}</code></td>
-                <td className="small">{sig.occurrence_count}</td>
-                <td className="muted small">{fmtDateTime(sig.occurred_at)}</td>
-                <td>
+                <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colApp") })}><code>{sig.source_app ?? t("common.none")}</code></td>
+                <td className="small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colOccurrences") })}>{t("views.wellbeing.signals.occurrences", { count: sig.occurrence_count })}</td>
+                <td className="muted small" data-label={t("common.cellLabel", { label: t("views.wellbeing.signals.colWhen") })}>{fmtDateTime(sig.occurred_at)}</td>
+                <td className="t-actions">
                   {sig.acknowledged_at
                     ? <span className="muted small">{t("views.wellbeing.signals.seen")}</span>
                     : <button className="link" disabled={busy} onClick={() => run(() => acknowledge(sig.id))}>{t("views.wellbeing.signals.markSeen")}</button>}
@@ -265,7 +283,7 @@ function SignalsCard({ s, busy, run, acknowledge }: {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </div>
   );
@@ -282,10 +300,10 @@ function ResourcesCard() {
       </p>
       <div className="grid cols-2" style={{ gap: 12 }}>
         {HELP_RESOURCES.map((r) => (
-          <div key={r.name} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
+          <div key={r.name} className="panel">
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <strong>{r.name}</strong>
-              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}</a>
+              <strong className="serif" style={{ fontSize: 18 }}>{r.name}</strong>
+              <a className="link" href={r.url} target="_blank" rel="noreferrer noopener">{t("views.wellbeing.resources.open")}<ExternalLink {...icSm} className="flip-rtl" /></a>
             </div>
             <div className="small" style={{ margin: "4px 0" }}>{r.contact}</div>
             <div className="muted small">{r.desc}</div>

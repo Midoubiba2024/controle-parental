@@ -35,18 +35,54 @@ export function date(
 ): string {
   const value = toDate(d);
   if (!isValidDate(value)) return t("common.none");
-  return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(value);
+  // Insécable entre le numéro du jour et le mois (« 3 oct. » jamais coupé).
+  return cached("dt", opts, (l) => new Intl.DateTimeFormat(l, opts)).format(value).replace(/(\d) (?=\p{L})/gu, "$1\u00A0");
 }
 
-/** Date et heure courtes : « 04/10 07:43 ». */
+const HM: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+function relative(d: DateInput, inSentence: boolean): string {
+  const value = toDate(d);
+  if (!isValidDate(value)) return t("common.none");
+  const now = new Date();
+  const time = date(value, HM);
+  if (sameDay(value, now)) return inSentence ? t("units.when.today", { time }) : time;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(value, yesterday)) return t("units.when.yesterday", { time });
+  const day = date(value, value.getFullYear() === now.getFullYear()
+    ? { day: "numeric", month: "short" }
+    : { day: "numeric", month: "short", year: "numeric" });
+  return t(inSentence ? "units.when.datedInSentence" : "units.when.dated", { date: day, time });
+}
+
+/**
+ * Date et heure RELATIVES, sans secondes, format unique des cellules et listes :
+ * « 06:40 » (aujourd'hui), « hier à 18:12 », « 2 oct. à 18:12 » (cette année),
+ * « 2 oct. 2025 à 18:12 » (années précédentes).
+ */
 export function dateTime(d: DateInput): string {
-  return date(d, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return relative(d, false);
 }
 
-/** Heure ; par défaut comme toLocaleTimeString() : « 07:43:12 ». */
-export function time(
-  d: DateInput, opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit" },
-): string {
+/**
+ * Même chose, mais à insérer DANS une phrase (« dernier signal {when} ») :
+ * « à 06:40 », « hier à 18:12 », « le 2 oct. à 18:12 ».
+ */
+export function at(d: DateInput): string {
+  return relative(d, true);
+}
+
+/** Pourcentage à partir d'un nombre 0–100 : « 76 % » ; `signed` → « +32 % » / « −5 % ». */
+export function percent(value: number, signed = false): string {
+  if (!Number.isFinite(value)) return t("common.none");
+  return number(value / 100, { style: "percent", maximumFractionDigits: 0, ...(signed ? { signDisplay: "exceptZero" } : {}) });
+}
+
+/** Heure ; par défaut sans secondes : « 07:43 ». */
+export function time(d: DateInput, opts: Intl.DateTimeFormatOptions = HM): string {
   return date(d, opts);
 }
 
@@ -70,7 +106,7 @@ export function duration(ms: number): string {
     : t("units.duration.hoursMinutes", { h: number(h), mm: number(m, { minimumIntegerDigits: 2 }) });
 }
 
-/** Durée courte pour axes : « 2h », « 45m », « 2h30 ». */
+/** Durée courte (étiquettes de barres) : « 45 min », « 2 h », « 2 h 30 ». */
 export function durationShort(ms: number): string {
   if (!Number.isFinite(ms)) return t("common.none");
   const totalMin = Math.round(ms / 60000);
@@ -79,7 +115,7 @@ export function durationShort(ms: number): string {
   if (h === 0) return t("units.durationShort.minutes", { m: number(m) });
   return m === 0
     ? t("units.durationShort.hours", { h: number(h) })
-    : t("units.durationShort.hoursMinutes", { h: number(h), m: number(m) });
+    : t("units.durationShort.hoursMinutes", { h: number(h), m: number(m, { minimumIntegerDigits: 2 }) });
 }
 
 /** Taille en octets : « 512 o », « 1,5 Mo », « 12 Go ». null → « — ». */
@@ -127,5 +163,5 @@ export function languageName(code: string): string {
   }
 }
 
-export const fmt = { date, dateTime, time, number, duration, durationShort, bytes, ago, dayLabel, languageName };
+export const fmt = { date, dateTime, at, time, number, percent, duration, durationShort, bytes, ago, dayLabel, languageName };
 export type Fmt = typeof fmt;
