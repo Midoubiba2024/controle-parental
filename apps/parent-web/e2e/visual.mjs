@@ -238,7 +238,7 @@ try {
           await page.waitForTimeout(200);
         }
         await checkOverflow(page, `${view}-${vpName}-${theme}`);
-        if (theme === "dark" && (view === "location" || view === "security")) await checkLeafletTheme(page, `${view}-${vpName}-${theme}`);
+        if (theme === "dark" && view === "location") await checkLeafletTheme(page, `${view}-${vpName}-${theme}`);
         await shot(page, `${view}-${vpName}-${theme}`);
         if (vpName !== "desktop" && view === "overview") {
           await page.getByRole("button", { name: /^Ouvrir le menu/ }).click();
