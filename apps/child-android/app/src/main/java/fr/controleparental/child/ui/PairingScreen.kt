@@ -49,6 +49,10 @@ fun PairingScreen(
     // Champ conservé à la rotation / recréation de l'activité.
     var field by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     var rejectedChar by rememberSaveable { mutableStateOf(false) }
+    var pasteRejected by rememberSaveable { mutableStateOf(false) }
+    // Dernière erreur déjà traitée (vidage du champ) : survit à la rotation, pour
+    // ne pas effacer de nouveau une saisie en cours.
+    var handledErrorSeq by rememberSaveable { mutableIntStateOf(0) }
     // Appel en cours / dernière erreur : niveau processus (survit à la recréation).
     val pairing by PairingController.state.collectAsState()
     var blockedUntil by remember { mutableLongStateOf(store.pairingBlockedUntil) }
@@ -56,12 +60,18 @@ fun PairingScreen(
     val context = LocalContext.current
 
     // Nouvelle erreur : relire le blocage ; après un code expiré/déjà utilisé,
-    // tout sélectionner pour que le collage du nouveau code remplace l'ancien.
+    // VIDER le champ, une seule fois par erreur (l'ancien code est définitivement
+    // inutilisable ; une sélection serait perdue avec le focus du champ désactivé).
     LaunchedEffect(pairing.errorSeq) {
         blockedUntil = store.pairingBlockedUntil
         now = System.currentTimeMillis()
-        if (pairing.errorCode == "code_expired" || pairing.errorCode == "code_already_used") {
-            field = field.copy(selection = TextRange(0, field.text.length))
+        if (pairing.errorSeq != handledErrorSeq) {
+            if (pairing.errorCode == "code_expired" || pairing.errorCode == "code_already_used") {
+                field = TextFieldValue("")
+                rejectedChar = false
+                pasteRejected = false
+            }
+            handledErrorSeq = pairing.errorSeq
         }
     }
 
@@ -132,17 +142,20 @@ fun PairingScreen(
                     input.text, input.selection.min, input.selection.max,
                 )
                 rejectedChar = edit.rejected
+                pasteRejected = edit.pasteRejected
                 field = TextFieldValue(edit.code, TextRange(edit.selStart, edit.selEnd))
             },
             label = { Text(stringResource(R.string.pairing_code_label)) },
             supportingText = {
-                if (rejectedChar) {
-                    Text(stringResource(R.string.pairing_code_rejected_char), modifier = announce)
-                } else {
-                    Text(stringResource(R.string.pairing_code_hint))
+                when {
+                    pasteRejected ->
+                        Text(stringResource(R.string.pairing_code_paste_rejected), modifier = announce)
+                    rejectedChar ->
+                        Text(stringResource(R.string.pairing_code_rejected_char), modifier = announce)
+                    else -> Text(stringResource(R.string.pairing_code_hint))
                 }
             },
-            isError = rejectedChar || shownError != null,
+            isError = rejectedChar || pasteRejected || shownError != null,
             singleLine = true,
             enabled = !busy,
             visualTransformation = GroupedCodeTransformation,

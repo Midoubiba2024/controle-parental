@@ -151,10 +151,15 @@ class SupervisionStore(context: Context) {
      * Jamais plus de 15 min dans le futur (PairingProtocol.effectiveBlockedUntil).
      */
     var pairingBlockedUntil: Long
-        // Borné à 15 min à la lecture : persisté en heure murale (horloge reculée).
-        get() = PairingProtocol.effectiveBlockedUntil(
-            prefs.getLong(KEY_PAIRING_BLOCKED_UNTIL, 0L), System.currentTimeMillis(),
-        )
+        // Borné à 15 min à la lecture (heure murale, horloge reculée) ; la valeur
+        // bornée est RÉÉCRITE pour que le blocage finisse réellement.
+        get() {
+            val clamp = PairingProtocol.clampBlockedUntil(
+                prefs.getLong(KEY_PAIRING_BLOCKED_UNTIL, 0L), System.currentTimeMillis(),
+            )
+            clamp.toPersist?.let { prefs.edit().putLong(KEY_PAIRING_BLOCKED_UNTIL, it).apply() }
+            return clamp.effective
+        }
         set(value) { prefs.edit().putLong(KEY_PAIRING_BLOCKED_UNTIL, value).apply() }
 
     /**

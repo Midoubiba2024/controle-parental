@@ -111,6 +111,19 @@ class PairingProtocolTest {
         assertTrue(PairingProtocol.shouldRefreshProactively(expiresAt = 1_020, obtainedAt = 960, nowEpochSeconds = 1_000))
     }
 
+    @Test fun cappedBlockIsRewrittenSoItEventuallyEnds() {
+        val now = 10_000_000L
+        // Borne appliquée → valeur à réécrire = now + 15 min.
+        val c = PairingProtocol.clampBlockedUntil(now + 5 * 3_600_000, now)
+        assertEquals(PairingProtocol.BlockClamp(now + 900_000, now + 900_000), c)
+        // Relue 16 min plus tard : la valeur réécrite est échue, pas de nouvelle borne.
+        val later = now + 960_000
+        assertEquals(PairingProtocol.BlockClamp(now + 900_000, null), PairingProtocol.clampBlockedUntil(c.toPersist!!, later))
+        assertFalse(PairingProtocol.clampBlockedUntil(c.toPersist!!, later).effective > later)
+        // Valeur normale : rien à réécrire.
+        assertEquals(PairingProtocol.BlockClamp(now + 754_000, null), PairingProtocol.clampBlockedUntil(now + 754_000, now))
+    }
+
     @Test fun blockedUntilIsCappedAtFifteenMinutes() {
         val now = 10_000_000L
         // Valeur normale (≤ 15 min + marge) : conservée.

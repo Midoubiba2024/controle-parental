@@ -58,6 +58,7 @@
     <string name="pairing_intro">Saisis le code à 10 caractères affiché par tes parents dans leur application (par exemple 7KQ2M-X9D4F).</string>
     <string name="pairing_code_label">Code d\'appairage</string>
     <string name="pairing_code_hint">10 caractères, avec ou sans tiret</string>
+    <string name="pairing_code_paste_rejected">Colle uniquement le code de 10 caractères.</string>
     <string name="pairing_code_rejected_char">Ce caractère n\'existe pas dans les codes (pas de U). Vérifie la saisie.</string>
     <string name="pairing_submit">Associer</string>
     <string name="pairing_submitting">Association…</string>

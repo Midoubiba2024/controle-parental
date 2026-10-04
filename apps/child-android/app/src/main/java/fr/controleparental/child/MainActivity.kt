@@ -44,7 +44,10 @@ class MainActivity : ComponentActivity() {
         if (store.isEnrolled) {
             // Vérifier que le parent n'a pas retiré l'appareil entre-temps
             // (docs/14-APPAIRAGE.md §5 : détection au démarrage).
-            lifecycleScope.launch { SupabaseClient(store).verifyDeviceActive(force = true) }
+            // Forcée au premier lancement seulement ; une recréation (rotation) reste
+            // soumise au plafond d'une vérification par minute.
+            val force = savedInstanceState == null
+            lifecycleScope.launch { SupabaseClient(store).verifyDeviceActive(force = force) }
         } else {
             // Filet LOT 12b : rejouer un démontage interrompu (processus tué).
             Unenrollment.resumeIfPending(this)

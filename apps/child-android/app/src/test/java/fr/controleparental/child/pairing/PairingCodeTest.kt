@@ -147,4 +147,33 @@ class PairingCodeTest {
         val e = PairingCode.applyEdit("ABCDE", 3, 3, "ABDE", 2, 2)
         assertEquals(PairingCode.Edit("ABDE", 2, 2, false), e)
     }
+
+    // --- Revue tour 2 : R8 (ancrage sur la sélection), R11 (collage trop long) ---
+
+    @Test fun pasteAtCursorZeroOnFullFieldIsNotPermuted() {
+        // Champ « 7KQ2MX9D4F », curseur en 0, collage « 7ZQ4P-K2M9A ».
+        val old = "7KQ2MX9D4F"
+        val after = "7ZQ4P-K2M9A" + old
+        val e = PairingCode.applyEdit(old, 0, 0, after, 11, 11)
+        assertEquals(PairingCode.Edit("7ZQ4PK2M9A", 10, 10, false), e)
+    }
+
+    @Test fun pasteAtCursorZeroOnPartialFieldIsNotPermuted() {
+        // Champ « 7KQ2M », curseur en 0, collage « 7KQ2M-X9D4F ».
+        val e = PairingCode.applyEdit("7KQ2M", 0, 0, "7KQ2M-X9D4F" + "7KQ2M", 11, 11)
+        assertEquals(PairingCode.Edit("7KQ2MX9D4F", 10, 10, false), e)
+    }
+
+    @Test fun pastingAWholeMessageIsRefusedWithDedicatedFlag() {
+        val e = PairingCode.applyEdit("", 0, 0, "Ton code : 7KQ2M-X9D4F", 22, 22)
+        assertEquals(PairingCode.Edit("", 0, 0, rejected = false, pasteRejected = true), e)
+        // Champ déjà rempli : inchangé.
+        val f = PairingCode.applyEdit("7KQ2M", 5, 5, "7KQ2M" + "code 7KQ2M-X9D4F merci", 27, 27)
+        assertEquals(PairingCode.Edit("7KQ2M", 5, 5, rejected = false, pasteRejected = true), f)
+    }
+
+    @Test fun pastingAPartialCodeIsStillAccepted() {
+        val e = PairingCode.applyEdit("", 0, 0, "7kq2m", 5, 5)
+        assertEquals(PairingCode.Edit("7KQ2M", 5, 5, false), e)
+    }
 }

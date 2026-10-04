@@ -142,9 +142,23 @@ object PairingProtocol {
      * heures. Au-delà de 15 min + 60 s de marge, on la ramène à `now + 15 min`
      * (le serveur ne demande jamais plus).
      */
-    fun effectiveBlockedUntil(storedUntilMs: Long, nowMs: Long): Long {
+    fun effectiveBlockedUntil(storedUntilMs: Long, nowMs: Long): Long =
+        clampBlockedUntil(storedUntilMs, nowMs).effective
+
+    /**
+     * [effective] : fin de blocage à appliquer ; [toPersist] : valeur à RÉÉCRIRE
+     * quand la borne s'applique (sinon null). Sans réécriture, chaque lecture
+     * recalculerait « dans 15 min » et le blocage ne finirait jamais.
+     */
+    data class BlockClamp(val effective: Long, val toPersist: Long?)
+
+    fun clampBlockedUntil(storedUntilMs: Long, nowMs: Long): BlockClamp {
         val maxMs = MAX_RETRY_AFTER_SECONDS * 1000
-        return if (storedUntilMs - nowMs > maxMs + 60_000) nowMs + maxMs else storedUntilMs
+        return if (storedUntilMs - nowMs > maxMs + 60_000) {
+            BlockClamp(nowMs + maxMs, nowMs + maxMs)
+        } else {
+            BlockClamp(storedUntilMs, null)
+        }
     }
 
     /** Minutes affichées pour `too_many_attempts` : arrondi supérieur, au moins 1. */

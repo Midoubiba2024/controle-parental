@@ -83,8 +83,18 @@ object PairingCode {
         return Input(code, rejected)
     }
 
-    /** Résultat d'une modification du champ : texte normalisé + sélection. */
-    data class Edit(val code: String, val selStart: Int, val selEnd: Int, val rejected: Boolean)
+    /**
+     * Résultat d'une modification du champ : texte normalisé + sélection.
+     * [pasteRejected] : un collage qui n'est pas un code seul (message entier,
+     * texte trop long) a été refusé — l'appli affiche « colle uniquement le code ».
+     */
+    data class Edit(
+        val code: String,
+        val selStart: Int,
+        val selEnd: Int,
+        val rejected: Boolean,
+        val pasteRejected: Boolean = false,
+    )
 
     /**
      * Applique une modification du champ ([before] → [after], sélections comprises)
@@ -101,18 +111,21 @@ object PairingCode {
         before: String, beforeSelStart: Int, beforeSelEnd: Int,
         after: String, afterSelStart: Int, afterSelEnd: Int,
     ): Edit {
-        // Segment inséré : ce qui diffère entre le préfixe et le suffixe communs.
-        var prefix = 0
-        val maxPrefix = minOf(before.length, after.length)
-        while (prefix < maxPrefix && before[prefix] == after[prefix]) prefix++
-        var suffix = 0
-        while (suffix < minOf(before.length, after.length) - prefix &&
-            before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
-        ) suffix++
-        val inserted = after.substring(prefix, after.length - suffix)
-        if (inserted.length > 1 && after != before && isValid(inserted)) {
-            val code = normalize(inserted)
-            return Edit(code, code.length, code.length, rejected = false)
+        val inserted = insertedSegment(before, beforeSelStart, beforeSelEnd, after)
+        if (inserted.length > 1 && after != before) {
+            if (isValid(inserted)) {
+                val code = normalize(inserted)
+                return Edit(code, code.length, code.length, rejected = false)
+            }
+            // Collage d'autre chose qu'un code seul (« Ton code : 7KQ2M-X9D4F »,
+            // texte trop long, caractères étrangers) : refusé tel quel, sans
+            // extraction automatique, avec un message dédié.
+            if (significantLength(inserted) > LENGTH || sanitizeInput(inserted).rejected) {
+                return Edit(
+                    before, beforeSelStart.coerceIn(0, before.length), beforeSelEnd.coerceIn(0, before.length),
+                    rejected = false, pasteRejected = true,
+                )
+            }
         }
 
         val full = sanitizeInput(after)
@@ -124,6 +137,29 @@ object PairingCode {
         fun map(offset: Int) = sanitizeInput(after.take(offset.coerceIn(0, after.length))).code.length
             .coerceAtMost(full.code.length)
         return Edit(full.code, map(afterSelStart), map(afterSelEnd), full.rejected)
+    }
+
+    /**
+     * Segment inséré par la modification. D'abord ANCRÉ sur la sélection d'avant
+     * (le texte avant et après elle doit être inchangé) — cas normal d'une frappe
+     * ou d'un collage ; sinon, repli sur préfixe/suffixe communs.
+     */
+    private fun insertedSegment(before: String, selStart: Int, selEnd: Int, after: String): String {
+        val s = minOf(selStart, selEnd).coerceIn(0, before.length)
+        val e = maxOf(selStart, selEnd).coerceIn(0, before.length)
+        val head = before.substring(0, s)
+        val tail = before.substring(e)
+        if (after.length >= head.length + tail.length && after.startsWith(head) && after.endsWith(tail)) {
+            return after.substring(head.length, after.length - tail.length)
+        }
+        var prefix = 0
+        val maxPrefix = minOf(before.length, after.length)
+        while (prefix < maxPrefix && before[prefix] == after[prefix]) prefix++
+        var suffix = 0
+        while (suffix < minOf(before.length, after.length) - prefix &&
+            before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+        ) suffix++
+        return after.substring(prefix, after.length - suffix)
     }
 
     /** Nombre de caractères conservés par [sanitizeInput] avant la borne de 10. */
