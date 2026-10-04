@@ -44,6 +44,9 @@ class GeofenceManager(private val context: Context) {
     /** Nom d'une zone depuis le cache local (pour l'instantané de l'événement). */
     fun nameOf(geofenceId: String): String? = names.getString(geofenceId, null)
 
+    /** Nombre de zones enregistrées sur l'appareil au dernier sync (écran « mes données »). */
+    fun registeredZoneCount(): Int = names.all.keys.count { it != KEY_SIG }
+
     /**
      * Resynchronise les geofences enregistrées avec celles de la base. Nécessite
      * la permission de localisation FINE (et arrière-plan pour un déclenchement

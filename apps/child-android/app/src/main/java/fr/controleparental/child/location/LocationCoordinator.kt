@@ -81,7 +81,7 @@ class LocationCoordinator(context: Context) {
     private suspend fun handlePeriodic(now: Long) {
         val s = settings
         if (!s.enabled || s.mode != "periodic") return
-        val intervalMs = s.periodicIntervalSec.coerceAtLeast(300) * 1000L
+        val intervalMs = s.periodicIntervalSec.coerceAtLeast(MIN_PERIODIC_INTERVAL_SEC) * 1000L
         if (now - lastPeriodicMs < intervalMs) return
         lastPeriodicMs = now
         val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return
@@ -119,9 +119,16 @@ class LocationCoordinator(context: Context) {
         DeviceStatusCollector(appContext).collect().batteryLevel
     }.getOrNull()
 
-    private companion object {
-        const val SOS_POLL_MS = 15_000L     // vérif de l'état SOS
-        const val SOS_FIX_MS = 12_000L      // cadence de diffusion live pendant SOS
+    companion object {
+        private const val SOS_POLL_MS = 15_000L     // vérif de l'état SOS
+        private const val SOS_FIX_MS = 12_000L      // cadence de diffusion live pendant SOS
+        // Lues aussi par l'écran « mes données » : le texte affiché à l'enfant suit
+        // le comportement réel.
         const val MAX_SOS_LIVE_MS = 15 * 60_000L  // diffusion bornée à 15 min
+        const val MIN_PERIODIC_INTERVAL_SEC = 300 // plancher du relevé périodique
+
+        /** Intervalle réellement appliqué au relevé périodique, en minutes (arrondi). */
+        fun periodicIntervalMinutes(intervalSec: Int): Int =
+            (intervalSec.coerceAtLeast(MIN_PERIODIC_INTERVAL_SEC) + 30) / 60
     }
 }
