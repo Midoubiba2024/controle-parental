@@ -1,5 +1,6 @@
 package fr.controleparental.child.filter
 
+import fr.controleparental.child.data.BatchRows
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
 import org.json.JSONArray
@@ -60,18 +61,11 @@ class FilterClient(private val store: SupervisionStore) {
     suspend fun logDomainEvents(events: List<DomainEvent>): Boolean {
         if (events.isEmpty()) return true
         val e = store.load() ?: return false
-        val arr = JSONArray()
-        for (ev in events) {
-            val o = JSONObject()
-                .put("family_id", e.familyId)
-                .put("child_id", e.childId)
-                .put("device_id", e.deviceId)
-                .put("domain", ev.domain)
-                .put("action", ev.action)
-                .put("occurred_at", ev.occurredAtIso)
-            if (ev.category != null) o.put("category", ev.category)
-            arr.put(o)
-        }
+        // category null reste une clé PRÉSENTE : lot homogène exigé par PostgREST (PGRST102).
+        val base = BatchRows.base(e.familyId, e.childId, e.deviceId)
+        val arr = BatchRows.toJsonArray(
+            events.map { BatchRows.domainEvent(base, it.domain, it.category, it.action, it.occurredAtIso) },
+        )
         return client.upsert("domain_events", arr) is SupabaseClient.Result.Ok
     }
 

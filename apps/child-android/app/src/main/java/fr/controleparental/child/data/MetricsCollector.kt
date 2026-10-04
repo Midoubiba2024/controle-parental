@@ -29,42 +29,16 @@ class MetricsCollector(private val context: Context) {
 
         // 1) Temps d'écran (agrégat par app/jour).
         val usage = UsageStatsCollector(context).collect(daysBack = 3)
-        val usageArr = JSONArray()
-        usage.forEach { r ->
-            usageArr.put(
-                base(e).apply {
-                    put("day", r.day)
-                    put("package_name", r.packageName)
-                    putOpt("app_label", r.appLabel)
-                    putOpt("category", r.category)
-                    put("total_foreground_ms", r.totalForegroundMs)
-                    put("launch_count", r.launchCount)
-                    put("last_used_at", iso(r.lastUsedAt))
-                },
-            )
-        }
+        val ids = BatchRows.base(e.familyId, e.childId, e.deviceId)
+        val usageArr = BatchRows.toJsonArray(usage.map { BatchRows.usage(ids, it) })
         when (val res = client.upsert(
             "usage_daily", usageArr, onConflict = "child_id,device_id,day,package_name",
         )) { is SupabaseClient.Result.Error -> errors += "usage:${res.code}"; else -> {} }
 
         // 2) Inventaire des apps installées.
         val inventory = AppInventoryCollector(context).collect()
-        val invArr = JSONArray()
-        inventory.forEach { r ->
-            invArr.put(
-                base(e).apply {
-                    put("package_name", r.packageName)
-                    putOpt("app_label", r.appLabel)
-                    putOpt("category", r.category)
-                    put("is_system", r.isSystem)
-                    putOpt("installed_at", r.installedAt?.let { iso(it) })
-                    put("last_seen_at", iso(System.currentTimeMillis()))
-                    // App présente : on « ressuscite » une entrée éventuellement
-                    // marquée désinstallée (removed_at remis à null au merge).
-                    put("removed_at", JSONObject.NULL)
-                },
-            )
-        }
+        val seenAt = System.currentTimeMillis()
+        val invArr = BatchRows.toJsonArray(inventory.map { BatchRows.inventory(ids, it, seenAt) })
         val invRes = client.upsert(
             "app_inventory", invArr, onConflict = "child_id,device_id,package_name",
         )
@@ -95,22 +69,9 @@ class MetricsCollector(private val context: Context) {
         if (callCollector.isEnabledAndGranted()) {
             val since = store.callLogWatermark
             val calls = callCollector.collect(since)
-            val callArr = JSONArray()
-            var maxTs = since
-            calls.forEach { r ->
-                callArr.put(
-                    base(e).apply {
-                        put("kind", "call")
-                        put("direction", r.direction)
-                        // null EXPLICITE (appel anonyme) : PostgREST exige les mêmes clés
-                        // dans tous les objets d'un envoi groupé (sinon PGRST102).
-                        put("counterparty_hash", r.counterpartyHash ?: JSONObject.NULL)
-                        put("duration_ms", r.durationMs)
-                        put("occurred_at", iso(r.occurredAt))
-                    },
-                )
-                if (r.occurredAt > maxTs) maxTs = r.occurredAt
-            }
+            // counterparty_hash null (appel anonyme) reste une clé PRÉSENTE (PGRST102).
+            val callArr = BatchRows.toJsonArray(calls.map { BatchRows.call(ids, it) })
+            val maxTs = calls.maxOfOrNull { it.occurredAt }?.coerceAtLeast(since) ?: since
             val res = client.upsert(
                 "comm_events", callArr,
                 onConflict = "device_id,occurred_at,counterparty_hash,direction",
@@ -134,14 +95,14 @@ class MetricsCollector(private val context: Context) {
             store.pendingStatusCapturedAt = capturedAt
             val statusArr = JSONArray().put(
                 base(e).apply {
-                    putOpt("battery_level", status.batteryLevel)
-                    putOpt("is_charging", status.isCharging)
-                    putOpt("storage_total_bytes", status.storageTotalBytes)
-                    putOpt("storage_free_bytes", status.storageFreeBytes)
-                    putOpt("perm_usage_access", status.permUsageAccess)
-                    putOpt("perm_overlay", status.permOverlay)
-                    putOpt("perm_notifications", status.permNotifications)
-                    putOpt("perm_location", status.permLocation)
+                    put("battery_level", status.batteryLevel ?: JSONObject.NULL)
+                    put("is_charging", status.isCharging ?: JSONObject.NULL)
+                    put("storage_total_bytes", status.storageTotalBytes ?: JSONObject.NULL)
+                    put("storage_free_bytes", status.storageFreeBytes ?: JSONObject.NULL)
+                    put("perm_usage_access", status.permUsageAccess ?: JSONObject.NULL)
+                    put("perm_overlay", status.permOverlay ?: JSONObject.NULL)
+                    put("perm_notifications", status.permNotifications ?: JSONObject.NULL)
+                    put("perm_location", status.permLocation ?: JSONObject.NULL)
                     put("captured_at", iso(capturedAt))
                 },
             )
