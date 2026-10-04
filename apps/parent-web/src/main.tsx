@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import { I18nProvider, initI18n } from "./i18n";
 import { clearChunkReloadFlag, RELOAD_FLAG } from "./lib/chunkReload";
+import { initAppearance } from "./lib/theme";
 import "./styles.css";
 
 // Chunk introuvable (nouvelle version publiée) : on recharge UNE seule fois la
@@ -17,6 +18,10 @@ window.addEventListener("vite:preloadError", (event) => {
   event.preventDefault();
   window.location.reload();
 });
+
+// Palette et mode (déjà posés par le script d'index.html) : theme-color et
+// polices de l'identité choisie (chargées à la demande, hors Cocon).
+initAppearance();
 
 // La langue (et son catalogue, chargé paresseusement hors français) est résolue
 // AVANT le premier rendu : pas de flash de texte dans une autre langue.

@@ -1,7 +1,7 @@
 import { fmt, SUPPORTED_LOCALES, useI18n, type Locale } from "../i18n";
 
 /**
- * Sélecteur de langue (pied de la barre latérale). MASQUÉ tant qu'une seule
+ * Sélecteur de langue (page Réglages, LOT 11). MASQUÉ tant qu'une seule
  * langue est active : il apparaît dès qu'une 2ᵉ langue est ajoutée à
  * SUPPORTED_LOCALES (src/i18n/config.ts). Chaque langue est affichée dans sa
  * propre langue (« français », « العربية »), via Intl.DisplayNames.

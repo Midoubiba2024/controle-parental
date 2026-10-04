@@ -1,20 +1,23 @@
 /* =============================================================================
-   Console parent — identité « Cocon » (LOT 10)
-   Chaleureuse, rassurante, raffinée : fond ivoire, cartes crème, encre
-   aubergine, barre latérale prune flottante, accent corail profond, touches
-   sable et sauge. Titres en Fraunces, texte en Figtree (auto-hébergées :
-   cf. fonts.css). Référence : docs/design/cocon/.
+   Console parent — feuille de styles COMMUNE aux identités visuelles.
+   Trois identités (LOT 10 + LOT 11), choisies dans Réglages, chacune dans son
+   fichier de jetons (src/themes/<palette>.css) :
+     - « Cocon » (défaut) : ivoire, prune, corail ; Fraunces + Figtree ;
+     - « Clarté »  : bleu nuit, bleu franc, nette ; Sora + Manrope ;
+     - « Jardin »  : vert sauge clair, vert forêt, touche soleil ; Outfit + Nunito Sans.
+   Références : docs/design/{cocon,clarte,jardin}/.
 
    RÈGLES
-   - Les JETONS ci-dessous (:root + thème sombre) sont la SEULE source de vérité
-     des couleurs, typographies, rayons, ombres, espacements et focus. Aucune
-     couleur littérale ailleurs (sauf blanc/noir purs dans quelques mélanges).
+   - Les JETONS (:root ci-dessous + src/themes/*.css) sont la SEULE source de
+     vérité des couleurs, typographies, rayons, ombres, espacements et focus.
+     Aucune couleur littérale ailleurs (sauf blanc/noir purs dans quelques mélanges).
    - RTL (LOT 9) : uniquement des propriétés LOGIQUES (margin-inline-*,
      padding-inline-*, inset-inline-*, text-align: start/end) — jamais
      left/right — pour que la mise en page se retourne quand <html dir="rtl">.
    - Deux axes sur <html> : data-palette (identité) × data-theme (clair/sombre ;
      absent = système). Toute couleur passe par un jeton --c-* défini dans CHAQUE
-     bloc de palette (clair, sombre, sombre-système).
+     bloc de palette (clair, sombre, sombre-système) — `npm run check:theme`
+     vérifie mêmes noms partout, blocs sombres identiques et contrastes.
    - Fond de page (--c-bg) recopié dans theme.ts, index.html et le manifeste :
      `npm run check:theme` vérifie qu'ils restent identiques.
    - Leaflet : leaflet.css est chargé APRÈS ce fichier ; ses surcharges sont
@@ -28,11 +31,15 @@
    ============================================================================= */
 
 @import "./fonts.css";
+/* Jetons par identité (un fichier par palette, mêmes noms de jetons partout). */
+@import "./themes/cocon.css";
+@import "./themes/clarte.css";
+@import "./themes/jardin.css";
 
 /* -----------------------------------------------------------------------------
    Jetons COMMUNS à toutes les palettes (échelle typographique, espacements,
    mouvement) + alias historiques. Deux axes INDÉPENDANTS sur <html> :
-     - data-palette = identité visuelle (« cocon » ; L11 ajoutera clarte, jardin) ;
+     - data-palette = identité visuelle (cocon | clarte | jardin) ;
      - data-theme   = mode (light | dark ; absent = réglage du système).
    Chaque palette définit TOUTES ses couleurs, ombres, rayons et polices, en
    clair puis en sombre (bouton de thème ET réglage OS).
@@ -77,351 +84,6 @@
   --radius:         var(--r-card);
   --radius-sm:      var(--r-ctl);
   --shadow:         var(--shadow-card);
-}
-
-/* -----------------------------------------------------------------------------
-   Palette « Cocon » (défaut) — clair. :not([data-palette]) = repli si
-   l'attribut manque (même rendu).
-   ----------------------------------------------------------------------------- */
-:root[data-palette="cocon"],
-:root:not([data-palette]) {
-  color-scheme: light;
-
-  /* --- Surfaces ---------------------------------------------------------- */
-  --c-bg:            #FAF6EF;   /* fond ivoire */
-  --c-surface:       #FFFDF9;   /* cartes */
-  --c-sunken:        #F6EFE4;   /* panneaux intérieurs (formulaire, notes) */
-  --c-track:         #EFE6D8;   /* pistes de jauges, fond d'anneau */
-  --c-border:        #ECE2D3;   /* bordure des cartes */
-  --c-divider:       #F0E7DA;   /* séparateurs internes */
-  --c-control:       #8C7B6F;   /* bordure des champs (≥ 3:1, y compris sur panneaux teintés) */
-  --c-control-soft:  #E2D6C4;   /* bordure des contrôles secondaires */
-
-  /* --- Encre ------------------------------------------------------------- */
-  --c-ink:           #2A1B2D;   /* encre aubergine */
-  --c-ink-2:         #5B4C56;   /* texte d'appoint */
-  --c-muted:         #6E5F69;   /* texte secondaire (5,6:1 sur ivoire) */
-
-  /* --- Accent corail profond -------------------------------------------- */
-  --c-accent:        #B5472F;   /* 5,4:1 avec le blanc */
-  --c-accent-hover:  #8E3522;
-  --c-accent-ink:    #FFFFFF;
-  --c-accent-soft:   #F6E3DC;
-  --c-accent-text:   #A63F28;   /* corail en TEXTE (liens) : ≥ 4,5:1 sur crème */
-
-  /* --- Couleurs secondaires --------------------------------------------- */
-  --c-plum:          #4A2F4E;
-  --c-plum-soft:     #ECE3EE;
-  --c-sand:          #F1E6D5;
-  --c-sand-2:        #E4D3BA;
-  --c-sand-3:        #C9A97C;
-  --c-sand-border:   #DCC9AC;
-  --c-sand-ink:      #5E4A36;
-  --c-family-ink:    #3B2540;
-  --c-sage:          #7FA486;
-  --c-sage-ink:      #2B5236;
-  --c-sage-soft:     #E9F0E6;
-  --c-sage-border:   #D3DFCD;
-  --c-sage-title:    #1F3527;
-  --c-brick:         #7A3524;   /* « ne voit jamais » */
-  --c-ochre-soft:    #F3E8D3;
-  --c-ochre-ink:     #7A5320;
-
-  /* --- États (toujours avec icône + libellé, jamais la couleur seule) --- */
-  --c-good:          #2B6E3F;
-  --c-good-soft:     #E5EFE4;
-  --c-warning:       #8A5A00;
-  --c-warning-soft:  #F7EBCF;
-  --c-danger:        #A6281F;
-  --c-danger-soft:   #F8E1DD;
-
-  /* --- Barre latérale prune --------------------------------------------- */
-  --c-side:          #2A1B2D;
-  --c-side-ink:      #E8DEE5;
-  --c-side-strong:   #FFF8F1;
-  --c-side-title:    #A9949F;
-  --c-side-foot:     #BFAFC0;
-  --c-side-hover:    rgba(255, 255, 255, 0.07);
-  --c-side-line:     rgba(255, 255, 255, 0.12);
-  --c-side-control:  #8A7590;   /* bordure des champs sur la barre (≥ 3:1) */
-  --side-color-scheme: dark;    /* barre prune : contrôles natifs sombres */
-  --c-side-active:   #FAF6EF;
-  --c-side-active-ink: #2A1B2D;
-
-
-  /* --- Accents de composants (centralisés : aucune couleur en dur ailleurs) */
-  --c-brand-logo-bg:      #B5472F;
-  --c-brand-logo-ink:     #FFFFFF;
-  --c-side-active-icon:   #B5472F;
-  --shadow-side-active: 0 8px 18px -12px rgba(0, 0, 0, 0.55);
-  --c-side-dot:           #B5472F;
-  --c-side-email:         #F4ECF1;
-  --c-avatar-bg:          #4A2F4E;
-  --c-avatar-ink:         #FAF6EF;
-  --c-status-dot:         #3E8A57;
-  --c-status-halo:        rgba(62, 138, 87, 0.18);
-  --c-family-ic-bg:       #2A1B2D;
-  --c-family-ic-ink:      #F6D9CF;
-  --c-transparency-ic-bg: #2B5236;
-  --c-transparency-ic-ink:#EDF2E9;
-  --c-ticket-bg:          #F4EADB;
-  --c-ticket-border:      #C3A77E;
-  --c-ticket-ink:         #2A1B2D;
-  --c-auth-point-bg:      rgba(255, 255, 255, 0.08);
-  --c-auth-point-ink:     #F6D9CF;
-  --c-scrim:              rgba(23, 15, 24, 0.45);
-  --c-check-mark:         #FFFFFF;
-  --c-side-border:        transparent;
-  --c-status-stale-halo:  rgba(201, 169, 124, 0.25);
-  --c-side-scrollbar:     rgba(255, 255, 255, 0.2);
-  --c-scroll-shadow:      rgba(0, 0, 0, 0.35);
-  --c-auth-deco:          rgba(255, 255, 255, 0.04);
-  --c-map-marker-ring:    #FFFFFF;
-  --map-tile-filter:      none;
-
-  /* --- Focus ------------------------------------------------------------- */
-  --c-focus:         #B5472F;
-  --focus-ring:      0 0 0 2px var(--c-surface), 0 0 0 4px var(--c-focus);
-
-  /* --- Typographie ------------------------------------------------------- */
-  --font-display: "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
-  --font-body:    "Figtree Variable", "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono:    ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-
-  /* --- Formes ------------------------------------------------------------ */
-  --r-hair:  2px;    /* base des barres denses */
-  --r-xxs:   3px;    /* jauges, pastilles de légende */
-  --r-xs:    4px;    /* base des barres d'histogramme */
-  --r-sm:    6px;    /* code, cases à cocher */
-  --r-chip:  8px;
-  --r-md:    10px;
-  --r-ctl:   12px;   /* contrôles */
-  --r-lg:    14px;
-  --r-panel: 16px;
-  --r-card:  18px;   /* cartes, bulles, barre latérale */
-  --r-xl:    20px;
-  --r-2xl:   24px;
-  --r-round: 50%;
-  --r-pill:  999px;
-  --shadow-card: 0 1px 2px rgba(42, 27, 45, 0.04), 0 12px 32px -20px rgba(42, 27, 45, 0.18);
-  --shadow-pop:  0 2px 6px rgba(42, 27, 45, 0.06), 0 24px 48px -24px rgba(42, 27, 45, 0.35);
-  --shadow-side: 0 18px 40px -28px rgba(42, 27, 45, 0.6);
-  --shadow-btn:  0 8px 18px -12px rgba(42, 27, 45, 0.5);
-  --shadow-bar:  0 8px 18px -10px rgba(42, 27, 45, 0.45);   /* barre du jour */
-  --shadow-selected: inset 0 0 0 1.5px var(--c-accent);
-
-
-  /* --- Séries data-viz « Cocon » (validées : bande de luminance, chroma,
-         séparation CVD adjacente ≥ 8, vision normale ≥ 15). Ordre FIXE. ---- */
-  --series-1: #C2553A;  /* corail   */
-  --series-2: #25917A;  /* sauge-turquoise */
-  --series-3: #7B4F8E;  /* prune    */
-  --series-4: #C38A1E;  /* ocre     */
-  --series-5: #3F78B0;  /* ardoise  */
-  --series-6: #D46F8C;  /* rose     */
-  --series-7: #6E8F2A;  /* olive    */
-  --series-8: #8A3550;  /* lie-de-vin */
-  --chart-bar:       #E4D3BA;   /* barres « jours précédents » (sable) */
-  --chart-bar-over:  #C9A97C;   /* barres au-dessus de la limite */
-  --chart-limit:     #4A2F4E;   /* ligne de limite quotidienne */
-  --chart-grid:      #E2D6C4;
-
-}
-
-/* -----------------------------------------------------------------------------
-   Thème sombre « Cocon de nuit » : fond aubergine très foncé, surfaces prune,
-   accent corail éclairci. Déclaré deux fois (bouton de thème ET réglage OS) ;
-   la garde :not([data-theme="light"]) laisse le choix « clair » l'emporter.
-   ----------------------------------------------------------------------------- */
-:root[data-palette="cocon"][data-theme="dark"],
-:root:not([data-palette])[data-theme="dark"] {
-  color-scheme: dark;
-  --c-bg:            #170F18;
-  --c-surface:       #241A27;
-  --c-sunken:        #1D141F;
-  --c-track:         #3A2C3E;
-  --c-border:        #382A3C;
-  --c-divider:       #30243A;
-  --c-control:       #8E7C8B;
-  --c-control-soft:  #4A3A4E;
-  --c-ink:           #F6EEF2;
-  --c-ink-2:         #DCCFD7;
-  --c-muted:         #BCA9B6;
-  --c-accent:        #E8806A;
-  --c-accent-hover:  #F29B87;
-  --c-accent-ink:    #2A1B2D;
-  --c-accent-soft:   #4A2723;
-  --c-accent-text:   #F09079;
-  --c-plum:          #CDB0D3;
-  --c-plum-soft:     #3B2A40;
-  --c-sand:          #332820;
-  --c-sand-2:        #5C4A3A;
-  --c-sand-3:        #A88A5E;
-  --c-sand-border:   #57452F;
-  --c-sand-ink:      #E9D6B8;
-  --c-family-ink:    #F3E3CA;
-  --c-sage:          #8DB394;
-  --c-sage-ink:      #B5D6BC;
-  --c-sage-soft:     #1F2C22;
-  --c-sage-border:   #34483A;
-  --c-sage-title:    #D6EBDA;
-  --c-brick:         #F0A08C;
-  --c-ochre-soft:    #3A2E1C;
-  --c-ochre-ink:     #E8C68C;
-  --c-good:          #7CCB92;
-  --c-good-soft:     #1E3324;
-  --c-warning:       #E8B85A;
-  --c-warning-soft:  #3A2E14;
-  --c-danger:        #F26D6D;   /* rouge plus froid : distinct de l'accent corail */
-  --c-danger-soft:   #45201D;
-  --c-side:          #2A1D2E;   /* prune un cran PLUS CLAIRE que la page */
-  --c-side-ink:      #E8DEE5;
-  --c-side-strong:   #FFF8F1;
-  --c-side-title:    #A9949F;
-  --c-side-foot:     #BFAFC0;
-  --c-side-hover:    rgba(255, 255, 255, 0.06);
-  --c-side-line:     rgba(255, 255, 255, 0.10);
-  --c-side-control:  #8A7590;
-  --c-side-active:   rgba(255, 255, 255, 0.09);
-  --c-side-active-ink: #FFF8F1;
-  --c-focus:         #F29B87;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 32px -20px rgba(0, 0, 0, 0.7);
-  --shadow-pop:  0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
-  --shadow-side: 0 18px 40px -28px rgba(0, 0, 0, 0.9);
-  --shadow-btn:  0 8px 18px -12px rgba(0, 0, 0, 0.7);
-  --series-1: #D8664A;
-  --series-2: #2A9C83;
-  --series-3: #9B6CB0;
-  --series-4: #BC8418;
-  --series-5: #4F8BC6;
-  --series-6: #CF6585;
-  --series-7: #7B9C2E;
-  --series-8: #B04A68;
-  --chart-bar:       #5C4A3A;
-  --chart-bar-over:  #A88A5E;
-  --chart-limit:     #E3CBE8;
-  --chart-grid:      #4A3A4E;
-  --c-brand-logo-bg:      #B5472F;
-  --c-brand-logo-ink:     #FFFFFF;
-  --c-side-active-icon:   #F29B87;
-  --shadow-side-active: none;
-  --c-side-dot:           #F29B87;
-  --c-side-email:         #F4ECF1;
-  --c-avatar-bg:          #4A2F4E;
-  --c-avatar-ink:         #FAF6EF;
-  --c-status-dot:         #5FBF7A;
-  --c-status-halo:        rgba(95, 191, 122, 0.22);
-  --c-family-ic-bg:       #F6D9CF;
-  --c-family-ic-ink:      #2A1B2D;
-  --c-transparency-ic-bg: #B5D6BC;
-  --c-transparency-ic-ink:#1F2C22;
-  --c-ticket-bg:          #3A2E22;
-  --c-ticket-border:      #8C7350;
-  --c-ticket-ink:         #F6EEF2;
-  --c-auth-point-bg:      rgba(255, 255, 255, 0.08);
-  --c-auth-point-ink:     #F6D9CF;
-  --c-scrim:              rgba(0, 0, 0, 0.62);
-  --c-check-mark:         #2A1B2D;
-  --c-side-border:        var(--c-side-line);
-  --c-map-marker-ring:    #241A27;
-  --map-tile-filter:      brightness(0.7) invert(1) contrast(0.9) hue-rotate(180deg) saturate(0.7);
-  --shadow-bar:           0 8px 18px -10px rgba(0, 0, 0, 0.6);
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-palette="cocon"]:not([data-theme="light"]),
-  :root:not([data-palette]):not([data-theme="light"]) {
-    color-scheme: dark;
-    --c-bg:            #170F18;
-    --c-surface:       #241A27;
-    --c-sunken:        #1D141F;
-    --c-track:         #3A2C3E;
-    --c-border:        #382A3C;
-    --c-divider:       #30243A;
-    --c-control:       #8E7C8B;
-    --c-control-soft:  #4A3A4E;
-    --c-ink:           #F6EEF2;
-    --c-ink-2:         #DCCFD7;
-    --c-muted:         #BCA9B6;
-    --c-accent:        #E8806A;
-    --c-accent-hover:  #F29B87;
-    --c-accent-ink:    #2A1B2D;
-    --c-accent-soft:   #4A2723;
-    --c-accent-text:   #F09079;
-    --c-plum:          #CDB0D3;
-    --c-plum-soft:     #3B2A40;
-    --c-sand:          #332820;
-    --c-sand-2:        #5C4A3A;
-    --c-sand-3:        #A88A5E;
-    --c-sand-border:   #57452F;
-    --c-sand-ink:      #E9D6B8;
-    --c-family-ink:    #F3E3CA;
-    --c-sage:          #8DB394;
-    --c-sage-ink:      #B5D6BC;
-    --c-sage-soft:     #1F2C22;
-    --c-sage-border:   #34483A;
-    --c-sage-title:    #D6EBDA;
-    --c-brick:         #F0A08C;
-    --c-ochre-soft:    #3A2E1C;
-    --c-ochre-ink:     #E8C68C;
-    --c-good:          #7CCB92;
-    --c-good-soft:     #1E3324;
-    --c-warning:       #E8B85A;
-    --c-warning-soft:  #3A2E14;
-    --c-danger:        #F26D6D;
-    --c-danger-soft:   #45201D;
-    --c-side:          #2A1D2E;   /* prune un cran PLUS CLAIRE que la page */
-    --c-side-ink:      #E8DEE5;
-    --c-side-strong:   #FFF8F1;
-    --c-side-title:    #A9949F;
-    --c-side-foot:     #BFAFC0;
-    --c-side-hover:    rgba(255, 255, 255, 0.06);
-    --c-side-line:     rgba(255, 255, 255, 0.10);
-    --c-side-control:  #8A7590;
-    --c-side-active:   rgba(255, 255, 255, 0.09);
-    --c-side-active-ink: #FFF8F1;
-    --c-focus:         #F29B87;
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 32px -20px rgba(0, 0, 0, 0.7);
-    --shadow-pop:  0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
-    --shadow-side: 0 18px 40px -28px rgba(0, 0, 0, 0.9);
-    --shadow-btn:  0 8px 18px -12px rgba(0, 0, 0, 0.7);
-    --series-1: #D8664A;
-    --series-2: #2A9C83;
-    --series-3: #9B6CB0;
-    --series-4: #BC8418;
-    --series-5: #4F8BC6;
-    --series-6: #CF6585;
-    --series-7: #7B9C2E;
-    --series-8: #B04A68;
-    --chart-bar:       #5C4A3A;
-    --chart-bar-over:  #A88A5E;
-    --chart-limit:     #E3CBE8;
-    --chart-grid:      #4A3A4E;
-    --c-brand-logo-bg:      #B5472F;
-    --c-brand-logo-ink:     #FFFFFF;
-    --c-side-active-icon:   #F29B87;
-    --shadow-side-active: none;
-    --c-side-dot:           #F29B87;
-    --c-side-email:         #F4ECF1;
-    --c-avatar-bg:          #4A2F4E;
-    --c-avatar-ink:         #FAF6EF;
-    --c-status-dot:         #5FBF7A;
-    --c-status-halo:        rgba(95, 191, 122, 0.22);
-    --c-family-ic-bg:       #F6D9CF;
-    --c-family-ic-ink:      #2A1B2D;
-    --c-transparency-ic-bg: #B5D6BC;
-    --c-transparency-ic-ink:#1F2C22;
-    --c-ticket-bg:          #3A2E22;
-    --c-ticket-border:      #8C7350;
-    --c-ticket-ink:         #F6EEF2;
-    --c-auth-point-bg:      rgba(255, 255, 255, 0.08);
-    --c-auth-point-ink:     #F6D9CF;
-    --c-scrim:              rgba(0, 0, 0, 0.62);
-    --c-check-mark:         #2A1B2D;
-    --c-side-border:        var(--c-side-line);
-    --c-map-marker-ring:    #241A27;
-    --map-tile-filter:      brightness(0.7) invert(1) contrast(0.9) hue-rotate(180deg) saturate(0.7);
-    --shadow-bar:           0 8px 18px -10px rgba(0, 0, 0, 0.6);
-  }
 }
 
 /* =============================================================================
@@ -471,7 +133,7 @@ img, svg { max-width: 100%; }
 
 h1, h2, .serif { font-family: var(--font-display); }
 h1 {
-  font-size: var(--fs-h1); font-weight: 500; line-height: 1.1; letter-spacing: -0.015em;
+  font-size: var(--fs-h1); font-weight: var(--fw-display); line-height: 1.1; letter-spacing: -0.015em;
   margin: 0; color: var(--c-ink);
 }
 h2 {
@@ -531,7 +193,7 @@ button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visi
 }
 .nav-item {
   display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px;
-  border-radius: var(--r-ctl); border: 0; background: none; width: 100%;
+  border-radius: var(--r-nav); border: 0; background: none; width: 100%;
   color: var(--c-side-ink); font: inherit; font-size: 14.5px; font-weight: 500; text-align: start;
   cursor: pointer; box-shadow: none; justify-content: flex-start; transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
@@ -549,6 +211,7 @@ button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visi
   font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-pill); flex: none;
   border: 1px solid var(--c-side-line); color: var(--c-side-title); white-space: nowrap;
 }
+.nav-item[aria-current="page"] .nav-count { background: var(--c-side-active-count-bg); color: var(--c-side-active-count-ink); }
 .nav-item[aria-current="page"] .nav-tag { color: inherit; border-color: currentColor; opacity: .75; }
 .nav-count {
   min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--r-pill); flex: none;
@@ -560,8 +223,9 @@ button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visi
 .sidebar-foot { margin-top: auto; padding: 16px 12px 4px; border-top: 1px solid var(--c-side-line); }
 .sidebar-email { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--c-side-email); overflow-wrap: anywhere; }
 .sidebar-note { margin: 6px 0 0; font-size: var(--fs-caption); line-height: 1.5; color: var(--c-side-foot); }
-label.lang-switch { display: flex; flex-direction: row; align-items: center; gap: 8px; margin-top: 10px; color: var(--c-side-foot); font-size: var(--fs-caption); font-weight: 500; }
-.lang-switch select { background-color: var(--c-side); color: var(--c-side-ink); border-color: var(--c-side-control); min-height: 44px; color-scheme: var(--side-color-scheme); }
+/* Sélecteur de langue (page Réglages). */
+label.lang-switch { display: flex; flex-direction: row; align-items: center; gap: 12px; color: var(--c-ink-2); font-size: var(--fs-small); font-weight: 600; }
+.lang-switch select { min-height: 44px; max-width: 260px; }
 
 .main {
   min-width: 0; display: flex; flex-direction: column; gap: 24px;
@@ -695,7 +359,7 @@ label.lang-switch { display: flex; flex-direction: row; align-items: center; gap
 }
 .tile-head { min-height: 36px; }
 .tile-value {
-  margin: 12px 0 0; font-family: var(--font-display); font-size: var(--fs-stat); font-weight: 500;
+  margin: 12px 0 0; font-family: var(--font-display); font-size: var(--fs-stat); font-weight: var(--fw-display);
   line-height: 1.1; color: var(--c-ink); font-variant-numeric: tabular-nums lining-nums;
   overflow-wrap: break-word; hyphens: auto;
 }
@@ -1518,4 +1182,95 @@ form.inline, .inline { display: flex; flex-direction: row; flex-wrap: wrap; alig
     transition-duration: 0.01ms !important; scroll-behavior: auto !important;
   }
   .skeleton .sk::after { display: none; }
+}
+
+/* =============================================================================
+   Réglages (LOT 11) : apparence (identité + mode) et langue.
+   Groupes de VRAIS boutons radio, masqués visuellement : la carte entière est
+   le libellé ; le focus clavier se voit sur la carte (:has(:focus-visible)).
+   ============================================================================= */
+.settings-group { border: 0; margin: 0; padding: 0; min-width: 0; }
+.settings-group + .settings-group { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--c-divider); }
+/* Légende flottante : sinon le navigateur la dessine DANS la bordure du fieldset. */
+.settings-group legend {
+  float: inline-start; width: 100%; padding: 0; margin-bottom: 12px; font-size: var(--fs-small); font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-ink-2);
+}
+.settings-group legend + * { clear: both; }
+.settings-hint { margin: 12px 0 0; font-size: var(--fs-small); color: var(--c-muted); }
+.settings-note { margin: 0; }
+
+.palette-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) { .palette-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); } }
+.palette-option {
+  position: relative; display: flex; flex-direction: column; gap: 12px; padding: 11px 11px 15px;
+  background: var(--c-surface); border: 2px solid var(--c-control-soft); border-radius: var(--r-panel);
+  cursor: pointer; transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  /* Le libellé générique des <label> (formulaires) ne s'applique pas ici. */
+  font-size: var(--fs-body); font-weight: 400; color: var(--c-ink); letter-spacing: 0;
+}
+.palette-option:hover { border-color: var(--c-control); }
+.palette-option.on { border-color: var(--c-accent); }
+.palette-option:has(input:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.palette-text { display: flex; flex-direction: column; gap: 4px; padding-inline: 4px; }
+.palette-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 700; font-size: 15.5px; }
+.palette-name .badge { font-size: var(--fs-caption); padding: 1px 8px; }
+.palette-desc { font-size: var(--fs-small); color: var(--c-muted); line-height: 1.45; }
+.palette-check {
+  position: absolute; inset-block-start: 20px; inset-inline-end: 20px;
+  width: 28px; height: 28px; border-radius: var(--r-round);
+  background: var(--c-accent); color: var(--c-accent-ink); box-shadow: 0 0 0 3px var(--c-surface);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* --- Vignette : mini-console aux jetons RÉELS de la palette (.palette-scope) -- */
+.palette-thumb {
+  display: flex; gap: 8px; height: 132px; padding: 8px; overflow: hidden;
+  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r-ctl);
+  color: var(--c-ink);
+}
+.pt-side {
+  flex: 0 0 30%; display: flex; flex-direction: column; gap: 6px; padding: 8px 6px;
+  background: var(--c-side); border: 1px solid var(--c-side-border); border-radius: var(--r-md);
+}
+.pt-logo { width: 18px; height: 18px; border-radius: var(--r-sm); background: var(--c-brand-logo-bg); margin-bottom: 4px; }
+.pt-nav { height: 9px; border-radius: var(--r-nav); background: var(--c-side-line); }
+.pt-nav.on { height: 12px; background: var(--c-side-active); box-shadow: inset 0 0 0 1px var(--c-side-line); }
+.pt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
+.pt-aa {
+  font-family: var(--font-display); font-weight: var(--fw-display); font-size: 28px; line-height: 1;
+  letter-spacing: -0.01em; color: var(--c-ink);
+}
+.pt-card {
+  flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 10px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+}
+.pt-line { height: 6px; width: 80%; border-radius: var(--r-pill); background: var(--c-track); }
+.pt-line.short { width: 55%; }
+.pt-btn { margin-top: auto; width: 46%; height: 14px; border-radius: var(--r-pill); background: var(--c-accent); }
+
+/* --- Mode : segments clair / sombre / automatique --------------------------- */
+.mode-options {
+  display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; max-width: 100%;
+  background: var(--c-sunken); border: 1px solid var(--c-border); border-radius: var(--r-lg);
+}
+.mode-option {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+  border-radius: var(--r-md); border: 2px solid transparent; cursor: pointer; color: var(--c-ink-2);
+  font-size: 14.5px; font-weight: 600; letter-spacing: 0;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.mode-option:hover { background: var(--c-track); color: var(--c-ink); }
+.mode-option.on { background: var(--c-surface); color: var(--c-ink); border-color: var(--c-accent); box-shadow: var(--shadow-card); }
+/* Contraste élevé (Windows) : fonds et ombres disparaissent, la sélection reste visible. */
+@media (forced-colors: active) {
+  .mode-option.on, .palette-option.on { outline: 2px solid Highlight; outline-offset: 2px; }
+  .palette-check { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+}
+.mode-option:has(input:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+/* Petit écran : trois colonnes égales, icône au-dessus du libellé (pas de retour à la ligne). */
+@media (max-width: 480px) {
+  .mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mode-option { flex-direction: column; justify-content: center; gap: 4px; min-height: 64px; padding: 8px 4px; font-size: 14px; text-align: center; }
 }

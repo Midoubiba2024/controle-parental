@@ -33,7 +33,7 @@ chaque itération. En cas d'écart, l'application fait foi :
   réellement — à aligner avec ce que l'enfant lit dans « Mes données » (app
   enfant, PR #24) — la liste écrite
   dans `vue-ensemble.dc.html` n'est qu'une illustration antérieure ;
-- **jetons** (couleurs, rayons, ombres, polices) : `apps/parent-web/src/styles.css`.
+- **jetons** (couleurs, rayons, ombres, polices) : `apps/parent-web/src/themes/cocon.css` (jetons communs dans `src/styles.css`).
 - **mise en page** : la carte de transparence occupe désormais toute la largeur,
   sous les rangées de graphiques, en deux colonnes (une seule sous 760 px), et
   la liste complète reste visible sur mobile.

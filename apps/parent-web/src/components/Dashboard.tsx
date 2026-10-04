@@ -3,15 +3,15 @@ import type { Session } from "@supabase/supabase-js";
 import type { LucideIcon } from "lucide-react";
 import {
   Blocks, CalendarClock, Clock3, Funnel, House, Inbox, Gauge, Lock, LogOut, MapPin,
-  Menu, MessageCircle, Monitor, Moon, Phone, ShieldAlert, Sun, TriangleAlert, UserRoundCheck, Users, X,
+  Menu, MessageCircle, Monitor, Moon, Phone, Settings, ShieldAlert, Sun, TriangleAlert, UserRoundCheck, Users, X,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme";
+import { flushAppearance } from "../lib/appearanceSync";
 import { useObservation } from "../lib/observation";
 import { fmtAgo } from "../lib/format";
 import { ageProfileLabel } from "../lib/labels";
 import { errorMessage, Trans, useI18n } from "../i18n";
-import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ViewErrorBoundary } from "./ErrorBoundary";
 import { clearChunkReloadFlag } from "../lib/chunkReload";
 import { ViewSkeleton } from "./Ui";
@@ -59,10 +59,11 @@ const SecurityView = named(() => import("./views/SecurityView"), "SecurityView")
 const FilteringView = named(() => import("./views/FilteringView"), "FilteringView");
 const SafetyView = named(() => import("./views/SafetyView"), "SafetyView");
 const PrivacyView = named(() => import("./views/PrivacyView"), "PrivacyView");
+const SettingsView = named(() => import("./views/SettingsView"), "SettingsView");
 
 export type View =
   | "overview" | "screen" | "apps" | "calls" | "rules" | "filter"
-  | "location" | "security" | "wellbeing" | "requests" | "messages" | "family" | "privacy";
+  | "location" | "security" | "wellbeing" | "requests" | "messages" | "family" | "privacy" | "settings";
 
 // Navigation en 4 sections titrées. Libellés : nav.<vue> ; sections :
 // dashboard.navSections.<section> ; titres de page : dashboard.viewTitle.<vue>.
@@ -87,6 +88,7 @@ const NAV: { section: "follow" | "protect" | "exchange" | "account"; items: { ke
   { section: "account", items: [
     { key: "family", icon: Users },
     { key: "privacy", icon: Lock },
+    { key: "settings", icon: Settings },
   ] },
 ];
 const ALL_VIEWS = NAV.flatMap((s) => s.items.map((i) => i.key));
@@ -260,7 +262,9 @@ export function Dashboard({ session }: { session: Session }) {
   const themeTitle = t(`dashboard.theme.${theme}`);
   const currentChild = children.find((c) => c.id === childId) ?? null;
   const currentFamily = families.find((f) => f.id === familyId) ?? null;
-  const showChildPicker = children.length > 0 && view !== "family" && view !== "requests";
+  // Vues sans enfant sélectionné : Famille, Demandes (toute la famille), Réglages.
+  const familyWide = view === "family" || view === "requests" || view === "settings";
+  const showChildPicker = children.length > 0 && !familyWide;
 
   // Pastille d'appareil : uniquement si un relevé RÉEL existe pour un appareil
   // actif DE L'ENFANT AFFICHÉ (jamais celui de l'enfant précédent pendant un chargement).
@@ -330,7 +334,6 @@ export function Dashboard({ session }: { session: Session }) {
         <div className="sidebar-foot">
           <p className="sidebar-email">{session.user.email}</p>
           <p className="sidebar-note">{t("dashboard.footerNote")}</p>
-          <LanguageSwitcher />
         </div>
       </aside>
       <div className="scrim" aria-hidden="true" onClick={closeDrawer} />
@@ -347,7 +350,7 @@ export function Dashboard({ session }: { session: Session }) {
             </button>
             <p className="header-date">
               <span className="nowrap-date">{t("dashboard.headerDate", { date: todayCap })}</span>
-              {currentChild && view !== "family" && view !== "requests" && (
+              {currentChild && !familyWide && (
                 <span className="profile" aria-hidden="true">{t("dashboard.headerProfileInline", { profile: ageProfileLabel(currentChild.age_profile) })}</span>
               )}
             </p>
@@ -356,7 +359,8 @@ export function Dashboard({ session }: { session: Session }) {
               <button type="button" className="icon-btn" title={themeTitle} aria-label={themeTitle} onClick={cycleTheme}>
                 <ThemeIcon {...ic} />
               </button>
-              <button type="button" className="ghost" onClick={() => supabase.auth.signOut()}
+              <button type="button" className="ghost"
+                onClick={async () => { await flushAppearance(); await supabase.auth.signOut(); }}
                 aria-label={t("dashboard.signOut")}>
                 <LogOut {...ic} size={18} className="flip-rtl" />
                 <span className="signout-label">{t("dashboard.signOut")}</span>
@@ -416,6 +420,8 @@ export function Dashboard({ session }: { session: Session }) {
         <Suspense fallback={<ViewSkeleton />}>
           {view === "family" ? (
             <FamilyView familyId={familyId!} onChildrenChanged={loadChildren} />
+          ) : view === "settings" ? (
+            <SettingsView />
           ) : view === "requests" ? (
             <RequestsView familyId={familyId!} children={children} onChanged={onRequestsChanged} />
           ) : !childId || !currentChild ? (
