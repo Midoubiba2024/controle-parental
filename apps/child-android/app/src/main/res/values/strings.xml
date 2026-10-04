@@ -6,7 +6,7 @@
   res/xml/locales_config.xml. Voir docs/13-I18N.md.
   RÈGLE : plus jamais de texte visible en dur dans le code Kotlin.
 -->
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="fr">
     <!-- Application -->
     <string name="app_name">Supervision familiale</string>
 
@@ -35,10 +35,12 @@
 
     <!-- Écran de pause (overlay) -->
     <string name="block_title">Pause</string>
+    <string name="block_icon" translatable="false">⏸</string>
     <string name="block_default">Cette application est momentanément en pause.</string>
     <string name="block_request_more_time">Demander plus de temps</string>
     <string name="block_go_home">Retour à l\'accueil</string>
-    <string name="block_emergency_call">Appel d\'urgence (112)</string>
+    <!-- Ne jamais écrire le numéro en dur : il est injecté depuis EMERGENCY_NUMBER (%1$s). -->
+    <string name="block_emergency_call">Appel d\'urgence (%1$s)</string>
     <string name="block_reason_block_app">Cette application est mise en pause par tes parents.</string>
     <string name="block_reason_paused">Petite pause demandée par tes parents.</string>
     <string name="block_reason_schedule_downtime">C\'est l\'heure de se reposer. À demain !</string>
@@ -69,11 +71,13 @@
     <string name="mydata_intro">Tes parents t\'accompagnent via cette application. Elle reste visible : tu peux voir ici tout ce qui est partagé. Rien n\'est caché, et jamais le contenu de tes messages, appels ou de ce que tu regardes.</string>
     <string name="mydata_list_item">"•  %1$s"</string>
     <string name="sos_title">Besoin d\'aide ? SOS</string>
-    <string name="sos_intro">Envoie une alerte à tes parents avec ta position en direct. C\'est toi qui le déclenches. Les appels d\'urgence (112) restent toujours possibles, séparément.</string>
+    <!-- Ne jamais écrire le numéro en dur : il est injecté depuis EMERGENCY_NUMBER (%1$s). -->
+    <string name="sos_intro">Envoie une alerte à tes parents avec ta position en direct. C\'est toi qui le déclenches. Les appels d\'urgence (%1$s) restent toujours possibles, séparément.</string>
     <string name="sos_button">"🆘  Envoyer un SOS"</string>
     <string name="sos_sending">Envoi…</string>
     <string name="sos_sent">SOS envoyé. Tes parents sont prévenus et voient ta position en direct.</string>
-    <string name="sos_failed">Impossible d\'envoyer le SOS (pas de réseau ?). Réessaie ou appelle le 112.</string>
+    <!-- Ne jamais écrire le numéro en dur : il est injecté depuis EMERGENCY_NUMBER (%1$s). -->
+    <string name="sos_failed">Impossible d\'envoyer le SOS (pas de réseau ?). Réessaie ou appelle le %1$s.</string>
     <string name="supervision_level_label">Niveau de supervision</string>
     <string name="supervision_level_reinforced">Renforcé</string>
     <string name="supervision_level_standard">Standard</string>
@@ -93,7 +97,8 @@
     <string name="rules_title">Mes règles en ce moment</string>
     <string name="rules_card_label">Règles d\'accès définies par mes parents</string>
     <string name="rules_none">Aucune règle particulière pour l\'instant.</string>
-    <string name="rules_footer">Tu peux demander plus de temps directement sur l\'écran de pause. Les appels d\'urgence (112) restent toujours possibles.</string>
+    <!-- Ne jamais écrire le numéro en dur : il est injecté depuis EMERGENCY_NUMBER (%1$s). -->
+    <string name="rules_footer">Tu peux demander plus de temps directement sur l\'écran de pause. Les appels d\'urgence (%1$s) restent toujours possibles.</string>
     <string name="parent_messages_title">Messages de mes parents</string>
     <string name="permissions_title">Autorisations</string>
     <string name="permission_granted">✓ accordé</string>
@@ -115,6 +120,7 @@
     <string name="permission_filter_whitelist">Mode liste blanche : seuls les sites autorisés s\'ouvrent.</string>
     <plurals name="permission_filter_blocked_categories">
         <item quantity="one">%1$d catégorie(s) bloquée(s).</item>
+        <item quantity="many">%1$d catégorie(s) bloquée(s).</item>
         <item quantity="other">%1$d catégorie(s) bloquée(s).</item>
     </plurals>
     <string name="permission_filter_safe_search">Recherche sécurisée activée.</string>
@@ -154,14 +160,17 @@
     <string name="rule_weekday_limits">Des limites différentes selon les jours de la semaine.</string>
     <plurals name="rule_blocked_count">
         <item quantity="one">%1$d élément(s) mis en pause (apps ou catégories).</item>
+        <item quantity="many">%1$d élément(s) mis en pause (apps ou catégories).</item>
         <item quantity="other">%1$d élément(s) mis en pause (apps ou catégories).</item>
     </plurals>
     <plurals name="rule_limited_count">
         <item quantity="one">%1$d élément(s) avec un temps limité par jour.</item>
+        <item quantity="many">%1$d élément(s) avec un temps limité par jour.</item>
         <item quantity="other">%1$d élément(s) avec un temps limité par jour.</item>
     </plurals>
     <plurals name="rule_always_allowed_count">
         <item quantity="one">%1$d application(s) toujours autorisées (dont l\'essentiel).</item>
+        <item quantity="many">%1$d application(s) toujours autorisées (dont l\'essentiel).</item>
         <item quantity="other">%1$d application(s) toujours autorisées (dont l\'essentiel).</item>
     </plurals>
     <string name="rule_downtime">Une heure du coucher (pause le soir).</string>

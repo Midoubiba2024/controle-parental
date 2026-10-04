@@ -7,6 +7,7 @@ import android.provider.CallLog
 import androidx.core.content.ContextCompat
 import fr.controleparental.child.Config
 import java.security.MessageDigest
+import java.util.Locale
 
 /**
  * Journal d'appels — MÉTADONNÉES UNIQUEMENT (qui/quand/durée).
@@ -102,6 +103,6 @@ class CallLogCollector(private val context: Context) {
     private fun hash(number: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val bytes = digest.digest("${Config.commHashPepper}:${number.trim()}".toByteArray())
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes.joinToString("") { String.format(Locale.ROOT, "%02x", it) }   // hachage machine : jamais localisé
     }
 }

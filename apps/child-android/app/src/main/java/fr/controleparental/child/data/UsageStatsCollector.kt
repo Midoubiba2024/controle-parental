@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Process
 import java.util.Calendar
+import java.util.Locale
 import java.util.TimeZone
 
 /**
@@ -123,13 +124,16 @@ class UsageStatsCollector(private val context: Context) {
     /** Bornes [minuit, minuit+1j) du jour à J-[offset], + libellé YYYY-MM-DD. */
     private fun dayBounds(offset: Int): Triple<Long, Long, String> {
         val tz = TimeZone.getDefault()
-        val cal = Calendar.getInstance(tz).apply {
+        // Locale.ROOT : calendrier grégorien et chiffres ASCII quelle que soit la langue
+        // de l'appareil (ex. arabe/persan, bouddhiste en th) — la clé `day` part au backend.
+        val cal = Calendar.getInstance(tz, Locale.ROOT).apply {
             add(Calendar.DAY_OF_YEAR, -offset)
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }
         val start = cal.timeInMillis
-        val label = "%04d-%02d-%02d".format(
+        val label = String.format(
+            Locale.ROOT, "%04d-%02d-%02d",
             cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH),
         )
         cal.add(Calendar.DAY_OF_YEAR, 1)

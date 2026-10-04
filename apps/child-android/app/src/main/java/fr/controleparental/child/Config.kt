@@ -4,6 +4,13 @@ import fr.controleparental.child.BuildConfig
 
 /** Configuration Supabase (injectée via BuildConfig depuis build.gradle.kts). */
 object Config {
+    /**
+     * Numéro d'URGENCE — SOURCE UNIQUE (ligne rouge : jamais bloqué). Utilisé à la
+     * fois pour composer (`tel:`) et dans les libellés (injecté en %1$s) : aucune
+     * traduction ne peut afficher un numéro différent de celui réellement composé.
+     */
+    const val EMERGENCY_NUMBER = "112"
+
     val supabaseUrl: String = BuildConfig.SUPABASE_URL
     val supabaseAnonKey: String = BuildConfig.SUPABASE_ANON_KEY
 

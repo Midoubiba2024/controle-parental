@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
+import fr.controleparental.child.Config
 import fr.controleparental.child.R
 
 /**
@@ -56,9 +57,11 @@ class BlockOverlay(private val context: Context) {
         }
 
         root.addView(TextView(context).apply {
-            text = "⏸"
+            text = context.getString(R.string.block_icon)
             textSize = 46f
             gravity = Gravity.CENTER
+            // Pictogramme décoratif : le titre « Pause » porte déjà le sens.
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         })
         root.addView(TextView(context).apply {
             text = context.getString(R.string.block_title)
@@ -95,9 +98,9 @@ class BlockOverlay(private val context: Context) {
 
         // URGENCE — toujours disponible.
         root.addView(Button(context).apply {
-            text = context.getString(R.string.block_emergency_call)
+            text = context.getString(R.string.block_emergency_call, Config.EMERGENCY_NUMBER)
             setOnClickListener {
-                val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:112"))
+                val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Config.EMERGENCY_NUMBER}"))
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(dial)
             }

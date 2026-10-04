@@ -202,7 +202,7 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                 Text(stringResource(R.string.sos_title), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    stringResource(R.string.sos_intro),
+                    stringResource(R.string.sos_intro, Config.EMERGENCY_NUMBER),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -217,7 +217,8 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                                 if (loc != null) locationRepo.insertFix(loc, source = "sos", batteryLevel = null)
                             }
                             sosBusy = false
-                            sosMsg = context.getString(if (ok) R.string.sos_sent else R.string.sos_failed)
+                            sosMsg = if (ok) context.getString(R.string.sos_sent)
+                                     else context.getString(R.string.sos_failed, Config.EMERGENCY_NUMBER)
                         }
                     },
                 ) { Text(stringResource(if (sosBusy) R.string.sos_sending else R.string.sos_button)) }
@@ -287,7 +288,7 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            stringResource(R.string.rules_footer),
+            stringResource(R.string.rules_footer, Config.EMERGENCY_NUMBER),
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(20.dp))
