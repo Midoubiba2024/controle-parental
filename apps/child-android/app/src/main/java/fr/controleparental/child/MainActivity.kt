@@ -12,9 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -43,11 +41,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val store = SupervisionStore(this)
-        // Si déjà enrôlé, (re)démarrer la notification de supervision, puis
-        // vérifier que le parent n'a pas retiré l'appareil entre-temps
-        // (docs/14-APPAIRAGE.md §5 : détection au démarrage).
         if (store.isEnrolled) {
-            SupervisionService.start(this)
+            // Vérifier que le parent n'a pas retiré l'appareil entre-temps
+            // (docs/14-APPAIRAGE.md §5 : détection au démarrage).
             lifecycleScope.launch { SupabaseClient(store).verifyDeviceActive(force = true) }
         } else {
             // Filet LOT 12b : rejouer un démontage interrompu (processus tué).
@@ -57,25 +53,20 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier) {
-                    var enrolled by remember { mutableStateOf(store.isEnrolled) }
-                    // Session perdue / appareil retiré (n'importe quel client du
-                    // processus) : retour à l'écran d'appairage, avec le motif.
+                    // Enrôlement courant : alimenté par l'enregistrement lui-même
+                    // (appairage réussi, désenrôlement), donc juste même après une
+                    // rotation pendant « Association… ».
+                    val current by SupervisionStore.current.collectAsState()
                     val unenrolled by SupervisionStore.unenrolled.collectAsState()
-                    LaunchedEffect(unenrolled) {
-                        if (unenrolled != null) enrolled = store.isEnrolled
+                    val enrollment = remember(current) { if (current != null) store.load() else null }
+                    LaunchedEffect(current) {
+                        // (Re)démarre la notification de supervision dès qu'on est enrôlé.
+                        if (current != null) SupervisionService.start(this@MainActivity)
                     }
-                    val enrollment = remember(enrolled, unenrolled) { if (enrolled) store.load() else null }
                     if (enrollment != null) {
                         MyDataScreen(enrollment = enrollment)
                     } else {
-                        PairingScreen(
-                            store = store,
-                            notice = unenrolled,
-                            onEnrolled = {
-                                SupervisionService.start(this@MainActivity)
-                                enrolled = true
-                            },
-                        )
+                        PairingScreen(store = store, notice = unenrolled)
                     }
                 }
             }

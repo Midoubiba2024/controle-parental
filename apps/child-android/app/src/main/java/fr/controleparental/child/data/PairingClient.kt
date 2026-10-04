@@ -45,6 +45,10 @@ class PairingClient(private val store: SupervisionStore) {
     }
 
     private fun completeLocked(code: String): Result {
+        // Déjà enrôlé (réponse arrivée pendant une recréation de l'écran, double
+        // envoi) : succès immédiat, AUCUN appel réseau ni nouvelle session.
+        if (store.isEnrolled) store.load()?.let { return Result.Ok(it) }
+
         // Attente imposée par le serveur encore en cours : ne rien envoyer.
         val blockedMs = store.pairingBlockedUntil - System.currentTimeMillis()
         if (blockedMs > 0) return Result.Error("too_many_attempts", ((blockedMs + 999) / 1000).toInt())
