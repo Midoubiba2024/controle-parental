@@ -194,7 +194,7 @@ class SupervisionService : Service() {
         withContext(Dispatchers.Main) {
             Toast.makeText(
                 this@SupervisionService,
-                if (ok) "Demande envoyée à tes parents." else "Demande impossible (hors ligne ?).",
+                getString(if (ok) R.string.extra_time_request_sent else R.string.extra_time_request_failed),
                 Toast.LENGTH_SHORT,
             ).show()
         }
@@ -207,7 +207,7 @@ class SupervisionService : Service() {
                 CHANNEL_ID,
                 getString(R.string.supervision_channel),
                 NotificationManager.IMPORTANCE_LOW,
-            ).apply { description = "Indique que la supervision parentale est active." }
+            ).apply { description = getString(R.string.supervision_channel_description) }
             nm.createNotificationChannel(channel)
         }
 
@@ -217,8 +217,8 @@ class SupervisionService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Supervision parentale active")
-            .setContentText("Tes parents t'accompagnent. Touche pour voir tes données.")
+            .setContentTitle(getString(R.string.supervision_notification_title))
+            .setContentText(getString(R.string.supervision_notification_text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setOngoing(true)            // non balayable
             .setContentIntent(openApp)

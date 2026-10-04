@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LOT 9 — Langues proposées dans « Langue de l'application » (Android 13+, par appli).
+  Ajouter une langue : créer res/values-<code>/strings.xml PUIS ajouter son <locale>
+  ici (ex. <locale android:name="ar" />). Voir docs/13-I18N.md.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="fr" />
+</locale-config>

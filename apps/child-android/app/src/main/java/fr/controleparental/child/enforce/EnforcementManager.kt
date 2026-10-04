@@ -52,7 +52,7 @@ class EnforcementManager(private val context: Context) {
 
         refreshUsageIfStale(now)
         val category = AppMeta.resolve(pm, pkg)?.second
-        val clock = PolicyEngine.Clock.from(Calendar.getInstance())
+        val clock = PolicyEngine.Clock.from(Calendar.getInstance(java.util.TimeZone.getDefault(), java.util.Locale.ROOT))
         val approved = if (cache.hasBaseline) cache.approvedPackages else null
 
         val decision = PolicyEngine.evaluate(

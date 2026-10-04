@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import fr.controleparental.child.Config
 import fr.controleparental.child.MainActivity
+import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.enforce.ReinforcedEnforcer
 import kotlinx.coroutines.CoroutineScope
@@ -92,7 +93,7 @@ class LocalDnsVpnService : VpnService() {
     private fun establish() {
         val pfd = runCatching {
             Builder()
-                .setSession("Filtrage parental")
+                .setSession(getString(R.string.filter_vpn_session))
                 .addAddress(VPN_ADDRESS, 32)
                 .addDnsServer(VPN_DNS)
                 .addRoute(VPN_DNS, 32)      // seul le DNS virtuel entre dans le tunnel
@@ -283,16 +284,16 @@ class LocalDnsVpnService : VpnService() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Filtrage du web", NotificationManager.IMPORTANCE_LOW)
-                    .apply { description = "Indique que le filtrage web parental est actif." },
+                NotificationChannel(CHANNEL_ID, getString(R.string.filter_channel), NotificationManager.IMPORTANCE_LOW)
+                    .apply { description = getString(R.string.filter_channel_description) },
             )
         }
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
         val notif: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Filtrage du web actif")
-            .setContentText("Les sites inappropriés sont filtrés. Touche pour en savoir plus.")
+            .setContentTitle(getString(R.string.filter_notification_title))
+            .setContentText(getString(R.string.filter_notification_text))
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setOngoing(true)
             .setContentIntent(open)
@@ -307,12 +308,12 @@ class LocalDnsVpnService : VpnService() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(ALERT_CHANNEL, "Filtrage désactivé", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(ALERT_CHANNEL, getString(R.string.filter_disabled_channel), NotificationManager.IMPORTANCE_HIGH),
             )
         }
         val n = NotificationCompat.Builder(this, ALERT_CHANNEL)
-            .setContentTitle("Filtrage du web désactivé")
-            .setContentText("Le filtrage a été coupé. Tes parents en sont informés (rien n'est caché).")
+            .setContentTitle(getString(R.string.filter_disabled_title))
+            .setContentText(getString(R.string.filter_disabled_text))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

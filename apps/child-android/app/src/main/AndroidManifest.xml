@@ -64,6 +64,7 @@
         android:label="@string/app_name"
         android:icon="@android:drawable/ic_lock_lock"
         android:theme="@style/Theme.ControleParental"
+        android:localeConfig="@xml/locales_config"
         android:supportsRtl="true">
 
         <activity

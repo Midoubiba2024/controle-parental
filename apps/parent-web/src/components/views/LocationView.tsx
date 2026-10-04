@@ -100,7 +100,7 @@ export function LocationView({ familyId, child }: { familyId: string; child: Chi
           tags={{ b: (c) => <b>{c}</b> }}
           params={{
             mode: loc.settings ? LOCATION_MODE_LABEL[loc.settings.mode] : t("views.location.transparency.defaultMode"),
-            days: loc.settings?.retention_days ?? 30,
+            count: loc.settings?.retention_days ?? 30,
           }} /></span>
       </div>
 

@@ -504,7 +504,7 @@ const fr = {
       journal: {
         title: "Journal des domaines",
         subtitle: "(métadonnées)",
-        // {days} = durée de conservation en jours
+        // {count} = durée de conservation en jours (pluriel)
         intro: {
           one: "Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu. Conservé {count} jour (purge automatique).",
           other: "Domaine + catégorie + action + heure. <b>Jamais</b> d'URL complète, de requête ni de contenu. Conservé {count} jours (purge automatique).",
@@ -687,7 +687,11 @@ const fr = {
       transparency: {
         title: "Localisation transparente.",
         // <b> = mode de partage actuel
-        body: "Seules les positions de cette application sont partagées — jamais à l'insu de l'enfant : il voit dans « mes données » quand et comment sa position est transmise. Partage actuel : <b>{mode}</b>. Les positions sont conservées {days} jours puis supprimées.",
+        // {count} = durée de conservation en jours (pluriel)
+        body: {
+          one: "Seules les positions de cette application sont partagées — jamais à l'insu de l'enfant : il voit dans « mes données » quand et comment sa position est transmise. Partage actuel : <b>{mode}</b>. Les positions sont conservées {count} jour puis supprimées.",
+          other: "Seules les positions de cette application sont partagées — jamais à l'insu de l'enfant : il voit dans « mes données » quand et comment sa position est transmise. Partage actuel : <b>{mode}</b>. Les positions sont conservées {count} jours puis supprimées.",
+        },
         defaultMode: "à la demande",
       },
       sos: {

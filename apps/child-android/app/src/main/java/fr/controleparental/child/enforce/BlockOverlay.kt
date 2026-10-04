@@ -13,6 +13,9 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.StringRes
+import fr.controleparental.child.Config
+import fr.controleparental.child.R
 
 /**
  * LOT 2 — Overlay de BLOCAGE plein écran (mode Standard, via SYSTEM_ALERT_WINDOW).
@@ -54,19 +57,21 @@ class BlockOverlay(private val context: Context) {
         }
 
         root.addView(TextView(context).apply {
-            text = "⏸"
+            text = context.getString(R.string.block_icon)
             textSize = 46f
             gravity = Gravity.CENTER
+            // Pictogramme décoratif : le titre « Pause » porte déjà le sens.
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         })
         root.addView(TextView(context).apply {
-            text = "Pause"
+            text = context.getString(R.string.block_title)
             textSize = 26f
             setTextColor(Color.parseColor("#2A2330"))
             gravity = Gravity.CENTER
-            setPadding(0, 16, 0, 8)
+            setPaddingRelative(0, 16, 0, 8)
         })
         root.addView(TextView(context).apply {
-            text = decision.message.ifBlank { "Cette application est momentanément en pause." }
+            text = context.getString(messageRes(decision.reason))
             textSize = 16f
             setTextColor(Color.parseColor("#6B6472"))
             gravity = Gravity.CENTER
@@ -75,15 +80,15 @@ class BlockOverlay(private val context: Context) {
         // Demander plus de temps (sauf pour un downtime/coucher où c'est hors sujet).
         if (decision.reason != BlockReason.SCHEDULE_DOWNTIME) {
             root.addView(Button(context).apply {
-                text = "Demander plus de temps"
-                setPadding(0, 24, 0, 0)
+                text = context.getString(R.string.block_request_more_time)
+                setPaddingRelative(0, 24, 0, 0)
                 setOnClickListener { onRequestExtra() }
             })
         }
 
         // Accès à l'accueil (ne piège pas l'enfant).
         root.addView(Button(context).apply {
-            text = "Retour à l'accueil"
+            text = context.getString(R.string.block_go_home)
             setOnClickListener {
                 val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -93,9 +98,9 @@ class BlockOverlay(private val context: Context) {
 
         // URGENCE — toujours disponible.
         root.addView(Button(context).apply {
-            text = "Appel d'urgence (112)"
+            text = context.getString(R.string.block_emergency_call, Config.EMERGENCY_NUMBER)
             setOnClickListener {
-                val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:112"))
+                val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Config.EMERGENCY_NUMBER}"))
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(dial)
             }
@@ -133,4 +138,24 @@ class BlockOverlay(private val context: Context) {
     }
 
     val isShowing: Boolean get() = view != null
+
+    companion object {
+        /** Message (traduit) expliquant à l'enfant le motif de la pause. */
+        @StringRes
+        fun messageRes(reason: BlockReason): Int = when (reason) {
+            BlockReason.BLOCK_APP -> R.string.block_reason_block_app
+            BlockReason.PAUSED -> R.string.block_reason_paused
+            BlockReason.SCHEDULE_DOWNTIME -> R.string.block_reason_schedule_downtime
+            BlockReason.SCHEDULE_BLOCKED -> R.string.block_reason_schedule_blocked
+            BlockReason.OUTSIDE_ALLOWED_WINDOW -> R.string.block_reason_outside_allowed_window
+            BlockReason.SCHOOL_MODE -> R.string.block_reason_school_mode
+            BlockReason.BLOCK_CATEGORY -> R.string.block_reason_block_category
+            BlockReason.NEW_APP_PENDING -> R.string.block_reason_new_app_pending
+            BlockReason.LIMIT_APP -> R.string.block_reason_limit_app
+            BlockReason.LIMIT_CATEGORY -> R.string.block_reason_limit_category
+            BlockReason.LIMIT_GLOBAL -> R.string.block_reason_limit_global
+            BlockReason.ALLOWED, BlockReason.EMERGENCY_EXEMPT, BlockReason.ALWAYS_ALLOWED ->
+                R.string.block_default
+        }
+    }
 }
