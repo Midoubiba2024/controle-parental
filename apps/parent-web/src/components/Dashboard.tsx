@@ -52,7 +52,14 @@ export function Dashboard({ session }: { session: Session }) {
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
   const [childId, setChildId] = useState<string | null>(null);
-  const [view, setView] = useState<View>("overview");
+  // Onglet mémorisé entre rafraîchissements (évite de « perdre » la vue Famille au
+  // rechargement — les données ne sont jamais perdues, seul l'onglet actif change).
+  const [view, setView] = useState<View>(() => {
+    try {
+      const saved = localStorage.getItem("cp.view") as View | null;
+      return saved && NAV.some((n) => n.key === saved) ? saved : "overview";
+    } catch { return "overview"; }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [theme, cycleTheme] = useTheme();
@@ -82,6 +89,7 @@ export function Dashboard({ session }: { session: Session }) {
 
   useEffect(() => { void loadFamilies(); }, [loadFamilies]);
   useEffect(() => { void loadChildren(); }, [loadChildren]);
+  useEffect(() => { try { localStorage.setItem("cp.view", view); } catch { /* ignore */ } }, [view]);
 
   const obs = useObservation(childId);
   const st = obs.status[0];
@@ -129,7 +137,10 @@ export function Dashboard({ session }: { session: Session }) {
         <div className="topbar">
           <div>
             <h1>{VIEW_TITLE[view]}</h1>
-            {currentChild && <div className="sub">{currentChild.display_name}</div>}
+            <div className="sub">
+              {currentFamily ? `Famille ${currentFamily.name}` : ""}
+              {currentChild ? ` · ${currentChild.display_name}` : ""}
+            </div>
           </div>
           <span className="spacer" />
 

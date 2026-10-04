@@ -76,11 +76,23 @@ function AddChild({ familyId, onAdded }: { familyId: string; onAdded: () => void
   }
 
   return (
-    <form onSubmit={add} className="inline" style={{ marginBottom: 12 }}>
-      <input placeholder="Prénom" value={name} required onChange={(e) => setName(e.target.value)} />
-      <input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
-      <button disabled={busy || !name.trim()} type="submit">{busy ? "…" : "+ Enfant"}</button>
-      {err && <span className="msg error">{err}</span>}
+    <form onSubmit={add} style={{ marginBottom: 12 }}>
+      <div className="inline" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span className="muted small">Prénom de l'enfant</span>
+          <input placeholder="Prénom" value={name} required onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span className="muted small">Date de naissance</span>
+          <input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
+        </label>
+        <button disabled={busy || !name.trim()} type="submit">{busy ? "…" : "+ Enfant"}</button>
+      </div>
+      <p className="muted small" style={{ marginTop: 6 }}>
+        La date de naissance adapte automatiquement les protections à l'âge de l'enfant
+        (profil « jeune enfant » / « préado » / « ado »). Elle est facultative.
+      </p>
+      {err && <p className="msg error">{err}</p>}
     </form>
   );
 }
@@ -95,8 +107,10 @@ function ChildRow({ child, devices }: { child: Child; devices: Device[] }) {
 
   async function genCode() {
     setBusy(true); setErr(null); setCode(null);
-    const { data, error } = await supabase.functions.invoke("pairing-start", {
-      body: { family_id: child.family_id, child_id: child.id, mode },
+    // RPC SECURITY DEFINER (migration 0028) : remplace l'Edge Function pairing-start,
+    // qui échouait faute de clé service_role fiable côté Edge Functions.
+    const { data, error } = await supabase.rpc("pairing_start", {
+      p_family_id: child.family_id, p_child_id: child.id, p_mode: mode,
     });
     setBusy(false);
     if (error) { setErr(error.message); return; }
