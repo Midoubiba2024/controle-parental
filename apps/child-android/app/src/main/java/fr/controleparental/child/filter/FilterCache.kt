@@ -30,6 +30,9 @@ class FilterCache(context: Context) {
         get() = prefs.getString(KEY_CONFIG, null)
         set(v) { prefs.edit().putString(KEY_CONFIG, v).apply() }
 
+    /** Désenrôlement (LOT 12b) : rien de l'ancien enfant ne doit subsister. */
+    fun clear() { prefs.edit().clear().commit() }
+
     private companion object {
         const val KEY_CONFIG = "filter_config_json"
     }

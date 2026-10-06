@@ -17,6 +17,7 @@ import fr.controleparental.child.MainActivity
 import fr.controleparental.child.R
 import fr.controleparental.child.data.SupervisionStore
 import fr.controleparental.child.enforce.ReinforcedEnforcer
+import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,11 +79,17 @@ class LocalDnsVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            // Arrêt EXPLICITE : on ne veut plus relancer le filtrage au boot.
+        if (intent?.action == ACTION_STOP || !store.isEnrolled) {
+            // Arrêt EXPLICITE, ou appareil non enrôlé (désenrôlement, VPN always-on
+            // relancé au boot après un retrait) : on ne filtre ni ne journalise plus,
+            // et on ne veut plus relancer le filtrage au boot.
+            synchronized(pending) { pending.clear() }
+            // Démarré via startForegroundService (relance au boot) : honorer le
+            // contrat de premier plan avant de s'arrêter, sinon le système plante l'app.
+            if (intent?.action != ACTION_STOP) startForegroundSafely()
             store.filterDesired = false
             runCatching { ReinforcedEnforcer(this).setAlwaysOnVpn(false) }
-            stopVpn(reportInactive = true)
+            stopVpn(reportInactive = store.isEnrolled)
             return START_NOT_STICKY
         }
         startForegroundSafely()
@@ -111,6 +118,14 @@ class LocalDnsVpnService : VpnService() {
         }
         vpn = pfd
         isRunning = true
+        // Désenrôlé pendant l'établissement du tunnel (course avec le démontage) :
+        // ne JAMAIS reposer filterDesired ni le VPN always-on.
+        if (!store.isEnrolled) {
+            store.filterDesired = false
+            runCatching { ReinforcedEnforcer(this).setAlwaysOnVpn(false) }
+            stopVpn(reportInactive = false)
+            return
+        }
         // Mémorise que le filtrage est voulu (relance au boot/MAJ — report L8a) et,
         // en device owner, délègue la persistance au VPN always-on système (fiable).
         store.filterDesired = true
@@ -216,9 +231,14 @@ class LocalDnsVpnService : VpnService() {
     }
 
     private fun enqueue(domain: String, category: String?, action: String) {
+        // Non enrôlé : rien n'est journalisé. Sinon, l'événement est étiqueté avec
+        // l'appareil courant (lecture mémoire, sans déchiffrement par paquet DNS).
+        val deviceId = SupervisionStore.current.value?.deviceId ?: return
+        // Aucune journalisation sans notification de supervision visible (LOT 12b).
+        if (!SupervisionService.supervisionVisible(this)) return
         synchronized(pending) {
             if (pending.size >= MAX_BUFFER) pending.removeFirst()
-            pending.addLast(FilterClient.DomainEvent(domain, category, action, Instant.now().toString()))
+            pending.addLast(FilterClient.DomainEvent(domain, category, action, Instant.now().toString(), deviceId))
         }
     }
 
@@ -234,6 +254,9 @@ class LocalDnsVpnService : VpnService() {
                     runCatching { filterClient.reportStatus(vpnActive = true) }
                 }
                 runCatching { flushEvents() }
+            } else {
+                // Désenrôlé : le journal en attente appartient à l'ancien enfant.
+                synchronized(pending) { pending.clear() }
             }
             tick++
             delay(FLUSH_EVERY_MS)

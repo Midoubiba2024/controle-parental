@@ -6,6 +6,7 @@ import android.content.Intent
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,6 +32,9 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
         val store = SupervisionStore(context)
         if (!store.isEnrolled) return
+        // Invariant de transparence (LOT 12b) : aucune transition envoyée sans
+        // notification de supervision visible. Abandonnée, jamais mise en file.
+        if (!SupervisionService.supervisionVisible(context)) return
         val repo = LocationRepository(store)
         val manager = GeofenceManager(context)
         // Alertes de zones désactivées depuis : une transition encore en vol n'est pas envoyée.

@@ -28,7 +28,12 @@ class MetricsCollector(private val context: Context) {
         val errors = mutableListOf<String>()
 
         // 1) Temps d'écran (agrégat par app/jour).
-        val usage = UsageStatsCollector(context).collect(daysBack = 3)
+        // Jamais rien d'antérieur à l'appairage (LOT 12b, minimisation).
+        // … ni des coupures OBSERVÉES de la supervision visible (VisibilityGaps) :
+        // elles sont exclues, rien n'est rattrapé ni écrasé à tort.
+        val enrolledAt = store.enrolledAt
+        val gaps = store.excludedGaps()
+        val usage = UsageStatsCollector(context).collect(daysBack = 3, notBefore = enrolledAt, gaps = gaps)
         val ids = BatchRows.base(e.familyId, e.childId, e.deviceId)
         // Un upsert PAR JEU DE CLÉS : une colonne facultative inconnue est retirée
         // (pas d'écrasement par NULL) sans casser l'homogénéité du lot (PGRST102).
@@ -75,11 +80,15 @@ class MetricsCollector(private val context: Context) {
         var callCount = 0
         val callCollector = CallLogCollector(context)
         if (callCollector.isEnabledAndGranted()) {
-            val since = store.callLogWatermark
-            val calls = callCollector.collect(since)
+            // Jamais avant l'appairage, ni avant une coupure purgée (plus excluable — V4).
+            val since = CollectionWindows.callsSince(store.callLogWatermark, store.callsFloor())
+            val read = callCollector.collect(since)
+            // Appels tombant dans une coupure : jamais remontés ; le filigrane avance
+            // quand même sur tout ce qui a été lu (pas de relecture ultérieure).
+            val calls = read.filter { !CollectionWindows.inGap(it.occurredAt, gaps) }
             // counterparty_hash null (appel anonyme) reste une clé PRÉSENTE (PGRST102).
             val callArr = BatchRows.toJsonArray(calls.map { BatchRows.call(ids, it) })
-            val maxTs = calls.maxOfOrNull { it.occurredAt }?.coerceAtLeast(since) ?: since
+            val maxTs = read.maxOfOrNull { it.occurredAt }?.coerceAtLeast(since) ?: since
             val res = client.upsert(
                 "comm_events", callArr,
                 onConflict = "device_id,occurred_at,counterparty_hash,direction",

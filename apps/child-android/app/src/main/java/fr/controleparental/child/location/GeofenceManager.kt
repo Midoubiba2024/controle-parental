@@ -11,6 +11,8 @@ import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Tasks
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.Unenrollment
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -51,6 +53,16 @@ class GeofenceManager(private val context: Context) {
     fun isActive(): Boolean = names.contains(KEY_SIG)
 
     /**
+     * Désenrôlement (LOT 12b) : retire INCONDITIONNELLEMENT toutes nos geofences et
+     * vide le cache local (idempotent, sans appel réseau).
+     */
+    suspend fun removeAll() = withContext(Dispatchers.IO) {
+        // Borné : le démontage ne doit jamais rester bloqué sur Play services.
+        runCatching { Tasks.await(client.removeGeofences(pendingIntent()), AWAIT_S, TimeUnit.SECONDS) }
+        names.edit().clear().commit()
+    }
+
+    /**
      * Resynchronise les geofences enregistrées avec celles de la base.
      * [shouldRegister] vient de GeofencePolicy : permission de localisation FINE
      * (et arrière-plan pour un déclenchement app fermée) ET alertes de zones
@@ -73,15 +85,22 @@ class GeofenceManager(private val context: Context) {
             }
             return@withContext
         }
+        // Enrôlement capturé AVANT le réseau : l'enregistrement ne se fait que s'il
+        // est toujours le courant (garde LOT 12b, même verrou que le démontage).
+        val deviceId = SupervisionStore.current.value?.deviceId ?: return@withContext
         // Erreur réseau : on garde l'état actuel (ne pas confondre avec « aucune zone »).
         val zones = runCatching { repo.geofencesOrNull() }.getOrNull() ?: return@withContext
+        Unenrollment.ifStillEnrolled(deviceId) { register(zones, force) }
+    }
 
+    @SuppressLint("MissingPermission")
+    private fun register(zones: List<LocationRepository.Geofence>, force: Boolean) {
         val signature = zones.sortedBy { it.id }
             .joinToString("|") { "${it.id}:${it.lat},${it.lng},${it.radiusM},${it.notifyEnter},${it.notifyExit}" }
-        if (!force && signature == names.getString(KEY_SIG, null)) return@withContext
+        if (!force && signature == names.getString(KEY_SIG, null)) return
 
         // On repart d'un état propre (retrait par PendingIntent) puis on ré-ajoute.
-        runCatching { Tasks.await(client.removeGeofences(pendingIntent())) }
+        runCatching { Tasks.await(client.removeGeofences(pendingIntent()), AWAIT_S, TimeUnit.SECONDS) }
 
         // Le cache local id→nom (instantané d'événement côté receiver, sans appel
         // réseau) et la signature ne sont écrits qu'APRÈS un enregistrement RÉUSSI :
@@ -90,7 +109,7 @@ class GeofenceManager(private val context: Context) {
         // prochain sync.
         if (zones.isEmpty()) {
             names.edit().clear().putString(KEY_SIG, signature).apply()
-            return@withContext
+            return
         }
 
         val geofences = zones.map { z ->
@@ -112,7 +131,9 @@ class GeofenceManager(private val context: Context) {
             .setInitialTrigger(0)
             .addGeofences(geofences)
             .build()
-        val added = runCatching { Tasks.await(client.addGeofences(request, pendingIntent())) }.isSuccess
+        val added = runCatching {
+            Tasks.await(client.addGeofences(request, pendingIntent()), AWAIT_S, TimeUnit.SECONDS)
+        }.isSuccess
         val editor = names.edit().clear()
         if (added) {
             zones.forEach { editor.putString(it.id, it.name) }
@@ -124,5 +145,6 @@ class GeofenceManager(private val context: Context) {
     private companion object {
         const val PREFS = "geofence_names"
         const val KEY_SIG = "_signature"
+        const val AWAIT_S = 10L
     }
 }

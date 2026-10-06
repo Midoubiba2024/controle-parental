@@ -4,12 +4,21 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import fr.controleparental.child.pairing.AuthSession
+import fr.controleparental.child.pairing.PairingProtocol
+import fr.controleparental.child.location.BootClock
+import fr.controleparental.child.service.Unenrollment
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Stockage CHIFFRÉ de l'état d'enrôlement et de la session enfant.
  * (EncryptedSharedPreferences — clé maître dans l'Android Keystore.)
  */
 class SupervisionStore(context: Context) {
+
+    private val appContext: Context = context.applicationContext ?: context
 
     private val prefs: SharedPreferences = run {
         val masterKey = MasterKey.Builder(context)
@@ -31,11 +40,39 @@ class SupervisionStore(context: Context) {
         val mode: String,
         val accessToken: String,
         val refreshToken: String,
+        /** Expiration de [accessToken], secondes epoch de l'horloge LOCALE (0 = inconnue). */
+        val expiresAt: Long = 0L,
+        /** Réception de [accessToken], même horloge (0 = inconnue). */
+        val obtainedAt: Long = 0L,
     )
+
+    init {
+        // État observable initialisé UNE fois par processus depuis le stockage.
+        if (!stateLoaded) synchronized(Companion) {
+            if (!stateLoaded) {
+                _current.value = readIds()
+                _unenrolled.value = prefs.getString(KEY_UNENROLL_REASON, null)
+                    ?.let { runCatching { UnenrollReason.valueOf(it) }.getOrNull() }
+                stateLoaded = true
+            }
+        }
+    }
 
     val isEnrolled: Boolean get() = prefs.contains(KEY_DEVICE_ID)
 
-    fun save(e: Enrollment) {
+    private fun readIds(): Ids? {
+        val device = prefs.getString(KEY_DEVICE_ID, null) ?: return null
+        return Ids(device, prefs.getString(KEY_CHILD_ID, "")!!)
+    }
+
+    /**
+     * Appairage réussi (LOT 12) : la session anonyme EN ATTENTE devient la session
+     * de l'appareil, et le blocage anti force brute est levé. Écriture synchrone
+     * (`commit`) : jamais d'enrôlement à moitié écrit, ni de session en attente
+     * réutilisée après succès.
+     */
+    fun completeEnrollment(e: Enrollment) {
+        val now = System.currentTimeMillis()
         prefs.edit()
             .putString(KEY_DEVICE_ID, e.deviceId)
             .putString(KEY_FAMILY_ID, e.familyId)
@@ -43,16 +80,139 @@ class SupervisionStore(context: Context) {
             .putString(KEY_MODE, e.mode)
             .putString(KEY_ACCESS, e.accessToken)
             .putString(KEY_REFRESH, e.refreshToken)
-            .apply()
+            .putLong(KEY_EXPIRES_AT, e.expiresAt)
+            .putLong(KEY_OBTAINED_AT, e.obtainedAt)
+            // Minimisation (LOT 12b) : toute collecte commence à l'appairage.
+            .putLong(KEY_ENROLLED_AT, now)
+            .putLong(KEY_CALL_WM, now)
+            // Rien d'un appairage précédent (écriture tardive d'un client en vol).
+            .remove(KEY_LOC_SETTINGS)
+            .remove(KEY_FILTER_DESIRED)
+            .remove(KEY_STATUS_TS)
+            .remove(KEY_MSG_WM)
+            .remove(KEY_LAST_VISIBLE_AT)
+            // La période [appairage, premier constat visible) est une coupure (V3).
+            .putLong(KEY_INVISIBLE_FROM, now)
+            .remove(KEY_VIS_TOKEN)
+            .remove(KEY_VIS_BOOT)
+            .remove(KEY_INVISIBLE_GAPS)
+            .remove(KEY_PURGED_THROUGH)
+            .remove(KEY_SOS_PREV_ID)
+            .remove(KEY_SOS_PREV_BOOT)
+            .remove(KEY_SOS_PREV_ELAPSED)
+            .remove(KEY_SOS_LOCAL_ID)
+            .remove(KEY_SOS_LOCAL_BOOT)
+            .remove(KEY_SOS_LOCAL_ELAPSED)
+            .remove(KEY_PENDING_ACCESS)
+            .remove(KEY_PENDING_REFRESH)
+            .remove(KEY_PENDING_EXPIRES_AT)
+            .remove(KEY_PENDING_USER_ID)
+            .remove(KEY_PENDING_OBTAINED_AT)
+            .remove(KEY_PAIRING_BLOCKED_UNTIL)
+            .remove(KEY_UNENROLL_REASON)
+            .commit()
+        _unenrolled.value = null
+        _current.value = Ids(e.deviceId, e.childId)
     }
 
-    /** Met à jour uniquement les jetons de session (après un refresh GoTrue). */
-    fun updateTokens(accessToken: String, refreshToken: String) {
+    /**
+     * Met à jour les jetons de la session de l'appareil (après un refresh GoTrue).
+     * Les refresh tokens sont À USAGE UNIQUE (rotation) : `commit()` pour que le
+     * nouveau soit écrit AVANT tout usage de l'access token (docs/14-APPAIRAGE.md §4).
+     */
+    fun updateTokens(s: AuthSession) {
         prefs.edit()
-            .putString(KEY_ACCESS, accessToken)
-            .putString(KEY_REFRESH, refreshToken)
-            .apply()
+            .putString(KEY_ACCESS, s.accessToken)
+            .putString(KEY_REFRESH, s.refreshToken)
+            .putLong(KEY_EXPIRES_AT, s.expiresAt)
+            .putLong(KEY_OBTAINED_AT, s.obtainedAt)
+            .commit()
     }
+
+    /**
+     * Session ANONYME en attente d'appairage (§5) : créée au premier appui sur
+     * « Associer », RÉUTILISÉE pour les essais suivants (mêmes limites côté
+     * serveur), jetée si le serveur la refuse ou après succès.
+     */
+    fun loadPendingSession(): AuthSession? {
+        val access = prefs.getString(KEY_PENDING_ACCESS, null) ?: return null
+        val refresh = prefs.getString(KEY_PENDING_REFRESH, null) ?: return null
+        val userId = prefs.getString(KEY_PENDING_USER_ID, null) ?: return null
+        return AuthSession(
+            access, refresh, prefs.getLong(KEY_PENDING_EXPIRES_AT, 0L), userId,
+            obtainedAt = prefs.getLong(KEY_PENDING_OBTAINED_AT, 0L),
+        )
+    }
+
+    fun savePendingSession(s: AuthSession) {
+        prefs.edit()
+            .putString(KEY_PENDING_ACCESS, s.accessToken)
+            .putString(KEY_PENDING_REFRESH, s.refreshToken)
+            .putLong(KEY_PENDING_EXPIRES_AT, s.expiresAt)
+            .putString(KEY_PENDING_USER_ID, s.userId)
+            .putLong(KEY_PENDING_OBTAINED_AT, s.obtainedAt)
+            .commit()
+    }
+
+    fun clearPendingSession() {
+        prefs.edit()
+            .remove(KEY_PENDING_ACCESS)
+            .remove(KEY_PENDING_REFRESH)
+            .remove(KEY_PENDING_EXPIRES_AT)
+            .remove(KEY_PENDING_USER_ID)
+            .remove(KEY_PENDING_OBTAINED_AT)
+            .commit()
+    }
+
+    /**
+     * Fin du blocage `too_many_attempts` (epoch ms, 0 = aucun). Persisté : fermer
+     * et rouvrir l'appli ne contourne pas l'attente demandée par le serveur.
+     * Jamais plus de 15 min dans le futur (PairingProtocol.effectiveBlockedUntil).
+     */
+    var pairingBlockedUntil: Long
+        // Borné à 15 min à la lecture (heure murale, horloge reculée) ; la valeur
+        // bornée est RÉÉCRITE pour que le blocage finisse réellement.
+        get() {
+            val clamp = PairingProtocol.clampBlockedUntil(
+                prefs.getLong(KEY_PAIRING_BLOCKED_UNTIL, 0L), System.currentTimeMillis(),
+            )
+            clamp.toPersist?.let { prefs.edit().putLong(KEY_PAIRING_BLOCKED_UNTIL, it).apply() }
+            return clamp.effective
+        }
+        set(value) { prefs.edit().putLong(KEY_PAIRING_BLOCKED_UNTIL, value).apply() }
+
+    /**
+     * Désenrôlement subi (§4 session perdue, §5 appareil retiré par le parent) :
+     * efface l'enrôlement ET la session locale (tout le stockage de supervision)
+     * en écrivant, dans le MÊME commit, le motif et un drapeau « démontage en
+     * attente ». Puis lance le démontage centralisé ([Unenrollment]) : levée de
+     * toutes les restrictions, notification visible, arrêt du service — quel que
+     * soit l'appelant (worker, VPN, boucle, écran). Plus aucune requête ne part
+     * ensuite : tous les clients s'arrêtent sur « non enrôlé ».
+     */
+    fun unenroll(reason: UnenrollReason) {
+        prefs.edit().clear()
+            .putString(KEY_UNENROLL_REASON, reason.name)
+            .putBoolean(KEY_TEARDOWN_PENDING, true)
+            .commit()
+        _current.value = null
+        _unenrolled.value = reason
+        Unenrollment.releaseAsync(appContext, reason)
+    }
+
+    /** Message de désenrôlement affiché : consommé par l'écran d'appairage. */
+    fun acknowledgeUnenrolled() {
+        prefs.edit().remove(KEY_UNENROLL_REASON).apply()
+        _unenrolled.value = null
+    }
+
+    /**
+     * Un démontage ([Unenrollment]) a été demandé et n'est pas encore terminé
+     * (processus tué pendant le démontage) : rejoué au démarrage et au boot.
+     */
+    var teardownPending: Boolean
+        get() = prefs.getBoolean(KEY_TEARDOWN_PENDING, false)
+        set(value) { prefs.edit().putBoolean(KEY_TEARDOWN_PENDING, value).commit() }
 
     fun load(): Enrollment? {
         if (!isEnrolled) return null
@@ -63,8 +223,92 @@ class SupervisionStore(context: Context) {
             mode = prefs.getString(KEY_MODE, "standard")!!,
             accessToken = prefs.getString(KEY_ACCESS, "")!!,
             refreshToken = prefs.getString(KEY_REFRESH, "")!!,
+            expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L),
+            obtainedAt = prefs.getLong(KEY_OBTAINED_AT, 0L),
         )
     }
+
+    /**
+     * Instant de l'appairage (epoch ms) : borne basse de TOUTE collecte
+     * (CollectionWindows). 0 = enrôlement antérieur au LOT 12b (pas de borne).
+     */
+    val enrolledAt: Long get() = prefs.getLong(KEY_ENROLLED_AT, 0L)
+    // Valeur BRUTE, jamais réécrite (tour 5, U2) : une horloge temporairement en
+    // retard exclut tout (échec fermé) au lieu de faire reculer définitivement la borne.
+
+    private fun visibilityState() = VisibilityGaps.State(
+        lastVisibleAt = prefs.getLong(KEY_LAST_VISIBLE_AT, 0L),
+        invisibleFrom = prefs.getLong(KEY_INVISIBLE_FROM, 0L),
+        processToken = prefs.getString(KEY_VIS_TOKEN, null),
+        boot = prefs.getInt(KEY_VIS_BOOT, -1),
+        gaps = VisibilityGaps.gapsFromJson(prefs.getString(KEY_INVISIBLE_GAPS, null)),
+        purgedThrough = prefs.getLong(KEY_PURGED_THROUGH, 0L),
+    )
+
+    /**
+     * Constat de visibilité de la supervision (boucle du service, MetricsWorker) :
+     * enregistre les coupures OBSERVÉES (VisibilityGaps) — jamais déduites d'un
+     * écart d'heure murale (veille du processeur ≠ coupure).
+     */
+    fun observeSupervision(visible: Boolean, now: Long = System.currentTimeMillis()) {
+        if (!isEnrolled) return
+        val step = VisibilityGaps.observe(
+            visibilityState(), visible, now, PROCESS_TOKEN, BootClock.bootCount(appContext),
+        )
+        if (!step.persist) return
+        val st = step.state
+        prefs.edit()
+            .putLong(KEY_LAST_VISIBLE_AT, st.lastVisibleAt)
+            .putLong(KEY_INVISIBLE_FROM, st.invisibleFrom)
+            .putString(KEY_VIS_TOKEN, st.processToken)
+            .putInt(KEY_VIS_BOOT, st.boot)
+            .putString(KEY_INVISIBLE_GAPS, VisibilityGaps.gapsToJson(st.gaps))
+            .putLong(KEY_PURGED_THROUGH, st.purgedThrough)
+            .apply()
+    }
+
+    /** Borne basse de lecture des appels : appairage ET coupures purgées (V4). */
+    fun callsFloor(): Long = VisibilityGaps.callsFloor(enrolledAt, visibilityState())
+
+    /** Intervalles à EXCLURE de la collecte (coupures closes + coupure en cours). */
+    fun excludedGaps(now: Long = System.currentTimeMillis()): List<VisibilityGaps.Gap> =
+        VisibilityGaps.excluded(visibilityState(), now)
+
+    /** SOS déclenché SUR CET APPAREIL (T1) : seul lui peut être diffusé en direct. */
+    data class LocalSos(val id: String, val boot: Int, val startedElapsedMs: Long)
+
+    /** SOS local PRÉCÉDENT : relais si un nouveau SOS n'a jamais été créé côté serveur (V2). */
+    var localSosPrevious: LocalSos?
+        get() {
+            val id = prefs.getString(KEY_SOS_PREV_ID, null) ?: return null
+            return LocalSos(id, prefs.getInt(KEY_SOS_PREV_BOOT, -1), prefs.getLong(KEY_SOS_PREV_ELAPSED, 0L))
+        }
+        set(v) {
+            val e = prefs.edit()
+            if (v == null) {
+                e.remove(KEY_SOS_PREV_ID).remove(KEY_SOS_PREV_BOOT).remove(KEY_SOS_PREV_ELAPSED)
+            } else {
+                e.putString(KEY_SOS_PREV_ID, v.id).putInt(KEY_SOS_PREV_BOOT, v.boot)
+                    .putLong(KEY_SOS_PREV_ELAPSED, v.startedElapsedMs)
+            }
+            e.commit()
+        }
+
+    var localSos: LocalSos?
+        get() {
+            val id = prefs.getString(KEY_SOS_LOCAL_ID, null) ?: return null
+            return LocalSos(id, prefs.getInt(KEY_SOS_LOCAL_BOOT, -1), prefs.getLong(KEY_SOS_LOCAL_ELAPSED, 0L))
+        }
+        set(v) {
+            val e = prefs.edit()
+            if (v == null) {
+                e.remove(KEY_SOS_LOCAL_ID).remove(KEY_SOS_LOCAL_BOOT).remove(KEY_SOS_LOCAL_ELAPSED)
+            } else {
+                e.putString(KEY_SOS_LOCAL_ID, v.id).putInt(KEY_SOS_LOCAL_BOOT, v.boot)
+                    .putLong(KEY_SOS_LOCAL_ELAPSED, v.startedElapsedMs)
+            }
+            e.commit()
+        }
 
     /** Filigrane de la dernière métadonnée d'appel remontée (epoch ms). */
     var callLogWatermark: Long
@@ -105,19 +349,67 @@ class SupervisionStore(context: Context) {
         get() = prefs.getString(KEY_LOC_SETTINGS, null)
         set(value) { prefs.edit().putString(KEY_LOC_SETTINGS, value).apply() }
 
-    fun clear() = prefs.edit().clear().apply()
+    /** Pourquoi l'appareil a été désenrôlé (message affiché à l'écran d'appairage). */
+    enum class UnenrollReason { SESSION_LOST, DEVICE_REVOKED }
 
-    private companion object {
-        const val KEY_DEVICE_ID = "device_id"
-        const val KEY_FAMILY_ID = "family_id"
-        const val KEY_CHILD_ID = "child_id"
-        const val KEY_MODE = "mode"
-        const val KEY_ACCESS = "access_token"
-        const val KEY_REFRESH = "refresh_token"
-        const val KEY_CALL_WM = "call_log_watermark"
-        const val KEY_STATUS_TS = "pending_status_captured_at"
-        const val KEY_MSG_WM = "message_watermark"
-        const val KEY_LOC_SETTINGS = "last_location_settings"
-        const val KEY_FILTER_DESIRED = "filter_desired"
+    /** Identifiants de l'enrôlement courant (lecture en mémoire, sans déchiffrement). */
+    data class Ids(val deviceId: String, val childId: String)
+
+    companion object {
+        @Volatile private var stateLoaded = false
+
+        /**
+         * Enrôlement COURANT (null = non enrôlé), tenu à jour par
+         * [completeEnrollment] et [unenroll]. Observé par MainActivity (écran à
+         * afficher, démarrage du service), lu sans déchiffrement par le VPN
+         * (étiquetage du journal) et l'analyse bien-être (garde du child_id).
+         */
+        private val _current = MutableStateFlow<Ids?>(null)
+        val current: StateFlow<Ids?> = _current.asStateFlow()
+
+        /**
+         * Dernier désenrôlement subi (null = aucun), PERSISTÉ jusqu'à ce que l'écran
+         * d'appairage l'ait affiché ([acknowledgeUnenrolled]) ou un nouvel appairage.
+         */
+        private val _unenrolled = MutableStateFlow<UnenrollReason?>(null)
+        val unenrolled: StateFlow<UnenrollReason?> = _unenrolled.asStateFlow()
+
+        private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_FAMILY_ID = "family_id"
+        private const val KEY_CHILD_ID = "child_id"
+        private const val KEY_MODE = "mode"
+        private const val KEY_ACCESS = "access_token"
+        private const val KEY_REFRESH = "refresh_token"
+        private const val KEY_CALL_WM = "call_log_watermark"
+        private const val KEY_STATUS_TS = "pending_status_captured_at"
+        private const val KEY_MSG_WM = "message_watermark"
+        private const val KEY_LOC_SETTINGS = "last_location_settings"
+        private const val KEY_FILTER_DESIRED = "filter_desired"
+        private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_OBTAINED_AT = "obtained_at"
+        private const val KEY_ENROLLED_AT = "enrolled_at"
+        private const val KEY_LAST_VISIBLE_AT = "supervision_last_visible_at"
+        private const val KEY_INVISIBLE_FROM = "supervision_invisible_from"
+        private const val KEY_VIS_TOKEN = "supervision_process_token"
+        private const val KEY_VIS_BOOT = "supervision_boot"
+        private const val KEY_INVISIBLE_GAPS = "supervision_invisible_gaps"
+        private const val KEY_PURGED_THROUGH = "supervision_gaps_purged_through"
+        private const val KEY_SOS_PREV_ID = "sos_prev_id"
+        private const val KEY_SOS_PREV_BOOT = "sos_prev_boot"
+        private const val KEY_SOS_PREV_ELAPSED = "sos_prev_started_elapsed"
+
+        /** Jeton de CE processus : un processus neuf est une coupure (VisibilityGaps). */
+        private val PROCESS_TOKEN: String = java.util.UUID.randomUUID().toString()
+        private const val KEY_SOS_LOCAL_ID = "sos_local_id"
+        private const val KEY_SOS_LOCAL_BOOT = "sos_local_boot"
+        private const val KEY_SOS_LOCAL_ELAPSED = "sos_local_started_elapsed"
+        private const val KEY_PENDING_OBTAINED_AT = "pending_obtained_at"
+        private const val KEY_PENDING_ACCESS = "pending_access_token"
+        private const val KEY_PENDING_REFRESH = "pending_refresh_token"
+        private const val KEY_PENDING_EXPIRES_AT = "pending_expires_at"
+        private const val KEY_PENDING_USER_ID = "pending_user_id"
+        private const val KEY_PAIRING_BLOCKED_UNTIL = "pairing_blocked_until"
+        private const val KEY_UNENROLL_REASON = "unenroll_reason"
+        private const val KEY_TEARDOWN_PENDING = "unenroll_teardown_pending"
     }
 }

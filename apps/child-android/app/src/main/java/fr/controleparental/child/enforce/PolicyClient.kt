@@ -20,12 +20,26 @@ class PolicyClient(private val store: SupervisionStore) {
     data class CommandRow(val id: String, val type: String, val payload: JSONObject)
     data class MessageRow(val id: String, val body: String, val createdAt: String)
 
+    /** Règles lues du serveur : JSON normalisé (pour le cache) + jeu de règles. */
+    class FetchedRules(val json: String, val ruleSet: RuleSet)
+
     /**
-     * Synchronise les règles et les met en cache. Renvoie le [RuleSet] à jour, ou
-     * null en cas d'échec réseau (l'appelant conserve alors le cache précédent).
-     * Alimente aussi la base d'apps approuvées (validation d'installation).
+     * Écrit [fetched] dans le cache (et la base d'apps approuvées). Séparé de
+     * [fetchRules] pour passer sous Unenrollment.ifStillEnrolled (LOT 12b).
      */
-    suspend fun syncAndCache(cache: PolicyCache, installedPackages: Set<String>): RuleSet? {
+    fun commitToCache(cache: PolicyCache, fetched: FetchedRules, installedPackages: Set<String>) {
+        cache.rulesJson = fetched.json
+        // Base d'apps approuvées (B2) : figée à la première synchro = apps déjà
+        // présentes. Les apps ajoutées ensuite seront « nouvelles » tant qu'une
+        // règle allow/always_allow n'existe pas.
+        if (!cache.hasBaseline) cache.approvedPackages = installedPackages
+    }
+
+    /**
+     * Lit les règles (sans rien écrire). null en cas d'échec réseau (l'appelant
+     * conserve alors le cache précédent).
+     */
+    suspend fun fetchRules(): FetchedRules? {
         val e = store.load() ?: return null
         val cid = e.childId
         val today = LocalDate.now().toString()
@@ -63,14 +77,7 @@ class PolicyClient(private val store: SupervisionStore) {
         combined.put("schedules", schedules)
         combined.put("grants", grArr)
 
-        cache.rulesJson = combined.toString()
-
-        // Base d'apps approuvées (B2) : figée à la première synchro = apps déjà
-        // présentes. Les apps ajoutées ensuite seront « nouvelles » tant qu'une
-        // règle allow/always_allow n'existe pas.
-        if (!cache.hasBaseline) cache.approvedPackages = installedPackages
-
-        return parseRuleSet(combined)
+        return FetchedRules(combined.toString(), parseRuleSet(combined))
     }
 
     /** Commandes en attente pour cet appareil (pause/verrouillage/sonner/message). */

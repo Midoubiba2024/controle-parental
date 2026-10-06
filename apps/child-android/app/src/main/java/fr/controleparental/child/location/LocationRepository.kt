@@ -1,9 +1,15 @@
 package fr.controleparental.child.location
 
+import android.content.Context
 import android.location.Location
+import android.os.SystemClock
 import fr.controleparental.child.data.SupabaseClient
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.Unenrollment
 import java.time.Instant
+import java.util.UUID
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -54,6 +60,7 @@ class LocationRepository(private val store: SupervisionStore) {
 
     private suspend fun fetchSettings(): Settings? {
         val e = store.load() ?: return null
+        val deviceId = e.deviceId
         val res = client.get("location_settings",
             // select=* : tolère une base où la colonne geofence_alerts_enabled n'existe
             // pas encore (migration 0030) — elle vaut alors true, comme avant.
@@ -61,7 +68,8 @@ class LocationRepository(private val store: SupervisionStore) {
         val body = (res as? SupabaseClient.GetResult.Ok)?.body ?: return null
         val arr = runCatching { JSONArray(body) }.getOrNull() ?: return null
         val row = (if (arr.length() > 0) arr.optJSONObject(0) else null) ?: JSONObject()
-        store.lastLocationSettingsJson = row.toString()
+        // Jamais écrit après (ou pendant) un démontage : sinon hérité par l'appairage suivant.
+        Unenrollment.ifStillEnrolled(deviceId) { store.lastLocationSettingsJson = row.toString() }
         return parseSettings(row)
     }
 
@@ -102,18 +110,16 @@ class LocationRepository(private val store: SupervisionStore) {
         return out
     }
 
-    /** Épisode SOS en cours (active|acked) pour cet enfant, ou null. */
-    suspend fun activeSos(): JSONObject? {
-        val e = store.load() ?: return null
-        val res = client.get("sos_events",
-            "child_id=eq.${e.childId}&status=in.(active,acked)&select=id,status,started_at&order=started_at.desc&limit=1")
-        val arr = asArray(res) ?: return null
-        return if (arr.length() > 0) arr.optJSONObject(0) else null
-    }
-
     /** Insère un relevé de position (idempotent sur device_id+captured_at). */
     suspend fun insertFix(loc: Location, source: String, batteryLevel: Int?, capturedAtMs: Long = loc.time.takeIf { it > 0 } ?: System.currentTimeMillis()): Boolean {
         val e = store.load() ?: return false
+        // Minimisation (LOT 12b) : jamais une position antérieure à l'appairage
+        // (repli lastLocation du cache système SANS limite d'âge). Un relevé SOS est
+        // aussi accepté s'il est FRAIS en temps monotone (≤ 2 min) : une horloge en
+        // retard sur l'appairage ne bloque pas un SOS, mais un relevé en cache
+        // d'avant l'appairage est refusé (FixPolicy, tour 6 V1).
+        val ageNs = loc.elapsedRealtimeNanos.takeIf { it > 0 }?.let { SystemClock.elapsedRealtimeNanos() - it }
+        if (!FixPolicy.accept(source, capturedAtMs, store.enrolledAt, ageNs)) return false
         val row = JSONObject()
             .put("family_id", e.familyId)
             .put("child_id", e.childId)
@@ -130,16 +136,60 @@ class LocationRepository(private val store: SupervisionStore) {
         ) is SupabaseClient.Result.Ok
     }
 
-    /** Déclenche un SOS (déclenché par l'enfant → transparent). */
-    suspend fun startSos(message: String?): Boolean {
+    /**
+     * Déclenche un SOS (déclenché par l'enfant → transparent). L'identifiant est
+     * généré ICI et mémorisé avec l'instant de déclenchement (temps écoulé) : seul
+     * ce SOS local pourra être diffusé en direct (T1 — une ligne rouverte côté
+     * serveur ne déclenche jamais de suivi).
+     */
+    suspend fun startSos(context: Context, message: String?): Boolean {
         val e = store.load() ?: return false
+        val id = UUID.randomUUID().toString()
+        val boot = BootClock.bootCount(context)
+        val startedElapsed = BootClock.elapsedMs()
         val row = JSONObject()
+            .put("id", id)
             .put("family_id", e.familyId)
             .put("child_id", e.childId)
             .put("device_id", e.deviceId)
             .put("status", "active")
         if (!message.isNullOrBlank()) row.put("message", message)
-        return client.upsert("sos_events", JSONArray().put(row)) is SupabaseClient.Result.Ok
+        // Ni une rotation d'écran ni la fin de la coroutine appelante n'interrompent
+        // l'enregistrement du SOS (tour 5, U3).
+        return withContext(NonCancellable) {
+            // Mémorisé AVANT l'envoi : une réponse perdue ou un délai dépassé laisse
+            // un SOS peut-être créé côté serveur — il doit rester diffusable.
+            // L'ancien SOS local devient le « précédent » : relais tant qu'il est
+            // dans sa fenêtre si celui-ci n'est jamais créé côté serveur (V2).
+            val previous = Unenrollment.ifStillEnrolled(e.deviceId) {
+                store.localSos.also { old ->
+                    if (old != null) store.localSosPrevious = old
+                    store.localSos = SupervisionStore.LocalSos(id, boot, startedElapsed)
+                }
+            }
+            // Idempotent sur l'identifiant local : un rejeu (OkHttp ou manuel) ne
+            // donne jamais de conflit 409.
+            val res = client.upsert("sos_events", JSONArray().put(row), onConflict = "id", ignoreDuplicates = true)
+            // Échec CERTAIN (refus 4xx reçu) seulement : on restaure l'ancien SOS local.
+            if (res is SupabaseClient.Result.Error && res.code.startsWith("http_4")) {
+                Unenrollment.ifStillEnrolled(e.deviceId) {
+                    if (store.localSos?.id == id) store.localSos = previous
+                }
+            }
+            res is SupabaseClient.Result.Ok
+        }
+    }
+
+    /**
+     * État d'UN SOS précis (un SOS local) : présent (actif/acquitté), absent, ou
+     * erreur — jamais « le plus récent de l'enfant », qui peut venir d'un autre
+     * appareil.
+     */
+    suspend fun sosState(id: String): SosChoice.RowState {
+        val res = client.get("sos_events", "id=eq.$id&status=in.(active,acked)&select=id,status&limit=1")
+        // Erreur (réseau, HTTP) ≠ ligne absente (2xx, tableau vide) — V2.
+        val arr = asArray(res) ?: return SosChoice.RowState.ERROR
+        return if (arr.length() > 0) SosChoice.RowState.PRESENT else SosChoice.RowState.ABSENT
     }
 
     /** L'enfant clôt son propre SOS (status → resolved). */

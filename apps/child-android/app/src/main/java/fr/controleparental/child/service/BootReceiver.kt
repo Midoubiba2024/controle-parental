@@ -33,7 +33,21 @@ class BootReceiver : BroadcastReceiver() {
         // une exception non gardée ferait PLANTER le process (ligne rouge). On la
         // capture → on ne démarre rien plutôt que de tomber.
         val enrolled = runCatching { SupervisionStore(context).isEnrolled }.getOrDefault(false)
-        if (!enrolled) return
+        if (!enrolled) {
+            // Filet LOT 12b : un démontage interrompu (processus tué pendant un
+            // désenrôlement) est rejoué — aucune restriction ne survit sans
+            // supervision visible. Sans démontage en attente : ne fait rien.
+            val appCtx = context.applicationContext
+            val pendingResult = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    runCatching { Unenrollment.resumeIfPendingNow(appCtx) }
+                } finally {
+                    pendingResult.finish()
+                }
+            }
+            return
+        }
 
         SupervisionService.start(context, fromBoot = true)
 

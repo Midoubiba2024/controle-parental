@@ -226,7 +226,7 @@ fun MyDataScreen(enrollment: SupervisionStore.Enrollment) {
                     onClick = {
                         scope.launch {
                             sosBusy = true; sosMsg = null
-                            val ok = locationRepo.startSos(null)
+                            val ok = locationRepo.startSos(context, null)
                             if (ok) {
                                 val loc = locationClient.currentFix(highAccuracy = true)
                                 if (loc != null) locationRepo.insertFix(loc, source = "sos", batteryLevel = null)

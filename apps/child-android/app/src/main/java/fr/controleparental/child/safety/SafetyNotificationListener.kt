@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import fr.controleparental.child.Config
 import fr.controleparental.child.data.SupervisionStore
+import fr.controleparental.child.service.SupervisionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,7 +48,21 @@ class SafetyNotificationListener : NotificationListenerService() {
     private val client by lazy { SafetyClient(store) }
 
     // Instantané de décision (mémoire) — jamais lu depuis les prefs sur le callback.
-    @Volatile private var snapEnrolled = false
+    // L'enrôlement courant se lit dans SupervisionStore.current (mémoire, sans
+    // déchiffrement) ; [snapDeviceId] = ENRÔLEMENT pour lequel la config a été
+    // synchronisée AVEC SUCCÈS. Chaque appairage crée un nouveau device_id : même
+    // le ré-appairage du MÊME enfant exige une nouvelle synchro du consentement
+    // avant toute analyse (LOT 12b).
+    @Volatile private var snapDeviceId: String? = null
+    // Instant d'appairage (mis en mémoire à la synchro, jamais lu des prefs sur le
+    // callback) : aucun message antérieur n'est analysé (NotificationText).
+    @Volatile private var snapEnrolledAt = Long.MAX_VALUE
+    // Clés des notifications DÉJÀ présentes avant l'appairage (T3) : une
+    // notification cumulative (Inbox, BigText) republiée ensuite contient
+    // d'anciens messages non datés → jamais analysée hors MessagingStyle.
+    // Rempli sur IO (syncSnapshot), vidé au changement d'enrôlement.
+    private val preEnrollmentKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    @Volatile private var preEnrollmentKeysFor: String? = null
     @Volatile private var snapActive = false   // consentement + profil ado
     @Volatile private var snapPaused = false   // pause de confidentialité (K8)
     @Volatile private var snapSynced = false   // une config fiable a été obtenue
@@ -60,14 +75,18 @@ class SafetyNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         if (!Config.featureSafetySignals) return
-        snapEnrolled = store.isEnrolled
-        if (!snapEnrolled) return
+        // Construit le store : initialise SupervisionStore.current dans ce processus.
+        if (!runCatching { store.isEnrolled }.getOrDefault(false)) return
         scope.launch {
-            client.syncSettings(cache)
-            applySnapshot()
+            syncSnapshot()
             lastRefreshAt = System.currentTimeMillis()
             client.reportStatus(snapActive && !snapPaused)
         }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+        sbn?.key?.let { preEnrollmentKeys.remove(it) }
     }
 
     override fun onListenerDisconnected() {
@@ -77,7 +96,10 @@ class SafetyNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (!Config.featureSafetySignals || sbn == null || !snapEnrolled) return
+        if (!Config.featureSafetySignals || sbn == null) return
+        val current = SupervisionStore.current.value ?: return
+        // Aucune analyse sans notification de supervision visible (LOT 12b).
+        if (!SupervisionService.supervisionVisible(applicationContext)) return
         val n = sbn.notification ?: return
         // #2 — ignorer les résumés de groupe (pas un vrai message).
         if ((n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
@@ -88,67 +110,118 @@ class SafetyNotificationListener : NotificationListenerService() {
         if (lastSeen.put(key, sbn.postTime) == sbn.postTime) return
         if (lastSeen.size > MAX_SEEN) lastSeen.clear()
 
+        // Config synchronisée pour un AUTRE enrôlement (ou jamais) : resynchroniser,
+        // et ne rien analyser d'ici là.
+        val sameEnrollment = snapDeviceId == current.deviceId
         // Rafraîchir l'instantané si périmé (asynchrone, en mémoire — pas de prefs ici).
-        maybeRefreshSnapshot()
+        maybeRefreshSnapshot(force = !sameEnrollment)
 
-        // Défaut protecteur : pas de config fiable, non consenti/gradué, ou en pause → rien.
-        if (!snapSynced || !snapActive || snapPaused) return
+        // Défaut protecteur : pas de config fiable pour CET enfant, non
+        // consenti/gradué, ou en pause → rien.
+        if (!sameEnrollment || !snapSynced || !snapActive || snapPaused) return
 
         // Extraction du texte EN MÉMOIRE (variable locale, jamais loggée/persistée).
-        val text = extractText(n) ?: return
+        val text = extractText(n, sbn.postTime, presentBefore = sbn.key in preEnrollmentKeys) ?: return
         val signals = SafetyDetectionEngine.analyze(text, sbn.packageName)
         // `text` sort de portée ici : aucune trace. Seuls les signaux remontent.
         if (signals.isEmpty()) return
         val sourceApp = sbn.packageName
-        scope.launch { client.reportSignals(signals, sourceApp) }
+        scope.launch {
+            // Dernière garde avant envoi : toujours le même enfant enrôlé.
+            if (SupervisionStore.current.value?.deviceId == current.deviceId) client.reportSignals(signals, sourceApp)
+        }
     }
 
     /** Recopie l'état du cache (déjà rafraîchi sur IO) dans l'instantané mémoire. */
     private fun applySnapshot() {
+        snapEnrolledAt = runCatching { store.enrolledAt }.getOrDefault(Long.MAX_VALUE)
         snapActive = cache.toConfig().active
         snapPaused = cache.pauseActive
         snapSynced = !cache.neverSynced
     }
 
-    private fun maybeRefreshSnapshot() {
+    /**
+     * Synchronise la config puis l'instantané. [snapDeviceId] ne prend la valeur
+     * de l'enrôlement courant qu'après une synchro RÉUSSIE pour lui (gardes connues).
+     */
+    private suspend fun syncSnapshot() {
+        val deviceId = SupervisionStore.current.value?.deviceId
+        client.syncSettings(cache)
+        applySnapshot()
+        // Les gardes en cache doivent avoir été synchronisées pour CET enrôlement
+        // (SafetyCache.syncedDeviceId, écrit seulement si consentement ET profil
+        // sont connus) — une synchro partielle ou celle d'un autre appairage ne suffit pas.
+        val synced = if (
+            deviceId != null &&
+            SupervisionStore.current.value?.deviceId == deviceId &&
+            cache.syncedDeviceId == deviceId
+        ) deviceId else null
+        // Clés antérieures recensées AVANT d'autoriser l'analyse pour cet enrôlement.
+        refreshPreEnrollmentKeys(deviceId)
+        snapDeviceId = synced
+    }
+
+    /**
+     * PREMIER recensement d'un enrôlement dans ce processus (connexion de
+     * l'écouteur ou synchro d'un nouvel enrôlement) : TOUTES les notifications
+     * actives hors MessagingStyle sont marquées, quel que soit leur postTime (une
+     * mise à jour le renouvelle). Une clé n'est libérée qu'au retrait de la
+     * notification (onNotificationRemoved) : une publication ultérieure est alors
+     * bien postérieure. MessagingStyle reste filtré par la date des messages.
+     */
+    private fun refreshPreEnrollmentKeys(deviceId: String?) {
+        if (deviceId == preEnrollmentKeysFor) return
+        preEnrollmentKeys.clear()
+        preEnrollmentKeysFor = deviceId
+        if (deviceId == null) return
+        runCatching { activeNotifications }.getOrNull()?.forEach { sbn ->
+            val messaging = sbn.notification?.let {
+                runCatching { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) }.getOrNull()
+            } != null
+            if (!messaging) sbn.key?.let { preEnrollmentKeys.add(it) }
+        }
+    }
+
+    private fun maybeRefreshSnapshot(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (now - lastRefreshAt > SETTINGS_TTL_MS && !syncing) {
+        val age = now - lastRefreshAt
+        // Forcé (enfant différent) : au plus toutes les 30 s, pour ne jamais
+        // enchaîner les requêtes à chaque notification si le réseau échoue.
+        if (((force && age > FORCED_REFRESH_MIN_MS) || age > SETTINGS_TTL_MS) && !syncing) {
             lastRefreshAt = now
             syncing = true
             scope.launch {
                 try {
-                    client.syncSettings(cache)
-                    applySnapshot()
+                    syncSnapshot()
                 } finally { syncing = false }
             }
         }
     }
 
     /**
-     * Concatène les champs texte de la notification, y compris les styles Messaging
-     * (EXTRA_MESSAGES) et Inbox (EXTRA_TEXT_LINES) — les plus récents seulement
-     * (#8). ⚠️ Le texte reste STRICTEMENT local (jamais loggé/persisté/envoyé).
-     * Retourne null si vide.
+     * Texte de la notification à analyser (Messaging, Inbox, champs simples),
+     * borné à l'appairage par [NotificationText] : aucun message reçu avant
+     * l'appairage n'est analysé (LOT 12b). ⚠️ Le texte reste STRICTEMENT local
+     * (jamais loggé/persisté/envoyé). Retourne null s'il ne reste rien.
      */
-    private fun extractText(n: Notification): String? {
+    private fun extractText(n: Notification, postTime: Long, presentBefore: Boolean): String? {
         val extras = n.extras ?: return null
-        val sb = StringBuilder()
-        extras.getCharSequence(Notification.EXTRA_TITLE)?.let { sb.append(it).append(' ') }
-        extras.getCharSequence(Notification.EXTRA_TEXT)?.let { sb.append(it).append(' ') }
-        extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.let { sb.append(it).append(' ') }
-        extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.let { sb.append(it).append(' ') }
-        // MessagingStyle (WhatsApp, Messages…) : le(s) message(s) le(s) plus récent(s).
-        runCatching {
+        // MessagingStyle (WhatsApp, Messages…) : messages datés, filtrés à l'appairage.
+        val messages = runCatching {
             NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n)
-        }.getOrNull()?.messages?.let { msgs ->
-            for (m in msgs.takeLast(RECENT_MESSAGES)) m.text?.let { sb.append(it).append(' ') }
-        }
-        // InboxStyle : lignes les plus récentes.
-        extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.let { lines ->
-            for (l in lines.takeLast(RECENT_MESSAGES)) sb.append(l).append(' ')
-        }
-        val text = sb.toString().trim()
-        return text.ifBlank { null }
+        }.getOrNull()?.messages?.map { NotificationText.Message(it.timestamp, it.text) }
+        return NotificationText.assemble(
+            title = extras.getCharSequence(Notification.EXTRA_TITLE),
+            text = extras.getCharSequence(Notification.EXTRA_TEXT),
+            bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+            subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT),
+            messages = messages,
+            inboxLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.toList(),
+            postTime = postTime,
+            enrolledAt = snapEnrolledAt,
+            recent = RECENT_MESSAGES,
+            presentBeforeEnrollment = presentBefore,
+        )
     }
 
     override fun onDestroy() {
@@ -158,6 +231,7 @@ class SafetyNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val SETTINGS_TTL_MS = 2 * 60 * 1000L // 2 min
+        private const val FORCED_REFRESH_MIN_MS = 30_000L
         private const val RECENT_MESSAGES = 3
         private const val MAX_SEEN = 500
 

@@ -182,7 +182,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // Réseau (appel des Edge Functions / PostgREST)
+    // Réseau (GoTrue / PostgREST)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Stockage chiffré de la session + identifiants d'appareil

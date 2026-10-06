@@ -46,6 +46,9 @@ class PolicyCache(context: Context) {
         get() = prefs.getBoolean(KEY_PAUSE, false)
         set(v) { prefs.edit().putBoolean(KEY_PAUSE, v).apply() }
 
+    /** Désenrôlement (LOT 12b) : rien de l'ancien enfant ne doit subsister. */
+    fun clear() { prefs.edit().clear().commit() }
+
     private companion object {
         const val KEY_RULES = "rules_json"
         const val KEY_APPROVED = "approved_packages"

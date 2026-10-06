@@ -3,7 +3,7 @@ package fr.controleparental.child.location
 import android.content.Context
 import fr.controleparental.child.data.DeviceStatusCollector
 import fr.controleparental.child.data.SupervisionStore
-import java.time.Instant
+import fr.controleparental.child.service.SupervisionService
 
 /**
  * LOT 3 — Orchestration de la localisation côté appareil enfant, pilotée par la
@@ -23,7 +23,8 @@ class LocationCoordinator(context: Context) {
 
     private val appContext = context.applicationContext
     private val client = LocationClient(appContext)
-    private val repo = LocationRepository(SupervisionStore(appContext))
+    private val store = SupervisionStore(appContext)
+    private val repo = LocationRepository(store)
     private val geofences = GeofenceManager(appContext)
 
     // Dernier réglage CONNU (lu ou mémorisé) ; null = jamais lu. Pour les positions,
@@ -47,9 +48,9 @@ class LocationCoordinator(context: Context) {
     private var lastPeriodicMs = 0L
     private var lastSosPollMs = 0L
     private var lastSosFixMs = 0L
-    // Épisode SOS en cours connu (id + instant de début) ; null si aucun.
+    // Épisode SOS actif côté serveur (id) ; null si aucun. Diffusé seulement s'il
+    // est le SOS local (SosWindow).
     private var sosId: String? = null
-    private var sosStartedMs = 0L
 
     /** Rafraîchit le réglage de partage + ré-enregistre les geofences si besoin. */
     suspend fun onSync() {
@@ -74,25 +75,36 @@ class LocationCoordinator(context: Context) {
     }
 
     private suspend fun handleSos(now: Long) {
-        // Interroge l'état SOS à cadence modérée (évite de marteler la base).
+        // Diffusion SEULEMENT pour le SOS déclenché sur CET appareil par l'enfant,
+        // et BORNÉE en temps écoulé (T1) : une ligne repassée en « active » côté
+        // serveur ne déclenche jamais de suivi en direct. Au-delà de la fenêtre,
+        // l'épisode reste ouvert jusqu'à clôture, mais plus de captation.
+        // Sans SOS local (courant ou précédent) dans sa fenêtre : aucune requête.
+        val boot = BootClock.bootCount(appContext)
+        val nowElapsed = BootClock.elapsedMs()
+        fun inWindow(s: SupervisionStore.LocalSos?) = s != null && SosWindow.isLive(
+            rowId = s.id, localId = s.id, localBoot = s.boot, currentBoot = boot,
+            startedElapsedMs = s.startedElapsedMs, nowElapsedMs = nowElapsed, maxMs = MAX_SOS_LIVE_MS,
+        )
+        val current = store.localSos?.takeIf { inWindow(it) }
+        val previous = store.localSosPrevious?.takeIf { inWindow(it) && it.id != current?.id }
+        if (current == null && previous == null) { sosId = null; return }
+        // État de CES SOS (clos ? jamais créé ?), à cadence modérée. Erreur réseau :
+        // on garde le choix courant ; ligne courante absente : relais du précédent (V2).
         if (now - lastSosPollMs >= SOS_POLL_MS) {
             lastSosPollMs = now
-            val row = runCatching { repo.activeSos() }.getOrNull()
-            if (row != null) {
-                sosId = row.optString("id")
-                sosStartedMs = runCatching { Instant.parse(row.optString("started_at")).toEpochMilli() }
-                    .getOrDefault(now)
-            } else {
-                sosId = null
-            }
+            val cs = current?.let { runCatching { repo.sosState(it.id) }.getOrDefault(SosChoice.RowState.ERROR) }
+                ?: SosChoice.RowState.ABSENT
+            val ps = if (cs == SosChoice.RowState.ABSENT && previous != null) {
+                runCatching { repo.sosState(previous.id) }.getOrDefault(SosChoice.RowState.ERROR)
+            } else null
+            sosId = SosChoice.next(current?.id, cs, previous?.id, ps, kept = sosId)
         }
         val active = sosId ?: return
-        // Diffusion BORNÉE : au-delà de la fenêtre, on cesse de diffuser (l'épisode
-        // reste ouvert jusqu'à clôture parent/enfant, mais plus de captation).
-        if (now - sosStartedMs > MAX_SOS_LIVE_MS) return
+        // Toujours un SOS LOCAL encore dans sa fenêtre.
+        if (active != current?.id && active != previous?.id) return
         if (now - lastSosFixMs < SOS_FIX_MS) return
         lastSosFixMs = now
-        if (active.isEmpty()) return
         val loc = client.currentFix(highAccuracy = true) ?: return
         repo.insertFix(loc, source = "sos", batteryLevel = batteryLevel())
     }
@@ -100,6 +112,9 @@ class LocationCoordinator(context: Context) {
     private suspend fun handlePeriodic(now: Long) {
         val s = settings
         if (!s.enabled || s.mode != "periodic") return
+        // Collecte : jamais sans notification de supervision visible (LOT 12b).
+        // Échec fermé, rien en file ; le relevé part dès que la notification revient.
+        if (!SupervisionService.supervisionVisible(appContext)) return
         val intervalMs = s.periodicIntervalSec.coerceAtLeast(MIN_PERIODIC_INTERVAL_SEC) * 1000L
         if (now - lastPeriodicMs < intervalMs) return
         lastPeriodicMs = now
@@ -107,27 +122,39 @@ class LocationCoordinator(context: Context) {
         repo.insertFix(loc, source = "periodic", batteryLevel = batteryLevel())
     }
 
-    /** Check-in ponctuel (commande 'locate', D2). Retourne true si une position
-     *  a été remontée. */
-    suspend fun checkInOnDemand(): Boolean {
+    /** Issue d'un check-in à la demande. */
+    enum class CheckIn { SENT, NOT_SENT, SUPERVISION_NOT_VISIBLE }
+
+    /** Check-in ponctuel (commande 'locate', D2). */
+    suspend fun checkInOnDemand(): CheckIn {
+        // Collecte demandée par le parent : jamais sans notification de supervision
+        // visible (LOT 12b). L'appelant (CommandExecutor) laisse alors la commande
+        // en attente si l'état est transitoire, sinon l'acquitte sans position.
+        if (!SupervisionService.supervisionVisible(appContext)) return CheckIn.SUPERVISION_NOT_VISIBLE
         // On RECHARGE le réglage (il a pu changer) et on RESPECTE le choix du
         // parent : si le partage est désactivé (off / !enabled), on ne remonte
         // AUCUNE position — cohérent avec l'écran « mes données » qui dit alors
         // « partage désactivé ». Le SOS enfant (child-initiated) reste, lui,
         // toujours autorisé par un autre chemin.
         val s = refreshSettings()
-        if (!s.enabled || s.mode == "off") return false
-        val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return false
-        return repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
+        if (!s.enabled || s.mode == "off") return CheckIn.NOT_SENT
+        val loc = client.currentFix(highAccuracy = s.highAccuracy) ?: return CheckIn.NOT_SENT
+        val sent = repo.insertFix(loc, source = "on_demand", batteryLevel = batteryLevel())
+        return if (sent) CheckIn.SENT else CheckIn.NOT_SENT
     }
 
     /** Batterie faible (D7) : remonte la dernière position + une alerte. Respecte
      *  le réglage de partage (pas de position si désactivé). */
     suspend fun onBatteryLow() {
+        // Collecte automatique (position + alerte) : jamais sans supervision visible.
+        if (!SupervisionService.supervisionVisible(appContext)) return
         val s = refreshSettings()
         if (!s.enabled || s.mode == "off") return
         val battery = batteryLevel()
-        val loc = client.lastKnown() ?: client.currentFix(highAccuracy = false)
+        // Jamais une position mise en cache AVANT l'appairage (LOT 12b).
+        val enrolledAt = store.enrolledAt
+        val loc = client.lastKnown()?.takeIf { it.time >= enrolledAt }
+            ?: client.currentFix(highAccuracy = false)
         if (loc != null) repo.insertFix(loc, source = "periodic", batteryLevel = battery)
         repo.insertSafetyAlert("low_battery", battery)
     }

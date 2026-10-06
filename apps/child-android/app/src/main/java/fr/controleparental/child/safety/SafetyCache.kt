@@ -53,10 +53,21 @@ class SafetyCache(context: Context) {
         get() = prefs.getLong(KEY_SYNC, 0L)
         set(v) { prefs.edit().putLong(KEY_SYNC, v).apply() }
 
+    /**
+     * Enrôlement (device_id) pour lequel les GARDES (consentement + profil) ont été
+     * synchronisées avec succès (LOT 12b). L'analyse exige qu'il soit le courant.
+     */
+    var syncedDeviceId: String?
+        get() = prefs.getString(KEY_SYNCED_DEVICE, null)
+        set(v) { prefs.edit().putString(KEY_SYNCED_DEVICE, v).apply() }
+
     /** True tant qu'on n'a pas encore pu synchroniser une config fiable. */
     val neverSynced: Boolean get() = lastSyncAt == 0L
 
     fun toConfig(): SafetyConfig = SafetyConfig(analysisEnabled = analysisEnabled, teenProfile = teenProfile)
+
+    /** Désenrôlement (LOT 12b) : rien de l'ancien enfant ne doit subsister. */
+    fun clear() { prefs.edit().clear().commit() }
 
     private companion object {
         const val KEY_ENABLED = "analysis_enabled"
@@ -64,5 +75,6 @@ class SafetyCache(context: Context) {
         const val KEY_TEEN = "teen_profile"
         const val KEY_PAUSE = "pause_active"
         const val KEY_SYNC = "last_sync_at"
+        const val KEY_SYNCED_DEVICE = "synced_device_id"
     }
 }
